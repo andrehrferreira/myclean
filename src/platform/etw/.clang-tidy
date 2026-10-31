@@ -1,0 +1,8 @@
+---
+# krabsetw's headers are written for MSVC, and clang rejects two constructs MSVC accepts: a
+# member template body that is never instantiated (provider.hpp) and a cast of 0x1f to an enum
+# (perfinfo_groupmask.hpp). Parse them as MSVC does; every check stays as in the root file.
+InheritParentConfig: true
+ExtraArgs: ['-fdelayed-template-parsing', '-Wno-delayed-template-parsing-in-cxx20',
+            '-Wno-enum-constexpr-conversion']
+...

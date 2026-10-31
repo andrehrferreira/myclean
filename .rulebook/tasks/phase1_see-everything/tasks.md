@@ -7,7 +7,7 @@
 - [x] 1.6 T3: CPU (per logical processor, % of max frequency, DPC/interrupt, queue) and memory (available, commit, standby/modified, compressed, hard faults/s) collectors
 - [x] 1.7 T4: physical-disk (bytes/s, IOPS, latency, queue, % idle) and volume (size, free, trend) collectors with volume-to-disk mapping
 - [x] 1.8 T5: GPU collector (engine utilization, dedicated/shared memory, per process)
-- [ ] 1.9 T2: ETW Microsoft-Windows-Kernel-Process and Kernel-Network sessions via krabsetw; persist proc_start
+- [x] 1.9 T2: ETW Microsoft-Windows-Kernel-Process and Kernel-Network sessions via krabsetw; persist proc_start
 - [x] 1.10 T6: telemetry pipeline: per-collector lock-free ring, downsampler, history query API
 - [ ] 1.11 R3: myclean-tray shell: tray icon with state color + tooltip, toasts, single instance, quits on Local\MyClean.Tray.Quit (deploy contract C5)
 - [ ] 1.12 T7: alert engine: thresholds + change detection, rate limiting, snooze, tray badge
