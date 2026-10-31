@@ -9,7 +9,7 @@
 - [x] 1.8 T5: GPU collector (engine utilization, dedicated/shared memory, per process)
 - [x] 1.9 T2: ETW Microsoft-Windows-Kernel-Process and Kernel-Network sessions via krabsetw; persist proc_start
 - [x] 1.10 T6: telemetry pipeline: per-collector lock-free ring, downsampler, history query API
-- [ ] 1.11 R3: myclean-tray shell: tray icon with state color + tooltip, toasts, single instance, quits on Local\MyClean.Tray.Quit (deploy contract C5)
+- [x] 1.11 R3: myclean-tray shell: tray icon with state color + tooltip, toasts, single instance, quits on Local\MyClean.Tray.Quit (deploy contract C5)
 - [x] 1.12 T7: alert engine: thresholds + change detection, rate limiting, snooze, tray badge
 - [x] 1.13 H1: disk-health reader (NVMe health log + temperature, ATA SMART, USB fallback to reliability counters) every 10 min + daily snapshot
 - [x] 1.14 H2: health history, delta alerts (any new media error / reallocated or pending sector), temperature thresholds, TBW endurance projection
