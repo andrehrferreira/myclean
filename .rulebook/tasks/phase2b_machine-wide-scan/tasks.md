@@ -9,6 +9,6 @@
 - [ ] 1.8 Acceptance: scan-all runs on all 8 drives of the reference machine and explains >= 95 % of used bytes on C: (rest listed as not visible without admin)
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 2.1 Update or create documentation covering the implementation
-- [ ] 2.2 Write tests covering the new behavior
-- [ ] 2.3 Run tests and confirm they pass
+- [x] 2.1 Update or create documentation covering the implementation
+- [x] 2.2 Write tests covering the new behavior
+- [x] 2.3 Run tests and confirm they pass

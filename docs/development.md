@@ -54,7 +54,21 @@ src/core/safety/        SafeRemove and its hard deny-list: the only code that de
 src/core/actions/       plan state machine, action_log/undo_blob/quarantine, DeleteItems,
                         QuarantineItems
 src/core/sched/         in-app scheduler (cron, catch-up) and its store-backed repository
-src/core/rules/         data-file schemas and loaders: cleaning rules, classes, knowledge base
+src/core/rules/         case schemas and parsers: cleaning rules, classes, knowledge base
+src/core/packs/         knowledge packs (data/packs, docs/packs.md): loader, applies_when,
+                        registry feeding every engine, relocation recipes, compress targets,
+                        the fixture runner behind `myclean packs validate`
+src/core/clean/         rule engine: evaluates clean cases and finds dev artifacts (git-aware)
+src/core/cleanup/       Windows cleanup handlers, native prune commands and DISM as actions
+src/core/space/         scanner v1 and the space analyses (top-N, old downloads, installers,
+                        duplicates)
+src/core/index/         NTFS volume index from the $MFT with USN refresh and folder growth
+src/core/map/           `myclean map`: attribution of every byte of a volume and how to reclaim it
+src/core/placement/     drive classes and targets, relocation and recipes, hibernation, page
+                        file and shadow-storage actions
+src/core/compress/      compression estimates, CompressFolder (WOF) and CompactOS actions
+src/core/drives/        drive maintenance: TRIM/defrag history, HDD fragmentation, retrim/defrag
+src/core/scanall/       `myclean scan-all`: per-drive findings grouped by action, one report
 src/core/telemetry/     collectors (processes, CPU, memory, disks, volumes, GPU), the pipeline
                         that samples them, history queries and the volume fill projection
 src/core/events/        process start/stop and network events: router, proc_start/net_minute,
@@ -76,11 +90,12 @@ src/core/tray_model/    tray state, the poller, the dashboard model and the appr
 src/core/user_tasks/    the user-scope plans the tray runs under the owner's token: native
                         commands, user-profile cleanup handlers, relocations; their reports
 src/platform/<module>/  Win32 implementations of src/core interfaces (proc, perf, disk,
-                        disk_health, etw, trust, input, ipc, fs, service)
+                        disk_health, etw, trust, input, ipc, fs, service, scan, clean, git,
+                        cleanup, settings, ntfs, compress, defrag, packs)
 src/svc/                myclean-svc: host, Service and its components (see below)
 src/tray/               myclean-tray: tray icon, toasts, dashboard (approval inbox, Space),
                         input watchdog, the worker that runs user tasks
-src/cli/                myclean: read-only CLI and `myclean mcp`
+src/cli/                myclean: read-only CLI, `map`, `scan-all`, `packs` and `myclean mcp`
 tests/fakes/            in-memory fakes of the src/core/os interfaces (myclean::fakes)
 tests/unit/<module>/    GoogleTest suite of one module
 cmake/                  helper functions, lint/format targets, vcpkg toolchain
