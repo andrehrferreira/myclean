@@ -28,8 +28,10 @@ if(MYCLEAN_ASAN)
   string(REGEX REPLACE "/RTC[1csu]+" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
   add_compile_options(/fsanitize=address)
   # vcpkg libraries are built without ASan; the STL's container annotations must match across
-  # everything linked (LNK2038), so they are off. Heap, stack and use-after-free checks remain.
-  add_compile_definitions(_DISABLE_STRING_ANNOTATION _DISABLE_VECTOR_ANNOTATION)
+  # everything linked (LNK2038), so they are off. The umbrella macro also covers annotations
+  # newer STLs add (optional in 14.45+, seen on the CI runner). Heap, stack and use-after-free
+  # checks remain.
+  add_compile_definitions(_DISABLE_STL_ANNOTATION)
   add_link_options(/INCREMENTAL:NO)
   # ASan binaries load the runtime DLL from the toolset's bin directory, which is only on PATH in
   # a developer shell; myclean_add_test copies it next to each test executable instead.
