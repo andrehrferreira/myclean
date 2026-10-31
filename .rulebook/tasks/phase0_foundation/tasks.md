@@ -6,8 +6,8 @@
 - [ ] 1.5 F3: SQLite store in WAL mode with versioned migrations, integrity check at open, repositories, batched writes (10 s) and synchronous audit writes
 - [ ] 1.6 F3: time-series pipeline storage: in-memory 1 s ring (1 h), minute aggregates (30 d), hour aggregates (2 y), retention jobs
 - [x] 1.7 F4: TOML/JSON loaders for data/rules/*.toml, data/classes.toml, data/kb/*.json with schema validation; an invalid file is rejected whole, never half-applied
-- [ ] 1.8 F5: SafeRemove: hard deny-list, never follows reparse points, skips cloud placeholders (RECALL_ON_DATA_ACCESS / RECALL_ON_OPEN / OFFLINE), accepts only items of a stored plan, re-validates each item immediately before acting
-- [ ] 1.9 F5: SafeRemove tests: one per deny-list entry, junction/symlink, cloud placeholder, TOCTOU swap, item not in plan
+- [x] 1.8 F5: SafeRemove: hard deny-list, never follows reparse points, skips cloud placeholders (RECALL_ON_DATA_ACCESS / RECALL_ON_OPEN / OFFLINE), accepts only items of a stored plan, re-validates each item immediately before acting
+- [x] 1.9 F5: SafeRemove tests: one per deny-list entry, junction/symlink, cloud placeholder, TOCTOU swap, item not in plan
 - [ ] 1.10 F6: Action contract (describe/preview/apply/verify/undo), plan state machine (proposed -> auto|awaiting_approval -> approved -> applying -> applied -> verified|rolled_back|failed), actors (scheduler, governor, owner, mcp:*) with mcp:* unable to approve
 - [ ] 1.11 F6: append-only action_log (DB trigger rejects UPDATE/DELETE) with undo blobs; quarantine table
 - [x] 1.12 F7: in-app scheduler: cron-expression parser, persisted last/next run, catch-up of missed runs after downtime, no OS scheduler
