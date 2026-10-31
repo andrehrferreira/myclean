@@ -145,13 +145,18 @@ Result<void> Service::stop() {
 
 ipc::StatusReply Service::status() const {
   std::vector<std::string> components;
+  std::vector<ipc::ComponentHealth> health;
   components.reserve(running_.size());
+  health.reserve(running_.size());
+  bool healthy = true;
   for (const std::unique_ptr<IComponent>& component : running_) {
     components.emplace_back(component->name());
+    health.push_back(component->health());
+    healthy = healthy && health.back().healthy;
   }
   const std::scoped_lock lock(mutex_);
   return ipc::StatusReply{
-      .healthy = !store_error_.has_value(),
+      .healthy = healthy && !store_error_.has_value(),
       .version = options_.version,
       .build = MYCLEAN_VERSION,
       .mode = options_.mode,
@@ -159,7 +164,8 @@ ipc::StatusReply Service::status() const {
       .uptime_seconds =
           std::chrono::duration_cast<std::chrono::seconds>(clock_->monotonic() - started_).count(),
       .store = ipc::StoreStatus{.path = utf8(options_.database), .error = store_error_},
-      .components = std::move(components)};
+      .components = std::move(components),
+      .component_health = std::move(health)};
 }
 
 }  // namespace myclean::svc

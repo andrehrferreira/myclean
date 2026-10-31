@@ -1,11 +1,13 @@
 #pragma once
 
 #include <filesystem>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "core/ipc/json_rpc.hpp"
+#include "core/ipc/status.hpp"
 #include "core/model/result.hpp"
 #include "core/os/clock.hpp"
 #include "core/store/migrations.hpp"
@@ -57,6 +59,11 @@ class IComponent {
   // Stops all work and returns; no store or context access afterwards. The whole service stop
   // must fit in 30 s (contract C3), so this must not block for long.
   virtual void stop() = 0;
+  // The component's health for `status`, between start() and stop(). Called from IPC threads,
+  // so it must be thread-safe. Healthy with no remarks unless overridden.
+  [[nodiscard]] virtual ipc::ComponentHealth health() const {
+    return ipc::ComponentHealth{.name = std::string(name())};
+  }
 
  protected:
   IComponent() = default;

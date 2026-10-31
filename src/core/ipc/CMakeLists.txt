@@ -8,6 +8,8 @@ myclean_add_library(ipc
     json_rpc.hpp
     status.cpp
     status.hpp
+    telemetry.cpp
+    telemetry.hpp
   DEPENDS
     myclean::model
     nlohmann_json::nlohmann_json)

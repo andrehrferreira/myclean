@@ -1,5 +1,6 @@
 // myclean-svc.exe: the MyClean service host. See svc/host.hpp for the command line.
 
+#include <array>
 #include <cstddef>
 #include <functional>
 #include <iostream>
@@ -12,10 +13,15 @@
 #include <windows.h>
 
 #include "core/model/result.hpp"
+#include "platform/disk/win32_volume_info.hpp"
 #include "platform/ipc/pipe_io.hpp"
+#include "platform/perf/pdh_counters.hpp"
+#include "platform/perf/win32_memory_status.hpp"
+#include "platform/proc/nt_process_table.hpp"
 #include "platform/service/scm.hpp"
 #include "svc/component.hpp"
 #include "svc/host.hpp"
+#include "svc/telemetry_component.hpp"
 
 namespace {
 
@@ -35,9 +41,26 @@ BOOL WINAPI on_console_control(DWORD control) {
   return FALSE;
 }
 
+// The drive Windows runs from, "C:", as a volume series entity; empty when unknown.
+std::string system_drive() {
+  std::array<wchar_t, MAX_PATH> windows{};
+  const UINT length = ::GetSystemWindowsDirectoryW(windows.data(), MAX_PATH);
+  if (length < 2 || length >= MAX_PATH || windows[1] != L':') {
+    return {};
+  }
+  return {static_cast<char>(windows[0]), ':'};
+}
+
 // Every component the service runs, in start order. Collectors are registered here.
 std::vector<std::unique_ptr<svc::IComponent>> make_components() {
-  return {};
+  std::vector<std::unique_ptr<svc::IComponent>> components;
+  components.push_back(std::make_unique<svc::TelemetryComponent>(
+      svc::TelemetrySources{.processes = std::make_unique<myclean::platform::NtProcessTable>(),
+                            .counters = std::make_unique<myclean::platform::PdhCounters>(),
+                            .memory = std::make_unique<myclean::platform::Win32MemoryStatus>(),
+                            .volumes = std::make_unique<myclean::platform::Win32VolumeInfo>(),
+                            .system_drive = system_drive()}));
+  return components;
 }
 
 int run_console(const svc::HostOptions& options) {
