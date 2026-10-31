@@ -3,6 +3,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -19,13 +20,16 @@
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/snapshot.hpp"
 #include "core/tray_model/tray_state.hpp"
+#include "core/user_tasks/task.hpp"
 #include "platform/input/input_watchdog.hpp"
 #include "tray/dashboard_window.hpp"
 #include "tray/icon.hpp"
 #include "tray/instance.hpp"
 #include "tray/pipe_link.hpp"
 #include "tray/poll_thread.hpp"
+#include "tray/task_worker.hpp"
 #include "tray/tray_icon.hpp"
+#include "tray/user_tools.hpp"
 #include "tray/window_object.hpp"
 
 namespace myclean::tray {
@@ -47,7 +51,12 @@ class App {
   App& operator=(const App&) = delete;
   App(App&&) = delete;
   App& operator=(App&&) = delete;
-  ~App() = default;
+  // The worker stops first: it wakes the poll thread, which in turn hands it tasks.
+  ~App() {
+    if (tasks_) {
+      tasks_->stop();
+    }
+  }
 
   [[nodiscard]] Result<void> start();
   [[nodiscard]] int loop(HANDLE quit_event);
@@ -77,6 +86,8 @@ class App {
   // Filled by the watchdog, emptied by the poll thread: declared before both, so it goes last.
   tray_model::IncidentQueue incidents_;
   std::unique_ptr<platform::InputWatchdog> watchdog_;
+  // Runs the approved user-scope plans; the poll thread hands it tasks, so it is joined after it.
+  std::unique_ptr<TaskWorker> tasks_;
   std::unique_ptr<PollThread> poll_;  // last: joined first, before anything it posts to goes
 };
 
@@ -100,9 +111,14 @@ Result<void> App::start() {
   taskbar_created_ = ::RegisterWindowMessageW(L"TaskbarCreated");
   icon_ = std::make_unique<TrayIcon>(window);
   refresh_icon(true);
+  tasks_ = std::make_unique<TaskWorker>(
+      [this](const user_tasks::UserTask& task, const std::stop_token& stop) {
+        return run_user_task(task, stop, shared_);
+      },
+      [this] { poll_->wake(); });
   poll_ = std::make_unique<PollThread>(
       link_, clock_, shared_, [window] { ::PostMessageW(window, update_message, 0, 0); },
-      &incidents_);
+      &incidents_, tasks_.get());
   // The freeze watchdog: raw input and a clipboard listener on a message-only window, no hook.
   // Without it the tray still runs; the Freezes view says why it is missing.
   Result<std::unique_ptr<platform::InputWatchdog>> watchdog =

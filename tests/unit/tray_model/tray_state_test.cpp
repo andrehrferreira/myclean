@@ -170,6 +170,14 @@ TEST(TrayStateTest, TooltipSaysWhenTheServiceIsDown) {
             "MyClean: service not running\nLive data unavailable");
 }
 
+TEST(TrayStateTest, TooltipCountsThePlansWaitingForApproval) {
+  TooltipData data = tooltip_data(true, calm, {});
+  data.pending_approvals = 1;
+  EXPECT_TRUE(tooltip_text(data).starts_with("MyClean - 1 approval waiting\nCPU"));
+  data.pending_approvals = 3;
+  EXPECT_TRUE(tooltip_text(data).starts_with("MyClean - 3 approvals waiting\n"));
+}
+
 TEST(TrayStateTest, TooltipIsCutAtALineBoundary) {
   EXPECT_EQ(tooltip_text(tooltip_data(true, calm, {}), 20), "MyClean\nCPU 20 %");
 }

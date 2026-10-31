@@ -87,7 +87,7 @@ TEST_F(PollerTest, UnreachableServiceStopsAfterTheFirstCall) {
   EXPECT_EQ(link().calls().size(), 1U);
 }
 
-TEST_F(PollerTest, ClosedDashboardAsksForMetricsAndBadgeAndFirstForHealthAndAlerts) {
+TEST_F(PollerTest, ClosedDashboardAsksForMetricsAndBadgeAndFirstForHealthAlertsAndPlans) {
   const PollResult first = poll_at(start, false);
   EXPECT_TRUE(first.reachable);
   EXPECT_TRUE(first.error.empty());
@@ -96,8 +96,9 @@ TEST_F(PollerTest, ClosedDashboardAsksForMetricsAndBadgeAndFirstForHealthAndAler
   EXPECT_FALSE(first.top_by_cpu);
   EXPECT_FALSE(first.freezes);
   EXPECT_TRUE(first.history.empty());
-  EXPECT_EQ(methods(link().calls()), (std::vector<std::string>{"metrics.latest", "alerts.badge",
-                                                               "disks.health", "alerts.list"}));
+  EXPECT_EQ(methods(link().calls()),
+            (std::vector<std::string>{"metrics.latest", "alerts.badge", "disks.health",
+                                      "alerts.list", "cleaning.status", "plans.list"}));
   EXPECT_EQ(link().calls()[0].params, Json::object());
   EXPECT_EQ(link().calls()[3].params, (Json{{"since", start - (std::int64_t{30} * 86'400)}}));
   ASSERT_TRUE(first.drives.has_value());

@@ -28,11 +28,12 @@ class PollThread {
  public:
   static constexpr std::chrono::seconds interval{1};
 
-  // Starts polling at once. `link`, `clock`, `shared` and `incidents` (when set) must outlive
-  // the thread. `on_update` runs on the poll thread after each result is applied (the tray posts
-  // itself a message).
+  // Starts polling at once. `link`, `clock`, `shared`, `incidents` and `tasks` (when set) must
+  // outlive the thread. `on_update` runs on the poll thread after each result is applied (the
+  // tray posts itself a message).
   PollThread(tray_model::IServiceLink& link, const os::IClock& clock, SharedModel& shared,
-             std::function<void()> on_update, tray_model::IncidentQueue* incidents = nullptr);
+             std::function<void()> on_update, tray_model::IncidentQueue* incidents = nullptr,
+             tray_model::ITaskRunner* tasks = nullptr);
   PollThread(const PollThread&) = delete;
   PollThread& operator=(const PollThread&) = delete;
   PollThread(PollThread&&) = delete;
@@ -45,6 +46,8 @@ class PollThread {
   void set_dashboard_open(bool open);
   // Sends `request` with a poll that starts at once.
   void request(tray_model::Request request);
+  // Polls at once (a user task finished: its report goes out without waiting for the second).
+  void wake();
 
  private:
   void run(const std::stop_token& stop);

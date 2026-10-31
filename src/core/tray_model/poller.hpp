@@ -4,14 +4,18 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "core/model/result.hpp"
 #include "core/model/series.hpp"
 #include "core/model/units.hpp"
+#include "core/tray_model/cleaning.hpp"
 #include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/replies.hpp"
 #include "core/tray_model/service_link.hpp"
@@ -41,7 +45,71 @@ struct ExplainProcess {
 struct SelectRange {
   Range range = Range::live;
 };
-using Request = std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange>;
+// The approval inbox: a cleaning scan, a plan's details shown or hidden, the owner's decision,
+// an undo, a restore from quarantine; a Space list, and a cleanup proposed from it.
+struct ScanNow {};
+struct OpenPlan {
+  std::int64_t id = 0;
+};
+struct ClosePlan {
+  std::int64_t id = 0;
+};
+struct ApprovePlan {
+  std::int64_t id = 0;
+  Selection selection;
+};
+struct RejectPlan {
+  std::int64_t id = 0;
+};
+struct UndoPlan {
+  std::int64_t id = 0;
+};
+struct RestoreQuarantine {
+  std::int64_t plan = 0;
+  std::optional<std::int64_t> item;  // nullopt: every item of the plan
+};
+struct LoadSpace {
+  SpaceList list = SpaceList::top;
+  std::string volume;    // space.top: "C:"
+  bool refresh = false;  // start a new analysis
+};
+struct ProposeCleanup {
+  std::vector<std::int64_t> candidates;  // Space candidate ids
+};
+using Request = std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange, ScanNow,
+                             OpenPlan, ClosePlan, ApprovePlan, RejectPlan, UndoPlan,
+                             RestoreQuarantine, LoadSpace, ProposeCleanup>;
+
+// The tray's executor of user-scope plans, as the poller drives it: the poller takes a task
+// (user_tasks.next) only from a reachable service and only while the runner is idle, and
+// delivers the runner's report (user_tasks.report) before it takes the next one.
+class ITaskRunner {
+ public:
+  struct Report {
+    std::int64_t plan = 0;
+    nlohmann::json result;  // the `result` record of user_tasks.report
+    std::string summary;    // for the dashboard: "Plan 12 verified"
+  };
+
+  virtual ~ITaskRunner() = default;
+  ITaskRunner(const ITaskRunner&) = delete;
+  ITaskRunner& operator=(const ITaskRunner&) = delete;
+  ITaskRunner(ITaskRunner&&) = delete;
+  ITaskRunner& operator=(ITaskRunner&&) = delete;
+
+  // No task runs and no report waits for delivery.
+  [[nodiscard]] virtual bool idle() const = 0;
+  // Starts `task`, the "task" object of a user_tasks.next answer, on the runner's own thread.
+  virtual void start(nlohmann::json task) = 0;
+  // The finished task's report, until delivered() is called.
+  [[nodiscard]] virtual std::optional<Report> report() const = 0;
+  virtual void delivered() = 0;
+  // What runs now, for the dashboard; empty when nothing does.
+  [[nodiscard]] virtual std::string activity() const = 0;
+
+ protected:
+  ITaskRunner() = default;
+};
 
 // The charts of a past range, fetched at `time`.
 struct RangeHistory {
@@ -70,6 +138,7 @@ struct PollResult {
   // Why a snooze or dismiss failed; empty when it worked.
   std::optional<std::string> alert_action;
   std::optional<IncidentQueue::Counts> incidents;
+  CleanupPoll cleanup;
 };
 
 // Polls the service, once per second, for what the tray shows.
@@ -82,7 +151,14 @@ struct PollResult {
 // missed between two polls (so the charts drop no sample), input.summary at the slow interval
 // and after incidents were sent, and the past range the charts show, at the slow interval.
 // Opening the dashboard fetches everything at once and starts on the live range.
-// Not thread-safe: one poll thread owns it.
+//
+// The approval inbox: plans.list every plans_interval (the badge counts the pending plans), at
+// once after connecting, after any request on a plan and when a cleaning scan ends; with it,
+// while the dashboard is open, quarantine.list and the details of the plans the owner opened.
+// cleaning.status at every poll while the dashboard is open or a scan runs, else with the plans.
+// Space lists when the owner asks, and again at every poll while their analysis runs. User tasks:
+// every poll, when a task runner is set, the finished task's report is delivered and, while the
+// runner is idle, the next task is taken. Not thread-safe: one poll thread owns it.
 class Poller {
  public:
   static constexpr int top_trees = 25;
@@ -91,11 +167,14 @@ class Poller {
   static constexpr int range_points = 600;
   // How far back the Alerts section lists alerts.
   static constexpr std::chrono::days recent_alerts{30};
+  static constexpr std::chrono::seconds plans_interval{10};
 
   // `window` is how far back the live charts reach: nothing older is fetched. `incidents`, when
-  // set, is forwarded at every poll and must outlive the poller.
-  Poller(IServiceLink& link, std::chrono::seconds window, IncidentQueue* incidents = nullptr)
-      : link_(&link), window_(window), incidents_(incidents) {}
+  // set, is forwarded at every poll; `tasks`, when set, runs the user tasks. Both must outlive
+  // the poller.
+  Poller(IServiceLink& link, std::chrono::seconds window, IncidentQueue* incidents = nullptr,
+         ITaskRunner* tasks = nullptr)
+      : link_(&link), window_(window), incidents_(incidents), tasks_(tasks) {}
 
   [[nodiscard]] PollResult poll(WallTime now, bool dashboard_open,
                                 const std::vector<Request>& requests = {});
@@ -109,11 +188,20 @@ class Poller {
   void fetch_rest(WallTime now, bool dashboard_open, PollResult& result);
   void fill_gaps(const LatestReply& latest, bool dashboard_open, PollResult& result);
   void handle(const Request& request, PollResult& result);
+  void load_space(const LoadSpace& load, PollResult& result);
+  // Asks again for the Space lists whose analysis ran at the previous poll, unless a request
+  // asks for one anyway.
+  void ask_again(bool dashboard_open, const std::vector<Request>& requests, PollResult& result);
+  // The inbox requests; true when the plans must be fetched again.
+  bool handle_cleanup(const Request& request, PollResult& result);
+  void fetch_cleanup(WallTime now, bool dashboard_open, bool refresh, PollResult& result);
+  void run_tasks(PollResult& result);
   [[nodiscard]] RangeHistory fetch_range(WallTime now);
 
   IServiceLink* link_;
   std::chrono::seconds window_;
   IncidentQueue* incidents_;
+  ITaskRunner* tasks_;
   bool connected_ = false;  // the previous poll reached the service
   bool dashboard_open_ = false;
   std::optional<WallTime> next_slow_;
@@ -121,6 +209,10 @@ class Poller {
   std::optional<AlertSummary> badge_;
   Range range_ = Range::live;
   std::map<SeriesKey, WallTime> newest_;  // per metrics.latest series
+  std::optional<WallTime> next_plans_;
+  std::optional<CleaningStatus> status_;
+  std::set<std::int64_t> open_plans_;  // whose details the dashboard shows
+  std::vector<LoadSpace> analysing_;   // Space lists whose analysis runs
 };
 
 // Whether the dashboard charts `key` over past ranges: the system CPU and memory lines, each

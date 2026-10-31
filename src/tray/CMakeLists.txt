@@ -1,6 +1,7 @@
 # The tray app: myclean-tray.exe and the library behind it (single instance and quit event, the
-# pipe link and poll thread, the icon and its toasts, the Dear ImGui dashboard, the hosting of the
-# freeze watchdog), which the tests drive headless.
+# pipe link and poll thread, the icon and its toasts, the Dear ImGui dashboard with the approval
+# inbox, the hosting of the freeze watchdog, the worker that runs user-scope plans under the
+# owner's token), which the tests drive headless.
 myclean_add_library(tray
   SOURCES
     app.cpp
@@ -11,21 +12,32 @@ myclean_add_library(tray
     dashboard_window.hpp
     icon.cpp
     icon.hpp
+    inbox_ui.cpp
+    inbox_ui.hpp
     instance.cpp
     instance.hpp
     pipe_link.cpp
     pipe_link.hpp
     poll_thread.cpp
     poll_thread.hpp
+    task_worker.cpp
+    task_worker.hpp
     tray_icon.cpp
     tray_icon.hpp
+    ui_text.hpp
+    user_tools.cpp
+    user_tools.hpp
     window_object.hpp
   DEPENDS
     myclean::os
+    myclean::platform_cleanup
+    myclean::platform_fs
     myclean::platform_input
     myclean::platform_ipc
     myclean::platform_service
+    myclean::platform_settings
     myclean::tray_model
+    myclean::user_tasks
     imgui::imgui
     implot::implot
     spdlog::spdlog

@@ -105,9 +105,9 @@ TEST(DashboardModelTest, ServiceStopKeepsTheLastValuesAndStopsTheCharts) {
   EXPECT_EQ(model.chart(SeriesKey{.metric = "cpu.utility", .entity = "system"})->times().size(),
             1U);
   EXPECT_EQ(model.tray_status().state, TrayState::service_down);
-  EXPECT_EQ(
-      model.unavailable_features(),
-      (std::vector<std::string>{"live telemetry", "history", "disk health", "alerts", "freezes"}));
+  EXPECT_EQ(model.unavailable_features(),
+            (std::vector<std::string>{"live telemetry", "history", "disk health", "alerts",
+                                      "freezes", "cleanup", "space"}));
   model.apply(reachable_at(start + 6));
   EXPECT_TRUE(model.service_reachable());
   EXPECT_TRUE(model.service_error().empty());

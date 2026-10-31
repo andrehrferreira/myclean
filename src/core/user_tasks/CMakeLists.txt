@@ -1,0 +1,18 @@
+# The user-scope plans the tray runs under the owner's token: reading a user_tasks.next answer,
+# running its native command, disk-cleanup handlers or relocation, and the report record; plus
+# the relocation targets as the tray sees them (volumes and disk health it polls).
+myclean_add_library(user_tasks
+  SOURCES
+    drive_facts.cpp
+    drive_facts.hpp
+    task.cpp
+    task.hpp
+  DEPENDS
+    myclean::cleanup
+    myclean::ipc
+    myclean::model
+    myclean::os
+    myclean::placement
+    myclean::safety
+    myclean::tray_model
+    nlohmann_json::nlohmann_json)

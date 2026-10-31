@@ -3,17 +3,21 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <set>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <gtest/gtest.h>
 #include <imgui.h>
 #include <implot.h>
 
+#include "../tray_model/inbox_fixtures.hpp"
 #include "../tray_model/tray_model_test_support.hpp"
 #include "core/model/result.hpp"
 #include "core/model/series.hpp"
+#include "core/tray_model/cleaning.hpp"
 #include "core/tray_model/dashboard_model.hpp"
 #include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/poller.hpp"
@@ -67,8 +71,40 @@ int render(const tray_model::DashboardModel& model, UiState& state) {
   return vertices;
 }
 
+// The inbox: a scan running, four plans (two waiting), the details of plans 7 and 5, a
+// quarantine run, every Space list and a task running.
+tray_model::CleanupPoll cleanup_poll() {
+  namespace fixtures = tray_model::testing;
+  tray_model::CleanupPoll poll;
+  poll.status = tray_model::parse_cleaning_status(fixtures::cleaning_status_json(true)).value();
+  poll.plans = tray_model::parse_plans_list(fixtures::plans_json()).value();
+  poll.details.push_back(tray_model::parse_plans_get(fixtures::plan_get_json(7)).value());
+  fixtures::Json verified = fixtures::plan_get_json(5, 1, "verified");
+  verified["kind"] = "relocate";
+  verified["freed"] = 4096;
+  verified["items"][0]["approved"] = true;
+  poll.details.push_back(tray_model::parse_plans_get(verified).value());
+  poll.quarantine = tray_model::parse_quarantine_list(fixtures::quarantine_json()).value();
+  poll.action = "Approve failed: the plan does not await approval";
+  const auto space = [&poll](tray_model::SpaceList list, const fixtures::Json& answer) {
+    tray_model::SpaceReply reply{.list = list,
+                                 .volume = list == tray_model::SpaceList::top ? "C:" : ""};
+    const Result<void> parsed = tray_model::parse_space(answer, reply);
+    EXPECT_TRUE(parsed.has_value()) << parsed.error().message;
+    poll.space.push_back(std::move(reply));
+  };
+  space(tray_model::SpaceList::top, fixtures::space_top_json("scanning"));
+  space(tray_model::SpaceList::old_downloads, fixtures::old_downloads_json());
+  space(tray_model::SpaceList::duplicates, fixtures::duplicates_json());
+  space(tray_model::SpaceList::used_installers, fixtures::used_installers_json());
+  poll.task_activity = "Running plan 8: Run `pnpm store prune`";
+  poll.task_note = "Plan 6 (Run `npm cache verify`): done, cache_bytes better";
+  return poll;
+}
+
 // Ten minutes of live data (per processor too), the top process trees with their trust, an
-// explanation, the health of three drives, alerts, freezes and the last hour of history.
+// explanation, the health of three drives, alerts, freezes, the last hour of history and the
+// approval inbox.
 tray_model::DashboardModel full_model() {
   tray_model::DashboardModel model;
   tray_model::testing::Json reply = tray_model::testing::latest_json(start);
@@ -109,13 +145,14 @@ tray_model::DashboardModel full_model() {
     hour.series.push_back(*series);
   }
   open.range = std::move(hour);
+  open.cleanup = cleanup_poll();
   model.apply(std::move(open));
   return model;
 }
 
-constexpr std::array<Section, 6> all_sections = {Section::cpu_memory, Section::disks,
-                                                 Section::volumes,    Section::processes,
-                                                 Section::alerts,     Section::freezes};
+constexpr std::array<Section, 8> all_sections = {
+    Section::cpu_memory, Section::disks,   Section::volumes, Section::processes,
+    Section::alerts,     Section::freezes, Section::cleanup, Section::space};
 
 TEST(DashboardUiTest, DrawsEverySectionWithLiveData) {
   const HeadlessUi ui;
@@ -201,6 +238,55 @@ TEST(DashboardUiTest, DrawsFreezesWithNoneRecordedAndAWatchdogThatDidNotStart) {
   for (const Section section : {Section::freezes, Section::alerts}) {
     UiState state{.section = section};
     EXPECT_GT(render(model, state), 0);
+  }
+}
+
+// Approvals spec, "Approval Inbox": waiting plans with their items, commands, risks and undo,
+// the decision buttons, recent plans with Undo, and the quarantine. Nothing is sent unasked.
+TEST(DashboardUiTest, DrawsTheInboxWithOpenPlansAndSendsNothingUnasked) {
+  const HeadlessUi ui;
+  apply_style(1.0F);
+  const tray_model::DashboardModel model = full_model();
+  UiState state{.section = Section::cleanup};
+  state.open_plans = {7, 5, 8};
+  state.selected[7] = {100, 101};
+  EXPECT_GT(render(model, state), 0);
+  EXPECT_TRUE(state.requests.empty());
+  EXPECT_EQ(state.open_plans, (std::set<std::int64_t>{5, 7, 8}));
+}
+
+TEST(DashboardUiTest, DrawsEverySpaceListAndAsksForEachOnceWhenShown) {
+  const HeadlessUi ui;
+  apply_style(1.0F);
+  const tray_model::DashboardModel model = full_model();
+  for (const tray_model::SpaceList list :
+       {tray_model::SpaceList::top, tray_model::SpaceList::old_downloads,
+        tray_model::SpaceList::duplicates, tray_model::SpaceList::used_installers}) {
+    UiState state{.section = Section::space};
+    state.space = list;
+    EXPECT_GT(render(model, state), 0);
+    ASSERT_EQ(state.requests.size(), 1U) << "asked once over three frames";
+    const auto* load = std::get_if<tray_model::LoadSpace>(&state.requests.front());
+    ASSERT_NE(load, nullptr);
+    EXPECT_EQ(load->list, list);
+    EXPECT_FALSE(load->refresh);
+    EXPECT_EQ(load->volume, list == tray_model::SpaceList::top ? "C:" : "");
+  }
+}
+
+TEST(DashboardUiTest, DrawsTheInboxAndSpaceWhileTheServiceIsDownWithoutAskingForAnything) {
+  const HeadlessUi ui;
+  apply_style(1.0F);
+  tray_model::DashboardModel model = full_model();
+  tray_model::PollResult down;
+  down.time = from_unix_seconds(start + 5);
+  down.error = "the service is not running";
+  model.apply(std::move(down));
+  for (const Section section : {Section::cleanup, Section::space}) {
+    UiState state{.section = section};
+    state.open_plans = {7};
+    EXPECT_GT(render(model, state), 0);
+    EXPECT_TRUE(state.requests.empty());
   }
 }
 

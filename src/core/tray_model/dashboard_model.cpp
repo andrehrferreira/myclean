@@ -36,8 +36,11 @@ void DashboardModel::apply(PollResult result) {
     incident_counts_ = result.incidents;
   }
   if (!reachable_) {
+    // The runner keeps working (or waits to report) while the service is away.
+    cleanup_.apply(CleanupPoll{.task_activity = std::move(result.cleanup.task_activity)});
     return;
   }
+  cleanup_.apply(std::move(result.cleanup));
   if (result.latest) {
     LatestReply& latest = *result.latest;
     metrics_ = std::move(latest.metrics);
@@ -172,11 +175,14 @@ const DriveHealthRow* DashboardModel::drive(const std::string& disk) const {
 }
 
 TrayStatus DashboardModel::tray_status() const {
-  return tray_model::tray_status(reachable_, metrics_, badge_);
+  TrayStatus status = tray_model::tray_status(reachable_, metrics_, badge_);
+  status.badge = status.badge || (reachable_ && cleanup_.pending() > 0);
+  return status;
 }
 
 std::string DashboardModel::tooltip() const {
   TooltipData data = tooltip_data(reachable_, metrics_, volumes_);
+  data.pending_approvals = reachable_ ? cleanup_.pending() : 0;
   if (drives_) {
     data.worst_disk_health = worst_drive_health(*drives_);
   }
@@ -187,7 +193,7 @@ std::vector<std::string> DashboardModel::unavailable_features() const {
   if (reachable_) {
     return {};
   }
-  return {"live telemetry", "history", "disk health", "alerts", "freezes"};
+  return {"live telemetry", "history", "disk health", "alerts", "freezes", "cleanup", "space"};
 }
 
 }  // namespace myclean::tray_model

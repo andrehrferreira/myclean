@@ -159,7 +159,10 @@ std::string tooltip_text(const TooltipData& data, std::size_t max_chars) {
     const auto of = [](const std::optional<double>& part, const std::optional<double>& whole) {
       return format_bytes(part) + " / " + format_bytes(whole);
     };
-    lines = {"MyClean",
+    lines = {data.pending_approvals == 0
+                 ? std::string("MyClean")
+                 : "MyClean - " + std::to_string(data.pending_approvals) + " approval" +
+                       (data.pending_approvals == 1 ? "" : "s") + " waiting",
              "CPU " + format_percent(data.cpu_percent),
              "RAM " + of(data.memory_used, data.memory_total),
              "Commit " + of(data.commit, data.commit_limit),

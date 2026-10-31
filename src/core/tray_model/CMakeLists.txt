@@ -1,10 +1,13 @@
 # The tray's view models, without any UI or Win32: polling the service, the live and past-range
-# chart buffers, alerts and their toasts, the freeze watchdog's incident queue, the tray icon's
-# state and pixels, the tooltip and the text formats of the dashboard.
+# chart buffers, alerts and their toasts, the approval inbox and Space lists, the freeze
+# watchdog's incident queue, the tray icon's state and pixels, the tooltip and the text formats
+# of the dashboard.
 myclean_add_library(tray_model
   SOURCES
     chart.cpp
     chart.hpp
+    cleaning.cpp
+    cleaning.hpp
     dashboard_model.cpp
     dashboard_model.hpp
     format.cpp

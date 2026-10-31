@@ -10,6 +10,7 @@
 #include "core/model/series.hpp"
 #include "core/model/units.hpp"
 #include "core/tray_model/chart.hpp"
+#include "core/tray_model/cleaning.hpp"
 #include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/snapshot.hpp"
@@ -95,6 +96,10 @@ class DashboardModel {
   void set_watchdog_error(std::string error) { watchdog_error_ = std::move(error); }
   [[nodiscard]] const std::string& watchdog_error() const { return watchdog_error_; }
 
+  // The approval inbox, the Space view and the user-task runner.
+  [[nodiscard]] const CleanupView& cleanup() const { return cleanup_; }
+
+  // The icon's state; its badge also shows while a plan waits for the owner's approval.
   [[nodiscard]] TrayStatus tray_status() const;
   [[nodiscard]] std::string tooltip() const;
   // The features the dashboard cannot show live while the service is unreachable; empty while
@@ -140,6 +145,7 @@ class DashboardModel {
   std::optional<std::vector<FreezeGroupRow>> freezes_;
   std::optional<IncidentQueue::Counts> incident_counts_;
   std::string watchdog_error_;
+  CleanupView cleanup_;
 };
 
 }  // namespace myclean::tray_model

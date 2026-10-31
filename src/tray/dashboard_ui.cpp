@@ -26,6 +26,8 @@
 #include "core/tray_model/replies.hpp"
 #include "core/tray_model/snapshot.hpp"
 #include "core/tray_model/tray_state.hpp"
+#include "tray/inbox_ui.hpp"
+#include "tray/ui_text.hpp"
 
 namespace myclean::tray {
 
@@ -35,62 +37,18 @@ namespace metric = telemetry::metric;
 using tray_model::ChartSeries;
 using tray_model::DashboardModel;
 using tray_model::Range;
+using ui::colored_text;
+using ui::join;
+using ui::local_date_time;
+using ui::muted_text;
+using ui::rgb;
+using ui::text;
+using ui::wrapped_text;
+namespace color = ui::color;
 
 constexpr double gib = 1024.0 * 1024.0 * 1024.0;
 constexpr double mib = 1024.0 * 1024.0;
 constexpr int heatmap_seconds = 120;
-
-// The palette, as 0xRRGGBB.
-namespace color {
-constexpr unsigned background = 0x111418;
-constexpr unsigned panel = 0x181C21;
-constexpr unsigned raised = 0x20252B;
-constexpr unsigned hover = 0x2A3038;
-constexpr unsigned border = 0x2A2F36;
-constexpr unsigned text = 0xE6E8EB;
-constexpr unsigned muted = 0x8B939C;
-constexpr unsigned accent = 0x4C9AFF;
-constexpr unsigned good = 0x2EB872;
-constexpr unsigned warning = 0xE8B21E;
-constexpr unsigned bad = 0xE5484D;
-}  // namespace color
-
-ImVec4 rgb(unsigned value, float alpha = 1.0F) {
-  return {static_cast<float>((value >> 16U) & 0xFFU) / 255.0F,
-          static_cast<float>((value >> 8U) & 0xFFU) / 255.0F,
-          static_cast<float>(value & 0xFFU) / 255.0F, alpha};
-}
-
-void text(std::string_view value) {
-  ImGui::TextUnformatted(value.data(), value.data() + value.size());
-}
-
-void muted_text(std::string_view value) {
-  ImGui::PushStyleColor(ImGuiCol_Text, rgb(color::muted));
-  text(value);
-  ImGui::PopStyleColor();
-}
-
-void colored_text(unsigned value_color, std::string_view value) {
-  ImGui::PushStyleColor(ImGuiCol_Text, rgb(value_color));
-  text(value);
-  ImGui::PopStyleColor();
-}
-
-// Text that wraps at the right edge of the current column or window.
-void wrapped_text(unsigned value_color, std::string_view value) {
-  ImGui::PushTextWrapPos(0.0F);
-  colored_text(value_color, value);
-  ImGui::PopTextWrapPos();
-}
-
-std::string join(const std::vector<std::string>& parts, std::string_view separator) {
-  std::string joined;
-  for (const std::string& part : parts) {
-    joined += (joined.empty() ? "" : std::string(separator)) + part;
-  }
-  return joined;
-}
 
 // "clipboard_held_open" -> "Clipboard held open".
 std::string humanize(std::string_view name) {
@@ -100,11 +58,6 @@ std::string humanize(std::string_view name) {
     result.front() = static_cast<char>(result.front() - 'a' + 'A');
   }
   return result;
-}
-
-std::string local_date_time(const std::chrono::time_zone& zone, WallTime time) {
-  return tray_model::format_date_time(
-      std::chrono::floor<std::chrono::seconds>(zone.to_local(time)));
 }
 
 std::optional<double> value(const DashboardModel& model, std::string_view name,
@@ -1139,18 +1092,25 @@ void draw_dashboard(const DashboardModel& model, const std::chrono::time_zone& z
   draw_header(model, zone);
 
   // A navigation column on the left, the chosen section on the right.
-  static constexpr std::array<std::pair<Section, const char*>, 6> sections = {{
+  static constexpr std::array<std::pair<Section, const char*>, 8> sections = {{
       {Section::cpu_memory, "CPU and memory"},
       {Section::disks, "Disks"},
       {Section::volumes, "Volumes"},
       {Section::processes, "Processes"},
       {Section::alerts, "Alerts"},
       {Section::freezes, "Freezes"},
+      {Section::cleanup, "Cleanup"},
+      {Section::space, "Space"},
   }};
   ImGui::BeginChild("navigation", ImVec2(ImGui::GetFontSize() * 10.0F, 0.0F),
                     ImGuiChildFlags_Borders);
+  const int pending = model.service_reachable() ? model.cleanup().pending() : 0;
   for (const auto& [section, label] : sections) {
-    if (ImGui::Selectable(label, state.section == section)) {
+    // The inbox shows how many plans wait for the owner; "###" keeps its id stable.
+    const std::string shown = section == Section::cleanup && pending > 0
+                                  ? std::format("{} ({})###{}", label, pending, label)
+                                  : std::string(label);
+    if (ImGui::Selectable(shown.c_str(), state.section == section)) {
       state.section = section;
     }
   }
@@ -1177,6 +1137,12 @@ void draw_dashboard(const DashboardModel& model, const std::chrono::time_zone& z
       break;
     case Section::freezes:
       draw_freezes(model, zone);
+      break;
+    case Section::cleanup:
+      draw_cleanup(model, zone, state);
+      break;
+    case Section::space:
+      draw_space(model, zone, state);
       break;
   }
   ImGui::EndChild();

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdint>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -16,10 +17,12 @@
 #include "core/ipc/alerts.hpp"
 #include "core/ipc/disk_health.hpp"
 #include "core/ipc/input.hpp"
+#include "core/ipc/plans.hpp"
 #include "core/ipc/telemetry.hpp"
 #include "core/model/result.hpp"
 #include "core/model/series.hpp"
 #include "core/telemetry/metrics.hpp"
+#include "core/tray_model/cleaning.hpp"
 #include "core/tray_model/replies.hpp"
 #include "core/tray_model/snapshot.hpp"
 
@@ -75,6 +78,9 @@ PollResult Poller::poll(WallTime now, bool dashboard_open, const std::vector<Req
   result.time = now;
   select(dashboard_open, requests);
   const Result<Json> reply = link_->call(ipc::metrics_latest_method, Json::object());
+  if (tasks_ != nullptr) {
+    result.cleanup.task_activity = tasks_->activity();
+  }
   if (!link_->reachable()) {
     connected_ = false;
     result.error = reply ? std::string() : reply.error().message;
@@ -87,6 +93,7 @@ PollResult Poller::poll(WallTime now, bool dashboard_open, const std::vector<Req
     // Connected (again): everything the service holds may have changed meanwhile.
     connected_ = true;
     next_slow_.reset();
+    next_plans_.reset();
     badge_.reset();
   }
   if (reply) {
@@ -95,10 +102,15 @@ PollResult Poller::poll(WallTime now, bool dashboard_open, const std::vector<Req
       result.latest = std::move(*latest);
     }
   }
+  ask_again(dashboard_open, requests, result);
+  bool refresh_plans = false;
   for (const Request& request : requests) {
     handle(request, result);
+    refresh_plans = handle_cleanup(request, result) || refresh_plans;
   }
   fetch_rest(now, dashboard_open, result);
+  fetch_cleanup(now, dashboard_open, refresh_plans, result);
+  run_tasks(result);
   // The service may have gone away after the first call.
   result.reachable = link_->reachable();
   if (!result.reachable) {
@@ -113,6 +125,11 @@ void Poller::select(bool dashboard_open, const std::vector<Request>& requests) {
     // Opening the dashboard shows current data at once, on the live range.
     range_ = Range::live;
     next_slow_.reset();
+  }
+  if (!dashboard_open) {
+    // A dashboard opened later starts with every plan closed and no Space list loaded.
+    open_plans_.clear();
+    analysing_.clear();
   }
   dashboard_open_ = dashboard_open;
   // A range takes effect even while the service is down.
@@ -178,6 +195,138 @@ void Poller::handle(const Request& request, PollResult& result) {
     result.explanation = reply ? parse_processes_explain(*reply)
                                : Result<Explanation>(tl::unexpected(reply.error()));
   }
+}
+
+bool Poller::handle_cleanup(const Request& request, PollResult& result) {
+  // Sends one of the owner's decisions; its outcome is empty when it worked.
+  const auto decide = [&](std::string_view what, std::string_view method, const Json& params) {
+    const Result<Json> reply = link_->call(method, params);
+    result.cleanup.action =
+        reply ? std::string() : std::string(what) + " failed: " + reply.error().message;
+    return true;
+  };
+  if (std::holds_alternative<ScanNow>(request)) {
+    return decide("Scan", ipc::cleaning_scan_method, Json::object());
+  }
+  if (const auto* approve = std::get_if<ApprovePlan>(&request)) {
+    return decide("Approve", ipc::plans_approve_method,
+                  plans_approve_params(approve->id, approve->selection));
+  }
+  if (const auto* reject = std::get_if<RejectPlan>(&request)) {
+    return decide("Reject", ipc::plans_reject_method, plan_id_params(reject->id));
+  }
+  if (const auto* undo = std::get_if<UndoPlan>(&request)) {
+    return decide("Undo", ipc::plans_undo_method, plan_id_params(undo->id));
+  }
+  if (const auto* restore = std::get_if<RestoreQuarantine>(&request)) {
+    return decide("Restore", ipc::quarantine_restore_method,
+                  quarantine_restore_params(restore->plan, restore->item));
+  }
+  if (const auto* propose = std::get_if<ProposeCleanup>(&request)) {
+    return decide("Proposing a cleanup", ipc::plans_propose_cleanup_method,
+                  propose_cleanup_params(propose->candidates));
+  }
+  if (const auto* open = std::get_if<OpenPlan>(&request)) {
+    open_plans_.insert(open->id);
+    if (std::optional<PlanDetail> detail =
+            fetch(*link_, ipc::plans_get_method, plan_id_params(open->id), &parse_plans_get)) {
+      result.cleanup.details.push_back(std::move(*detail));
+    }
+  } else if (const auto* close = std::get_if<ClosePlan>(&request)) {
+    open_plans_.erase(close->id);
+  } else if (const auto* load = std::get_if<LoadSpace>(&request)) {
+    load_space(*load, result);
+  }
+  return false;
+}
+
+void Poller::ask_again(bool dashboard_open, const std::vector<Request>& requests,
+                       PollResult& result) {
+  if (!dashboard_open) {
+    return;
+  }
+  for (const LoadSpace& load : std::exchange(analysing_, {})) {
+    const bool asked = std::ranges::any_of(requests, [&](const Request& request) {
+      const auto* other = std::get_if<LoadSpace>(&request);
+      return other != nullptr && other->list == load.list;
+    });
+    if (!asked) {
+      load_space(load, result);
+    }
+  }
+}
+
+void Poller::load_space(const LoadSpace& load, PollResult& result) {
+  SpaceReply space{.list = load.list, .volume = load.volume};
+  const Result<Json> reply =
+      link_->call(space_method(load.list), space_params(load.list, load.volume, load.refresh));
+  const Result<void> parsed =
+      reply ? parse_space(*reply, space) : Result<void>(tl::unexpected(reply.error()));
+  if (!parsed) {
+    space.state = "failed";
+    space.error = parsed.error().message;
+  }
+  if (space.state == "scanning") {
+    // Asked again, without starting another analysis, until it is ready.
+    analysing_.push_back(LoadSpace{.list = load.list, .volume = load.volume, .refresh = false});
+  }
+  result.cleanup.space.push_back(std::move(space));
+}
+
+void Poller::fetch_cleanup(WallTime now, bool dashboard_open, bool refresh, PollResult& result) {
+  bool due = refresh || !next_plans_ || now >= *next_plans_;
+  if (dashboard_open || due || (status_ && status_->scanning)) {
+    result.cleanup.status =
+        fetch(*link_, ipc::cleaning_status_method, Json::object(), &parse_cleaning_status);
+    if (result.cleanup.status) {
+      // A scan that ended may have proposed plans.
+      due = due || (status_ && status_->last_completed != result.cleanup.status->last_completed);
+      status_ = result.cleanup.status;
+    }
+  }
+  if (!due) {
+    return;
+  }
+  next_plans_ = now + plans_interval;
+  result.cleanup.plans = fetch(*link_, ipc::plans_list_method, Json::object(), &parse_plans_list);
+  if (!dashboard_open) {
+    return;
+  }
+  result.cleanup.quarantine =
+      fetch(*link_, ipc::quarantine_list_method, Json::object(), &parse_quarantine_list);
+  for (const std::int64_t id : open_plans_) {
+    if (std::optional<PlanDetail> detail =
+            fetch(*link_, ipc::plans_get_method, plan_id_params(id), &parse_plans_get)) {
+      result.cleanup.details.push_back(std::move(*detail));
+    }
+  }
+}
+
+void Poller::run_tasks(PollResult& result) {
+  if (tasks_ == nullptr) {
+    return;
+  }
+  if (const std::optional<ITaskRunner::Report> report = tasks_->report()) {
+    const Result<Json> reply = link_->call(ipc::user_tasks_report_method,
+                                           Json{{"id", report->plan}, {"result", report->result}});
+    if (!link_->reachable()) {
+      return;  // delivered at a later poll; no new task meanwhile
+    }
+    // A refusal the service answered does not change when the same report is sent again.
+    result.cleanup.task_note = reply ? report->summary
+                                     : "The service refused the report of plan " +
+                                           std::to_string(report->plan) + ": " +
+                                           reply.error().message;
+    tasks_->delivered();
+  }
+  if (tasks_->idle()) {
+    const Result<Json> next = link_->call(ipc::user_tasks_next_method, Json::object());
+    const auto task = next ? next->find("task") : Json::const_iterator{};
+    if (next && link_->reachable() && task != next->end() && task->is_object()) {
+      tasks_->start(*task);
+    }
+  }
+  result.cleanup.task_activity = tasks_->activity();
 }
 
 std::optional<Series> Poller::query(const SeriesKey& key, std::int64_t from, std::int64_t to,

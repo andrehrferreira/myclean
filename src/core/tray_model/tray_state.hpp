@@ -60,6 +60,7 @@ struct TooltipData {
   std::string system_volume = "C:";              // the volume Windows runs from
   std::optional<double> system_free;             // bytes free on it
   std::optional<std::string> worst_disk_health;  // worst_drive_health()
+  int pending_approvals = 0;                     // plans waiting for the owner
 };
 
 // The tooltip's disk-health text: "good" when every drive is good, "Disk 3 warning" naming the
