@@ -34,7 +34,7 @@ Paste Stall, Incident Recording, Mechanism Classification).
 ## 2. Method
 
 The experimental code lives outside the repo, in
-`C:\Users\Bolado\AppData\Local\Temp\claude\f--MyClean\c9ddaf7d-862d-42f1-a36e-af1fa4e3176b\scratchpad\spikes\`:
+`C:\Users\<user>\AppData\Local\Temp\claude\f--MyClean\c9ddaf7d-862d-42f1-a36e-af1fa4e3176b\scratchpad\spikes\`:
 
 - `x2.cpp`: a single test program.
 - `build.ps1`: enters the VS 2022 Build Tools dev shell (x64) and runs

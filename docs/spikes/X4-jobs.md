@@ -39,7 +39,7 @@ Recovery and Job Re-Adoption, Game Mode, Governor Overhead and Effect).
 ## 2. Method
 
 The experimental code lives outside the repo, in
-`C:\Users\Bolado\AppData\Local\Temp\claude\f--MyClean\c9ddaf7d-862d-42f1-a36e-af1fa4e3176b\scratchpad\spikes\`:
+`C:\Users\<user>\AppData\Local\Temp\claude\f--MyClean\c9ddaf7d-862d-42f1-a36e-af1fa4e3176b\scratchpad\spikes\`:
 
 - `x4.cpp`: one program with subcommands; it also acts as its own child
   workloads.
@@ -66,7 +66,7 @@ powershell -NoProfile -File build.ps1 x4.cpp -DDYN_SUSPEND -Fejs2.exe -Fojs2.obj
 | `js2 suspendtest` | Tree of root + 3 children × 2 busy threads in an unlimited job (for accounting). `NtSuspendProcess` on each member ×1 and ×2, resume ×1 and ×2. A helper process suspends and exits; another process resumes. `NtResumeProcess` on someone else's `CREATE_SUSPENDED` process. Undocumented job freeze (`NtSetInformationJobObject`, class 18, `JOBOBJECT_FREEZE_INFORMATION`: `Flags=1`, `Freeze=TRUE/FALSE`), including a member added after the freeze, a freezer that exits, and `NtResumeProcess` on frozen members |
 | `runbuilds.ps1 -Which cpp\|rust -Configs "rate:commitMB,…"` | `jt3 runjob <rate> <commitMB> <80 % notif>` around `cl /nologo /c /MP32 /EHsc /O2 /std:c++17 *.cpp` (320 generated files, each with `<regex>`, `<map>`, `<unordered_map>`, `<sstream>`, `<iostream>` and unique templates), or `cargo build --offline -j 32 --release` on a generated workspace of 32 independent crates (60 generic structs each, no dependencies). Records wall time, job CPU, total processes, `PeakJobMemoryUsed` and port messages; outputs are cleaned before every run |
 
-`cargo` is on PATH (`C:\Users\Bolado\.cargo\bin\cargo.exe`); **`gradle` is
+`cargo` is on PATH (`C:\Users\<user>\.cargo\bin\cargo.exe`); **`gradle` is
 not**, so Gradle was not tested.
 
 ## 3. Results
