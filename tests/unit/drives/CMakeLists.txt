@@ -1,0 +1,10 @@
+myclean_add_test(drives
+  SOURCES
+    actions_test.cpp
+    analysis_test.cpp
+    drives_fakes.hpp
+    history_test.cpp
+    layout_test.cpp
+  DEPENDS
+    myclean::drives
+    myclean::fakes)
