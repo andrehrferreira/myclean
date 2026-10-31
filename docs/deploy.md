@@ -43,7 +43,11 @@ logon.
  7 ───────────────────────────────────────────▶ 8  copy stage → versions\<version>
                                                 9  stop service (SCM stop, kill after 30 s)
                                                10  point current → versions\<version>
-                                               11  register / fix service if needed
+                                               10b record your SID in %ProgramData%\MyClean\owner.sid
+                                                   (first deploy only; the service trusts it because
+                                                   Administrators own it)
+                                               11  register / fix service if needed (restart on
+                                                   failure, also on a stop with an error code)
                                                12  start service; must stay up, same PID, 5 s
                                                    └ fails → current → previous, restart, report
                                                13  prune old versions (keep 5, never current/previous)

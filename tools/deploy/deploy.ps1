@@ -45,6 +45,7 @@ param(
     [ValidateSet('activate', 'uninstall', 'purge')][string]$Privileged,
     [Parameter(ParameterSetName = 'Privileged')][string]$Target,
     [Parameter(Mandatory, ParameterSetName = 'Privileged')][string]$ResultFile,
+    [Parameter(ParameterSetName = 'Privileged')][string]$OwnerSid,
 
     [int]$KeepVersions = 5,
     [int]$HealthSeconds = 5
@@ -245,7 +246,8 @@ function Invoke-Privileged([string]$Action, [string]$TargetPath) {
     $resultPath = Join-Path ([IO.Path]::GetTempPath()) ('myclean-deploy-{0}.json' -f [guid]::NewGuid())
     $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"",
                  '-Privileged', $Action, '-ResultFile', "`"$resultPath`"",
-                 '-KeepVersions', $KeepVersions, '-HealthSeconds', $HealthSeconds)
+                 '-KeepVersions', $KeepVersions, '-HealthSeconds', $HealthSeconds,
+                 '-OwnerSid', [Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
     if ($TargetPath) { $argList += @('-Target', "`"$TargetPath`"") }
     Write-Step "Elevating for '$Action' (UAC prompt)"
     try {
@@ -293,6 +295,8 @@ function Register-MyCleanService {
                     -Description 'MyClean monitoring, resource governor and maintenance service' `
                     -StartupType Automatic | Out-Null
         Invoke-Native sc.exe @('failure', $ServiceName, 'reset=', '86400', 'actions=', 'restart/5000/restart/5000/restart/30000')
+        # Also restart when the service stops itself with an error (a failed start, contract C7).
+        Invoke-Native sc.exe @('failureflag', $ServiceName, '1')
     } elseif ($existing.PathName -ne $binPath) {
         Write-Log "Updating service path to $binPath"
         $change = Invoke-CimMethod -InputObject $existing -MethodName Change -Arguments @{ PathName = $binPath }
@@ -320,6 +324,18 @@ function Start-MyCleanService {
     $svc.Refresh()
     if ($svc.Status -ne 'Running') { throw "service is '$($svc.Status)' $HealthSeconds s after start" }
     if ((Get-ServiceProcessId) -ne $startedPid) { throw "service crashed and was restarted by the SCM within $HealthSeconds s" }
+}
+
+# The service trusts %ProgramData%\MyClean\owner.sid only when SYSTEM or Administrators own it,
+# which is the case for a file created here, in the elevated half. Never overwritten.
+function Set-OwnerSid {
+    if (-not $OwnerSid) { return }
+    $stateDir = Join-Path $env:ProgramData 'MyClean'
+    $file = Join-Path $stateDir 'owner.sid'
+    if (Test-Path -LiteralPath $file) { return }
+    New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
+    [IO.File]::WriteAllText($file, "$OwnerSid`n")
+    Write-Log "Recorded owner SID $OwnerSid"
 }
 
 function Set-CurrentLink([string]$VersionDir) {
@@ -370,6 +386,7 @@ function Invoke-Activate([string]$Source, $Result) {
 
     $Result.version = Split-Path $versionDir -Leaf
     Write-Log "Activating $($Result.version) (previous: $previous)"
+    Set-OwnerSid
     Stop-MyCleanService
     Set-CurrentLink $versionDir
     try {
