@@ -1,0 +1,11 @@
+myclean_add_test(store
+  SOURCES
+    database_test.cpp
+    migrations_test.cpp
+    repositories_test.cpp
+    store_test.cpp
+    store_test_support.hpp
+    time_series_test.cpp
+  DEPENDS
+    myclean::store
+    myclean::fakes)

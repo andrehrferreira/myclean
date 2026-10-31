@@ -3,8 +3,8 @@
 - [x] 1.2 F1: .clang-format, .clang-tidy and a `lint` build target; GoogleTest wired into ctest
 - [x] 1.3 F1: GitHub Actions windows-latest workflow running configure -> build -> lint -> ctest; pre-commit hook running type-check + lint + affected tests
 - [x] 1.4 F2: core model types (ids, units, Sample, Series, Finding, Plan, Action, Undo) in src/core with no <windows.h>; platform interfaces (IFileSystem, IProcessTable, IJobController, IRegistry, IClipboardProbe, ...) with fakes in tests
-- [ ] 1.5 F3: SQLite store in WAL mode with versioned migrations, integrity check at open, repositories, batched writes (10 s) and synchronous audit writes
-- [ ] 1.6 F3: time-series pipeline storage: in-memory 1 s ring (1 h), minute aggregates (30 d), hour aggregates (2 y), retention jobs
+- [x] 1.5 F3: SQLite store in WAL mode with versioned migrations, integrity check at open, repositories, batched writes (10 s) and synchronous audit writes
+- [x] 1.6 F3: time-series pipeline storage: in-memory 1 s ring (1 h), minute aggregates (30 d), hour aggregates (2 y), retention jobs
 - [x] 1.7 F4: TOML/JSON loaders for data/rules/*.toml, data/classes.toml, data/kb/*.json with schema validation; an invalid file is rejected whole, never half-applied
 - [x] 1.8 F5: SafeRemove: hard deny-list, never follows reparse points, skips cloud placeholders (RECALL_ON_DATA_ACCESS / RECALL_ON_OPEN / OFFLINE), accepts only items of a stored plan, re-validates each item immediately before acting
 - [x] 1.9 F5: SafeRemove tests: one per deny-list entry, junction/symlink, cloud placeholder, TOCTOU swap, item not in plan
