@@ -15,4 +15,5 @@ myclean_add_library(compress
     myclean::cleanup
     myclean::model
     myclean::os
+    myclean::packs
     myclean::space)

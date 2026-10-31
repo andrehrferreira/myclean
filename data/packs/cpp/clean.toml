@@ -1,0 +1,27 @@
+# Developer artifacts (cleaning spec, "Developer Artifact Qualification"; analysis F-012;
+# sources: pack.toml). The scanner walks the roots of data/workspaces.toml; a folder holding a
+# rule's marker is a project root, and the rule's targets are patterns relative to it. An
+# artifact is proposed only when the project is in a git work tree, git ignores the artifact and
+# tracks nothing inside it, no process uses it or the project, and the project is inactive for
+# require.inactive_days (newest of the last commit and every source file). One marker per rule,
+# and an artifact that several rules select is proposed once.
+
+[[rule]]
+id       = "vcxproj-artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "*.vcxproj" }
+targets  = ["bin", "obj", "x64", "Debug", "Release"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+[[rule]]
+id       = "cmake-artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "CMakeLists.txt" }
+targets  = ["build*", "out", "cmake-build-*"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }

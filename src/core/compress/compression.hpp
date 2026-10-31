@@ -47,6 +47,7 @@ enum class Exclusion {
   recent,          // modified within the recent window: likely written again
   windows,         // under %WINDIR%: CompactOS covers it
   incompressible,  // of an extension the samples showed does not compress
+  pack_excluded,   // named by the `exclude` of a knowledge pack's compression target
 };
 
 [[nodiscard]] std::string_view to_string(Exclusion exclusion);
@@ -71,6 +72,11 @@ struct Rules {
   std::chrono::days recent{30};             // files modified more recently are left alone
   std::filesystem::path windows;            // %WINDIR%; empty: no Windows folder exclusion
   std::vector<std::string> incompressible;  // extra extensions to skip, lower case with the dot
+  // A knowledge pack's compression target (packs::CompressTarget::exclude): files and folders
+  // below `excluded_below` whose name matches one of `excluded_names` ('*' and '?', any case)
+  // are left alone.
+  std::filesystem::path excluded_below;
+  std::vector<std::string> excluded_names;
 };
 
 // Why `file` of folder `folder` is left uncompressed at time `now`, or Exclusion::none.

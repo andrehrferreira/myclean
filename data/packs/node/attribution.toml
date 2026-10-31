@@ -1,0 +1,36 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "npm-cache"
+paths    = ['%LOCALAPPDATA%\npm-cache']
+category = "dev-caches"
+label    = "npm cache"
+reclaim  = { kind = "relocate", ref = "npm", note = "Rule node/npm-cache verifies and trims it instead." }
+
+[[area]]
+id       = "npm-global"
+paths    = ['%APPDATA%\npm']
+category = "dev-toolchains"
+label    = "Globally installed npm packages"
+reclaim  = { kind = "manual-review", note = "`npm ls -g` lists them; `npm rm -g <name>` removes one." }
+
+[[area]]
+id       = "pnpm-store"
+paths    = ['%LOCALAPPDATA%\pnpm']
+category = "dev-caches"
+label    = "pnpm content store"
+reclaim  = { kind = "clean-rule", ref = "pnpm-store" }
+
+[[area]]
+id       = "yarn-cache"
+paths    = ['%LOCALAPPDATA%\Yarn']
+category = "dev-caches"
+label    = "Yarn cache"
+reclaim  = { kind = "clean-rule", ref = "yarn-cache" }
+
+[[area]]
+id       = "js-runtime-caches"
+paths    = ['%USERPROFILE%\.bun\install\cache', '%LOCALAPPDATA%\electron\Cache']
+category = "dev-caches"
+label    = "Bun package cache and Electron download cache"
+reclaim  = { kind = "manual-review", note = "Regenerates (`bun pm cache rm`); no cleaning rule covers them yet." }

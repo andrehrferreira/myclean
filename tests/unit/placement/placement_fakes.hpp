@@ -20,6 +20,7 @@
 #include "core/os/file_system.hpp"
 #include "core/placement/drives.hpp"
 #include "core/placement/settings.hpp"
+#include "core/telemetry/process_table.hpp"
 #include "fakes/fake_file_system.hpp"
 
 namespace myclean::placement::testing {
@@ -259,6 +260,80 @@ class FakeProcessRunner final : public IProcessRunner {
   std::vector<std::string> commands;
   std::map<std::string, std::uint32_t> exit_codes;
   std::function<void(const std::string&)> on_run;
+};
+
+// Registry keys by their text (HKCU\Software\...), case-insensitive, with their values.
+class FakeRegistry final : public IRegistry {
+ public:
+  [[nodiscard]] Result<std::optional<RegistryValue>> read(std::string_view key,
+                                                          std::string_view name) const override {
+    const auto found = keys_.find(upper(key));
+    if (found == keys_.end()) {
+      return std::optional<RegistryValue>{};
+    }
+    const auto value = found->second.values.find(upper(name));
+    return value == found->second.values.end() ? std::optional<RegistryValue>{} : value->second;
+  }
+  [[nodiscard]] Result<void> write(std::string_view key, std::string_view name,
+                                   const RegistryValue& value) override {
+    if (failing_) {
+      return fail(Errc::access_denied, "injected failure writing " + std::string(name));
+    }
+    put(key, name, value);
+    return {};
+  }
+  [[nodiscard]] Result<void> remove(std::string_view key, std::string_view name) override {
+    if (const auto found = keys_.find(upper(key)); found != keys_.end()) {
+      found->second.values.erase(upper(name));
+    }
+    return {};
+  }
+  [[nodiscard]] Result<std::vector<std::string>> subkeys(std::string_view key) const override {
+    const std::string prefix = upper(key) + "\\";
+    std::vector<std::string> names;
+    for (const auto& [folded, entry] : keys_) {
+      if (folded.starts_with(prefix) && folded.find('\\', prefix.size()) == std::string::npos) {
+        names.push_back(entry.text.substr(prefix.size()));
+      }
+    }
+    return names;
+  }
+
+  void put(std::string_view key, std::string_view name, RegistryValue value) {
+    Key& entry = keys_[upper(key)];
+    entry.text = std::string(key);
+    entry.values[upper(name)] = std::move(value);
+  }
+  // Deletes `key` with its values, as `wsl --unregister` does with a distribution's key.
+  void drop(std::string_view key) { keys_.erase(upper(key)); }
+  [[nodiscard]] bool has(std::string_view key) const { return keys_.contains(upper(key)); }
+  // Makes every later write fail with access_denied.
+  void fail_writes() { failing_ = true; }
+
+ private:
+  struct Key {
+    std::string text;
+    std::map<std::string, RegistryValue> values;
+  };
+
+  std::map<std::string, Key> keys_;
+  bool failing_ = false;
+};
+
+// A process table holding processes with the images `images`.
+class FakeProcessTable final : public telemetry::IProcessTable {
+ public:
+  [[nodiscard]] Result<std::vector<telemetry::ProcessInfo>> snapshot() override {
+    std::vector<telemetry::ProcessInfo> processes;
+    processes.reserve(images.size());
+    for (const std::string& image : images) {
+      processes.push_back(telemetry::ProcessInfo{.image = image});
+    }
+    return processes;
+  }
+  [[nodiscard]] unsigned logical_processors() const override { return 1; }
+
+  std::vector<std::string> images;
 };
 
 class FakeSystemSpace final : public ISystemSpace {

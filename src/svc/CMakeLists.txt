@@ -32,6 +32,7 @@ myclean_add_library(svc
     myclean::input
     myclean::ipc
     myclean::os
+    myclean::packs
     myclean::platform_clean
     myclean::platform_fs
     myclean::platform_ipc
@@ -49,7 +50,7 @@ target_compile_definitions(myclean_svc PRIVATE MYCLEAN_VERSION="${PROJECT_VERSIO
 add_executable(myclean-svc main.cpp)
 target_link_libraries(myclean-svc PRIVATE
   myclean::svc myclean::platform_cleanup myclean::platform_disk myclean::platform_disk_health
-  myclean::platform_etw myclean::platform_git myclean::platform_perf myclean::platform_proc
+  myclean::platform_etw myclean::platform_git myclean::platform_packs myclean::platform_perf myclean::platform_proc
   myclean::platform_settings myclean::platform_trust)
 if(MYCLEAN_ASAN)
   add_custom_command(TARGET myclean-svc POST_BUILD

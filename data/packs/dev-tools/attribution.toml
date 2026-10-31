@@ -1,0 +1,25 @@
+# Sources: pack.toml. The caches of each tool are areas of that tool's pack; these are the
+# folders around them.
+
+[[area]]
+id       = "user-cache"
+paths    = ['%USERPROFILE%\.cache']
+category = "dev-caches"
+label    = "Developer tool caches (~/.cache)"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "projects"
+paths    = ['%USERPROFILE%\source\repos', '%USERPROFILE%\Documents\GitHub', '%USERPROFILE%\Projects',
+            '%USERPROFILE%\dev', '%USERPROFILE%\Documents\Unreal Projects', '%USERPROFILE%\Documents\Visual Studio 2022\Projects']
+category = "dev-projects"
+label    = "Source code projects"
+reclaim  = { kind = "manual-review", note = "Projects can move to the workspace drives; build output inside them is listed separately." }
+
+[[area]]
+id       = "sdks"
+paths    = ['%ProgramFiles(x86)%\Windows Kits', '%ProgramFiles%\dotnet', '%ProgramFiles%\NVIDIA GPU Computing Toolkit',
+            '%ProgramFiles%\LLVM', '%ProgramFiles%\Go', '%ProgramFiles%\Android']
+category = "dev-toolchains"
+label    = "SDKs and toolchains (Windows SDK, .NET, CUDA, LLVM, Go, Android Studio)"
+reclaim  = { kind = "uninstall", note = "Uninstall SDK versions you no longer build with." }

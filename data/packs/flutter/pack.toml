@@ -1,0 +1,12 @@
+id          = "flutter"
+version     = "1.0.0"
+title       = "Flutter and Dart"
+description = "The .dart_tool and build folders of inactive Flutter and Dart projects, cleaned when git ignores them."
+sources     = [
+  "https://dart.dev/tools/pub/cmd/pub-get (the package cache, %LOCALAPPDATA%\\Pub\\Cache on Windows, and the project's .dart_tool folder)",
+  "observed on reference machine: Flutter projects (pubspec.yaml) with .dart_tool and build ignored by git (analysis F-012)",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%LOCALAPPDATA%\Pub\Cache' }, { path_exists = '%FLUTTER_ROOT%' }]

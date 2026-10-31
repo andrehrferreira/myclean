@@ -1,0 +1,23 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "windows.wsl-launcher"
+match    = ['wsl.exe']
+no_match = ['notepad++.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "microsoft.wsl.service"
+match    = ['wslservice.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "microsoft.wsl.host"
+match    = ['wslhost.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "docker.desktop"
+match    = ['Docker Desktop.exe']

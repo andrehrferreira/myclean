@@ -1,0 +1,51 @@
+# Developer artifacts (cleaning spec, "Developer Artifact Qualification"; analysis F-012;
+# sources: pack.toml). The scanner walks the roots of data/workspaces.toml; a folder holding a
+# rule's marker is a project root, and the rule's targets are patterns relative to it. An
+# artifact is proposed only when the project is in a git work tree, git ignores the artifact and
+# tracks nothing inside it, no process uses it or the project, and the project is inactive for
+# require.inactive_days (newest of the last commit and every source file).
+
+[[rule]]
+id       = "artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "package.json" }
+targets  = ["node_modules", ".next", ".nuxt", ".turbo", ".parcel-cache", ".svelte-kit", "dist",
+            "build", "coverage", ".cache"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+# Global package caches (cleaning spec, "Native Prune Commands Under the User Token"; analysis
+# F-013). Each is pruned with its tool's own command, run by the tray under the owner's token:
+# deleting files under a content-addressed store breaks it. For native rules, `targets` are only
+# measured: the rule is offered when they hold anything (a rule without targets always is),
+# sized by what they hold now.
+
+[[rule]]
+id       = "pnpm-store"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "pnpm store prune"
+targets  = ['%LOCALAPPDATA%\pnpm\store']
+
+# `npm cache verify` garbage-collects unreferenced data and checks the rest.
+[[rule]]
+id       = "npm-cache"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "npm cache verify"
+targets  = ['%LOCALAPPDATA%\npm-cache']
+
+[[rule]]
+id       = "yarn-cache"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "yarn cache clean"
+targets  = ['%LOCALAPPDATA%\Yarn\Cache']

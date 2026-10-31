@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -12,13 +13,13 @@
 #include "core/clean/engine.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
-#include "core/rules/catalog.hpp"
-#include "core/rules/data_files.hpp"
+#include "core/packs/loader.hpp"
+#include "core/packs/registry.hpp"
 #include "core/rules/schema.hpp"
 #include "core/safety/deny_list.hpp"
 
 // Shared setup of the engine tests: a machine whose owner is C:\Users\owner, and the rules
-// shipped in data/rules.
+// of the knowledge packs shipped in data/packs.
 namespace myclean::clean::testing {
 
 inline const WallTime now = std::chrono::sys_days{std::chrono::year{2026} / 10 / 31};
@@ -45,15 +46,17 @@ inline void set_owner_environment(FakeEnvironment& environment) {
   environment.set(L"WINDIR", LR"(C:\Windows)");
 }
 
-// The rules of data/rules, loaded as the service loads them; throws when any file is rejected.
+// The clean cases of every shipped pack, as the service loads them (applies_when aside);
+// throws when any pack is rejected.
 inline const std::vector<rules::CleaningRule>& shipped_rules() {
   static const std::vector<rules::CleaningRule> loaded = [] {
-    rules::RuleCatalog catalog = rules::make_rule_catalog(MYCLEAN_DATA_DIR);
-    const std::vector<Error> errors = catalog.reload(rules::DiskDataFiles{});
-    if (!errors.empty()) {
-      throw std::runtime_error(errors.front().message);
+    const packs::LoadReport report =
+        packs::load_packs(packs::DiskPackFiles{}, std::filesystem::path{MYCLEAN_DATA_DIR} / "packs",
+                          std::nullopt, packs::this_version());
+    if (!report.errors.empty()) {
+      throw std::runtime_error(report.errors.front().message);
     }
-    return catalog.entries();
+    return packs::make_registry(report.packs).clean;
   }();
   return loaded;
 }

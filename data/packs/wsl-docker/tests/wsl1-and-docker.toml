@@ -1,0 +1,9 @@
+# A WSL 1 distribution's file system, beside a WSL 2 disk.
+
+[[expect]]
+kind     = "attribution"
+case     = "distro-files"
+match    = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu20.04LTS_79rhkp1fndgsc\LocalState\rootfs',
+            'C:\Users\owner\AppData\Local\Packages\TheDebianProject.DebianGNULinux_76v4gfsz19hv4\rootfs']
+no_match = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx',
+            'C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu20.04LTS_79rhkp1fndgsc\LocalState']

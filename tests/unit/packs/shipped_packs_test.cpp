@@ -9,9 +9,9 @@
 
 #include "core/map/attribution.hpp"
 #include "core/model/result.hpp"
+#include "core/packs/fixtures.hpp"
 #include "core/packs/loader.hpp"
 #include "core/packs/schema.hpp"
-#include "fixture_runner.hpp"
 
 // The packs shipped in data/packs (docs/packs.md). Every pack folder is one test, discovered
 // when ctest runs: a new pack is tested without any build change.
@@ -46,11 +46,11 @@ TEST_P(ShippedPack, IsValidAndPassesItsFixtures) {
   const Result<Pack> pack =
       load_pack(DiskPackFiles{}, packs_dir / GetParam(), Origin::builtin, running());
   ASSERT_TRUE(pack.has_value()) << pack.error().message;
-  int fixtures = 0;
-  for (const std::string& failure : testing::run_fixtures(*pack, fixtures)) {
+  const FixtureRun run = run_fixtures(DiskPackFiles{}, *pack);
+  for (const std::string& failure : run.failures) {
     ADD_FAILURE() << failure;
   }
-  EXPECT_GT(fixtures, 0) << "a shipped pack has at least one fixture in tests\\";
+  EXPECT_GT(run.fixtures, 0) << "a shipped pack has at least one fixture in tests\\";
 }
 
 INSTANTIATE_TEST_SUITE_P(Packs, ShippedPack, ::testing::ValuesIn(shipped_pack_ids()),

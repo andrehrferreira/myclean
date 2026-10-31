@@ -9,9 +9,11 @@
 #include <string>
 #include <vector>
 
+#include "core/clean/probes.hpp"
 #include "core/compress/compression.hpp"
 #include "core/model/units.hpp"
 #include "core/os/clock.hpp"
+#include "core/packs/schema.hpp"
 #include "core/space/scanner.hpp"
 
 // The compression analyzer (compression spec, "Sampled Compression Estimate"): estimates what
@@ -54,6 +56,12 @@ struct AnalyzerOptions {
   // `min_savings_share` of the eligible bytes.
   Bytes min_savings{std::uint64_t{64} << 20U};
   double min_savings_share = 0.1;
+  // The compression targets of the knowledge packs in effect (packs::Registry::compress), their
+  // paths expanded with `environment` (null: targets are not used). A folder inside one gets the
+  // target's algorithm as its recommendation instead of its category's, and the names the
+  // target excludes are left alone (Exclusion::pack_excluded).
+  std::vector<packs::CompressTarget> targets;
+  const clean::IEnvironment* environment = nullptr;
 };
 
 struct AlgorithmEstimate {
@@ -75,6 +83,7 @@ struct ExclusionTotal {
 struct FolderEstimate {
   std::filesystem::path folder;
   Category category = Category::other;
+  std::string target;  // the "<pack>/<case>" of the compression target it is in; empty: none
   Bytes size_on_disk;  // the whole folder
   Bytes eligible;      // size on disk of the files that would be compressed
   std::uint64_t eligible_files = 0;

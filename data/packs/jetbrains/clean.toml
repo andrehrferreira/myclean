@@ -1,0 +1,23 @@
+# IDE caches (analysis F-013, F-016; sources: pack.toml). Settings, keymaps, plugins and local
+# history are never targets.
+
+# Indexes; rebuilt on the next start, which takes a while on large projects.
+[[rule]]
+id       = "caches"
+category = "ides"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\JetBrains\*\caches']
+require  = { not_in_use = true }
+
+# Local folders of IDE versions not run for 180 days, such as IntelliJIdea2023.1. Settings live
+# in %APPDATA%\JetBrains and are not touched; Toolbox does not match the version pattern.
+[[rule]]
+id       = "old-versions"
+category = "ides"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\JetBrains\*20??.*']
+require  = { min_age_days = 180, not_in_use = true }

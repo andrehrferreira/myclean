@@ -21,8 +21,8 @@
 
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/packs/loader.hpp"
 #include "core/placement/drives.hpp"
-#include "core/rules/data_files.hpp"
 #include "platform/clean/win32_probes.hpp"
 #include "platform/cleanup/win32_command_runner.hpp"
 #include "platform/cleanup/win32_handler_host.hpp"
@@ -33,6 +33,7 @@
 #include "platform/fs/win32_file_system.hpp"
 #include "platform/git/git_cli.hpp"
 #include "platform/ipc/pipe_io.hpp"
+#include "platform/packs/win32_packs.hpp"
 #include "platform/perf/pdh_counters.hpp"
 #include "platform/perf/win32_memory_status.hpp"
 #include "platform/proc/nt_process_table.hpp"
@@ -124,8 +125,14 @@ bool system_volume_busy(const svc::TelemetryComponent& telemetry, const std::str
   return false;
 }
 
+// The owner's override packs folder, when administrators alone can write to it.
+myclean::Result<std::optional<std::filesystem::path>> owner_packs() {
+  namespace platform = myclean::platform;
+  return platform::owner_packs_dir().and_then(platform::owner_packs_folder);
+}
+
 std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& options,
-                                                      const myclean::rules::IDataFiles& files,
+                                                      const myclean::packs::IPackFiles& files,
                                                       const svc::TelemetryComponent& telemetry,
                                                       const svc::DiskHealthComponent& disks) {
   namespace platform = myclean::platform;
@@ -149,7 +156,11 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
       .installers = std::make_unique<platform::Win32InstallerInspector>(),
       .owner = [](std::string_view owner) { return svc::owner_context(owner); },
       // NOLINTNEXTLINE(bugprone-exception-escape): only std::bad_alloc, as anywhere in the service
-      .busy = [&telemetry, drive] { return system_volume_busy(telemetry, drive); }};
+      .busy = [&telemetry, drive] { return system_volume_busy(telemetry, drive); },
+      .machine = [](std::string_view owner) -> std::unique_ptr<myclean::packs::IMachine> {
+        return std::make_unique<platform::Win32Machine>(std::wstring(owner.begin(), owner.end()));
+      },
+      .owner_packs = owner_packs};
   const std::filesystem::path root = std::filesystem::path(drive.empty() ? "C:" : drive) / "";
   return std::make_unique<svc::CleaningComponent>(
       std::move(sources), files,
@@ -162,12 +173,13 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
 // stops before them. Collectors are registered here.
 std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOptions& options) {
   namespace platform = myclean::platform;
-  static const myclean::rules::DiskDataFiles files;
+  static const myclean::packs::DiskPackFiles files;
   auto alerts = std::make_unique<svc::AlertsComponent>(files);
   auto trust = std::make_unique<svc::TrustComponent>(
       svc::TrustSources{.inspector = std::make_unique<platform::WinImageInspector>(),
                         .images = std::make_unique<platform::WinProcessImages>(),
-                        .user_writable_roots = platform::user_writable_roots()},
+                        .user_writable_roots = platform::user_writable_roots(),
+                        .owner_packs = owner_packs},
       files);
   auto telemetry = std::make_unique<svc::TelemetryComponent>(
       svc::TelemetrySources{.processes = std::make_unique<platform::NtProcessTable>(),

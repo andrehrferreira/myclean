@@ -68,6 +68,41 @@ class ITextFiles {
   ITextFiles() = default;
 };
 
+enum class RegistryType { string, expandable, dword };  // REG_SZ, REG_EXPAND_SZ, REG_DWORD
+
+// A registry value as stored: a DWORD as its decimal text.
+struct RegistryValue {
+  std::string text;  // UTF-8
+  RegistryType type = RegistryType::string;
+
+  friend bool operator==(const RegistryValue&, const RegistryValue&) = default;
+};
+
+// String and DWORD values of the registry. A key is "HKCU\<path>" or "HKLM\<path>"; HKCU is the
+// caller's, so relocation uses it in the owner's context (the tray).
+class IRegistry {
+ public:
+  virtual ~IRegistry() = default;
+  IRegistry(const IRegistry&) = delete;
+  IRegistry& operator=(const IRegistry&) = delete;
+  IRegistry(IRegistry&&) = delete;
+  IRegistry& operator=(IRegistry&&) = delete;
+
+  // Value `name` of `key`; nullopt when the key or the value does not exist. Other types fail.
+  [[nodiscard]] virtual Result<std::optional<RegistryValue>> read(std::string_view key,
+                                                                  std::string_view name) const = 0;
+  // Sets value `name` of `key`, creating the key when it is missing.
+  [[nodiscard]] virtual Result<void> write(std::string_view key, std::string_view name,
+                                           const RegistryValue& value) = 0;
+  // Deletes value `name` of `key`; succeeds when it does not exist.
+  [[nodiscard]] virtual Result<void> remove(std::string_view key, std::string_view name) = 0;
+  // The names of the subkeys of `key`; empty when it does not exist.
+  [[nodiscard]] virtual Result<std::vector<std::string>> subkeys(std::string_view key) const = 0;
+
+ protected:
+  IRegistry() = default;
+};
+
 // What a tree holds: regular files and their logical bytes. Reparse points are not counted.
 struct TreeTotals {
   std::uint64_t files = 0;

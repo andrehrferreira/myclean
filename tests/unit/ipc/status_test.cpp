@@ -25,7 +25,16 @@ StatusReply sample() {
                                           ComponentHealth{.name = "perf",
                                                           .healthy = false,
                                                           .problems = {"disks: timed out"},
-                                                          .unavailable = {"gpu: no counters"}}}};
+                                                          .unavailable = {"gpu: no counters"}}},
+                     .packs = {PackStatus{.id = "zig",
+                                          .version = "1.0.0",
+                                          .origin = "builtin",
+                                          .status = "loaded",
+                                          .applies = true},
+                               PackStatus{.id = "broken",
+                                          .origin = "owner",
+                                          .status = "rejected",
+                                          .message = "pack 'broken': has no pack.toml"}}};
 }
 
 TEST(StatusTest, SerializesTheDocumentedMembers) {
@@ -38,7 +47,12 @@ TEST(StatusTest, SerializesTheDocumentedMembers) {
     "component_health": [
       {"name": "proc", "health": "ok", "problems": [], "unavailable": []},
       {"name": "perf", "health": "degraded", "problems": ["disks: timed out"],
-       "unavailable": ["gpu: no counters"]}]})"));
+       "unavailable": ["gpu: no counters"]}],
+    "packs": [
+      {"id": "zig", "version": "1.0.0", "origin": "builtin", "status": "loaded", "applies": true,
+       "message": null},
+      {"id": "broken", "version": "", "origin": "owner", "status": "rejected", "applies": false,
+       "message": "pack 'broken': has no pack.toml"}]})"));
 }
 
 TEST(StatusTest, RoundTrips) {
@@ -67,15 +81,25 @@ TEST(StatusTest, RoundTrips) {
       EXPECT_EQ(actual.problems, expected.problems);
       EXPECT_EQ(actual.unavailable, expected.unavailable);
     }
+    ASSERT_EQ(parsed->packs.size(), status.packs.size());
+    for (std::size_t index = 0; index < status.packs.size(); ++index) {
+      EXPECT_EQ(parsed->packs[index].id, status.packs[index].id);
+      EXPECT_EQ(parsed->packs[index].version, status.packs[index].version);
+      EXPECT_EQ(parsed->packs[index].status, status.packs[index].status);
+      EXPECT_EQ(parsed->packs[index].applies, status.packs[index].applies);
+      EXPECT_EQ(parsed->packs[index].message, status.packs[index].message);
+    }
   }
 }
 
-TEST(StatusTest, AcceptsAReplyWithoutComponentHealth) {
+TEST(StatusTest, AcceptsAReplyWithoutComponentHealthOrPacks) {
   Json older = to_json(sample());
   older.erase("component_health");
+  older.erase("packs");
   const Result<StatusReply> parsed = parse_status(older);
   ASSERT_TRUE(parsed.has_value()) << parsed.error().message;
   EXPECT_TRUE(parsed->component_health.empty());
+  EXPECT_TRUE(parsed->packs.empty());
 }
 
 TEST(StatusTest, RejectsMissingOrMistypedMembers) {

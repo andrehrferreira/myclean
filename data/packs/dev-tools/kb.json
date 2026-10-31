@@ -1,0 +1,22 @@
+{
+  "entries": [
+    {
+      "id": "git.bash",
+      "image": "bash.exe",
+      "signer": "Johannes Schindelin",
+      "description": "Git Bash, the command line that comes with Git for Windows.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "git.git",
+      "image": "git.exe",
+      "signer": "Johannes Schindelin",
+      "description": "Git version control, from Git for Windows.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

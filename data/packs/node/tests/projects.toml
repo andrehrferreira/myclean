@@ -1,0 +1,98 @@
+# An inactive web app in a workspace: its ignored node_modules, dist and .next go; its sources,
+# a build folder git does not ignore and a project outside git stay. The package managers'
+# caches are measured where they are on the reference machine.
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'F:\code\storefront\.git'
+folder = true
+[[entry]]
+path = 'F:\code\storefront\package.json'
+[[entry]]
+path = 'F:\code\storefront\src\pages\index.tsx'
+[[entry]]
+path = 'F:\code\storefront\node_modules'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\storefront\node_modules\react\package.json'
+size = 1048576
+[[entry]]
+path = 'F:\code\storefront\dist'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\storefront\dist\index.js'
+[[entry]]
+path = 'F:\code\storefront\.next'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\storefront\.next\cache\webpack\client-production\0.pack'
+[[entry]]
+path = 'F:\code\storefront\build\deploy.sh'
+
+[[entry]]
+path = 'F:\downloads\template\package.json'
+[[entry]]
+path = 'F:\downloads\template\node_modules\lodash\package.json'
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\pnpm\store\v10\files\00\1a2b3c'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\npm-cache\_cacache\index-v5\00\1a\2b3c'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Yarn\Cache\v6\npm-react-18.3.1\package.json'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\npm\node_modules\typescript\package.json'
+
+[[expect]]
+kind     = "clean"
+case     = "artifacts"
+match    = ['F:\code\storefront\node_modules', 'F:\code\storefront\dist', 'F:\code\storefront\.next']
+no_match = ['F:\code\storefront\src', 'F:\code\storefront\build', 'F:\code\storefront\package.json',
+            'F:\downloads\template\node_modules']
+
+[[expect]]
+kind     = "clean"
+case     = "pnpm-store"
+match    = ['C:\Users\owner\AppData\Local\pnpm\store']
+
+[[expect]]
+kind     = "clean"
+case     = "npm-cache"
+match    = ['C:\Users\owner\AppData\Local\npm-cache']
+no_match = ['C:\Users\owner\AppData\Roaming\npm']
+
+[[expect]]
+kind     = "clean"
+case     = "yarn-cache"
+match    = ['C:\Users\owner\AppData\Local\Yarn\Cache']
+
+[[expect]]
+kind     = "attribution"
+case     = "npm-cache"
+match    = ['C:\Users\owner\AppData\Local\npm-cache']
+
+[[expect]]
+kind     = "attribution"
+case     = "npm-global"
+match    = ['C:\Users\owner\AppData\Roaming\npm']
+
+[[expect]]
+kind     = "attribution"
+case     = "pnpm-store"
+match    = ['C:\Users\owner\AppData\Local\pnpm']
+
+[[expect]]
+kind     = "attribution"
+case     = "yarn-cache"
+match    = ['C:\Users\owner\AppData\Local\Yarn']
+
+[[expect]]
+kind     = "attribution"
+case     = "js-runtime-caches"
+match    = ['C:\Users\owner\.bun\install\cache', 'C:\Users\owner\AppData\Local\electron\Cache']
+no_match = ['C:\Users\owner\.bun\bin']

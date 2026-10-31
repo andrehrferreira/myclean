@@ -1,0 +1,63 @@
+# The shader caches of an NVIDIA and an AMD driver and of DirectX: their entries go; the cache
+# folders and the drivers' other data stay.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\NVIDIA\DXCache\b2c8f1e0a9d7_1.nvph'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\NVIDIA\GLCache\7f3a1c2d\a1b2\1234.bin'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\NVIDIA Corporation\NVIDIA App\NvBackend\ApplicationOntology\data.json'
+[[entry]]
+path = 'C:\Users\owner\AppData\LocalLow\NVIDIA\PerDriverVersion\DXCache\581.57\1a2b3c.nvph'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\D3DSCache\4c0a9b8e7f6d5c4b\8086_3E9B_35.idx'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\AMD\DxCache\0123abcd.parc'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\AMD\VkCache\a1b2c3d4.parc'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\AMD\CN\settings.sqlite'
+
+[[expect]]
+kind     = "clean"
+case     = "nvidia-dxcache"
+match    = ['C:\Users\owner\AppData\Local\NVIDIA\DXCache\b2c8f1e0a9d7_1.nvph',
+            'C:\Users\owner\AppData\LocalLow\NVIDIA\PerDriverVersion\DXCache\581.57']
+no_match = ['C:\Users\owner\AppData\Local\NVIDIA\DXCache',
+            'C:\Users\owner\AppData\Local\NVIDIA Corporation\NVIDIA App']
+
+[[expect]]
+kind     = "clean"
+case     = "nvidia-glcache"
+match    = ['C:\Users\owner\AppData\Local\NVIDIA\GLCache\7f3a1c2d']
+no_match = ['C:\Users\owner\AppData\Local\NVIDIA\GLCache']
+
+[[expect]]
+kind     = "clean"
+case     = "d3dscache"
+match    = ['C:\Users\owner\AppData\Local\D3DSCache\4c0a9b8e7f6d5c4b']
+no_match = ['C:\Users\owner\AppData\Local\D3DSCache']
+
+[[expect]]
+kind     = "clean"
+case     = "amd-cache"
+match    = ['C:\Users\owner\AppData\Local\AMD\DxCache\0123abcd.parc', 'C:\Users\owner\AppData\Local\AMD\VkCache\a1b2c3d4.parc']
+no_match = ['C:\Users\owner\AppData\Local\AMD\CN', 'C:\Users\owner\AppData\Local\AMD\CN\settings.sqlite']
+
+[[expect]]
+kind     = "attribution"
+case     = "nvidia-dxcache"
+match    = ['C:\Users\owner\AppData\Local\NVIDIA\DXCache', 'C:\Users\owner\AppData\LocalLow\NVIDIA\PerDriverVersion\DXCache']
+
+[[expect]]
+kind     = "attribution"
+case     = "amd-cache"
+match    = ['C:\Users\owner\AppData\Local\AMD\DxcCache']
+no_match = ['C:\Users\owner\AppData\Local\AMD\CN']
+
+[[expect]]
+kind     = "attribution"
+case     = "driver-installers"
+match    = ['C:\NVIDIA', 'C:\AMD', 'C:\ProgramData\NVIDIA Corporation\Downloader',
+            'C:\Program Files\NVIDIA Corporation\Installer2']
+no_match = ['C:\Program Files\NVIDIA Corporation\NvContainer']

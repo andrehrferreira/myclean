@@ -1,0 +1,52 @@
+# Developer artifacts (cleaning spec, "Developer Artifact Qualification"; analysis F-012;
+# sources: pack.toml). The scanner walks the roots of data/workspaces.toml; a folder holding a
+# rule's marker is a project root, and the rule's targets are patterns relative to it. An
+# artifact is proposed only when the project is in a git work tree, git ignores the artifact and
+# tracks nothing inside it, no process uses it or the project, and the project is inactive for
+# require.inactive_days (newest of the last commit and every source file). One marker per rule:
+# toolchains with several markers have one rule per marker, and an artifact that several rules
+# select is proposed once.
+
+[[rule]]
+id       = "gradle-artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "build.gradle" }
+targets  = ["build", ".gradle"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+[[rule]]
+id       = "gradle-kts-artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "build.gradle.kts" }
+targets  = ["build", ".gradle"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+[[rule]]
+id       = "maven-artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "pom.xml" }
+targets  = ["target"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+# Gradle has no prune command: version folders of its caches and wrapper distributions not
+# used for 90 days are deleted (cleaning spec, "Cache without a native command").
+[[rule]]
+id       = "gradle-versions"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%GRADLE_USER_HOME%\caches\?.*', '%GRADLE_USER_HOME%\caches\??.*',
+            '%GRADLE_USER_HOME%\wrapper\dists\*',
+            '%USERPROFILE%\.gradle\caches\?.*', '%USERPROFILE%\.gradle\caches\??.*',
+            '%USERPROFILE%\.gradle\wrapper\dists\*']
+require  = { min_age_days = 90, not_in_use = true }

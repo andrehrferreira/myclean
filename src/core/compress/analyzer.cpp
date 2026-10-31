@@ -9,16 +9,19 @@
 #include <filesystem>
 #include <format>
 #include <map>
+#include <optional>
 #include <set>
 #include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "core/clean/patterns.hpp"
 #include "core/compress/compression.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/clock.hpp"
+#include "core/packs/schema.hpp"
 #include "core/space/scanner.hpp"
 #include "core/space/text.hpp"
 
@@ -26,7 +29,7 @@ namespace myclean::compress {
 
 namespace {
 
-constexpr std::size_t exclusion_count = static_cast<std::size_t>(Exclusion::incompressible) + 1;
+constexpr std::size_t exclusion_count = static_cast<std::size_t>(Exclusion::pack_excluded) + 1;
 constexpr std::array<Algorithm, 5> algorithms = {Algorithm::xpress4k, Algorithm::xpress8k,
                                                  Algorithm::xpress16k, Algorithm::lzx,
                                                  Algorithm::lznt1};
@@ -161,6 +164,40 @@ std::string gib(Bytes bytes) {
   return std::format("{:.1f} GiB", static_cast<double>(bytes.count()) / unit);
 }
 
+// The compression target `folder` is in, and the folder the target names; nullopt when none.
+std::optional<std::pair<const packs::CompressTarget*, std::filesystem::path>> target_of(
+    const std::filesystem::path& folder, const AnalyzerOptions& options) {
+  if (options.environment == nullptr) {
+    return std::nullopt;
+  }
+  for (const packs::CompressTarget& target : options.targets) {
+    for (const std::string& pattern : target.paths) {
+      const std::optional<std::wstring> expanded = clean::expand_variables(
+          std::filesystem::path{std::u8string(pattern.begin(), pattern.end())}.native(),
+          *options.environment);
+      if (!expanded) {
+        continue;
+      }
+      // The pattern's components against the folder's first ones ('*' and '?' within one).
+      const std::filesystem::path base{*expanded};
+      auto name = folder.begin();
+      bool inside = true;
+      std::filesystem::path named;
+      for (const std::filesystem::path& part : base) {
+        if (name == folder.end() || !clean::wildcard_match(name->native(), part.native())) {
+          inside = false;
+          break;
+        }
+        named /= *name++;
+      }
+      if (inside) {
+        return std::pair{&target, named};
+      }
+    }
+  }
+  return std::nullopt;
+}
+
 // The algorithm recommended for `category`, and why.
 std::pair<Algorithm, std::string> preferred(Category category) {
   switch (category) {
@@ -179,7 +216,8 @@ std::pair<Algorithm, std::string> preferred(Category category) {
   return {Algorithm::xpress4k, "XPRESS4K: the lightest WOF algorithm for content of unknown use"};
 }
 
-void recommend(FolderEstimate& result, Bytes recent_bytes, const AnalyzerOptions& options) {
+void recommend(FolderEstimate& result, Bytes recent_bytes, const AnalyzerOptions& options,
+               const packs::CompressTarget* target) {
   if (result.eligible_files == 0) {
     result.reason = "nothing to compress";
     return;
@@ -193,6 +231,17 @@ void recommend(FolderEstimate& result, Bytes recent_bytes, const AnalyzerOptions
     return;
   }
   auto [algorithm, why] = preferred(result.category);
+  if (target != nullptr) {
+    if (const std::optional<Algorithm> hint = parse_algorithm(target->algorithm); hint) {
+      algorithm = *hint;
+      std::string name = target->algorithm;
+      std::ranges::transform(name, name.begin(), [](char character) {
+        return character >= 'a' && character <= 'z' ? static_cast<char>(character - 'a' + 'A')
+                                                    : character;
+      });
+      why = std::format("{}: knowledge pack case {} ({})", name, target->id, target->label);
+    }
+  }
   const AlgorithmEstimate* chosen = result.find(algorithm);
   const auto threshold =
       std::max(options.min_savings.count(),
@@ -369,9 +418,15 @@ FolderEstimate estimate(const space::ScanResult& scan, std::size_t folder,
   const space::Folder& root = scan.folders.at(folder);
   FolderEstimate result{
       .folder = root.path, .category = categorize(root.path), .size_on_disk = root.size_on_disk};
+  Rules rules = options.rules;
+  const auto target = target_of(root.path, options);
+  if (target) {
+    result.target = target->first->id;
+    rules.excluded_below = target->second;
+    rules.excluded_names = target->first->exclude;
+  }
   Exclusions excluded{};
-  const std::vector<Candidate> candidates =
-      collect(scan, folder, options.rules, clock.now(), excluded);
+  const std::vector<Candidate> candidates = collect(scan, folder, rules, clock.now(), excluded);
   std::uint64_t total = 0;
   for (const Candidate& candidate : candidates) {
     total += candidate.file->size.count();
@@ -412,7 +467,7 @@ FolderEstimate estimate(const space::ScanResult& scan, std::size_t folder,
     }
   }
   const Bytes recent = excluded.at(static_cast<std::size_t>(Exclusion::recent)).size_on_disk;
-  recommend(result, recent, options);
+  recommend(result, recent, options, target ? target->first : nullptr);
   return result;
 }
 

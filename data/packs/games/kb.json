@@ -1,0 +1,31 @@
+{
+  "entries": [
+    {
+      "id": "valve.steam",
+      "image": "steam.exe",
+      "signer": "Valve Corp.",
+      "description": "Steam. Game store and launcher.",
+      "category": "launcher",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "valve.steam-webhelper",
+      "image": "steamwebhelper.exe",
+      "signer": "Valve Corp.",
+      "description": "Steam web helper. Shows Steam's store, library and chat pages; several copies run.",
+      "category": "launcher",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "valve.steam-service",
+      "image": "steamservice.exe",
+      "signer": "Valve Corp.",
+      "description": "Steam Client Service. Lets Steam install and update games without asking for administrator rights.",
+      "category": "launcher",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

@@ -24,12 +24,15 @@
 #include "core/cleaning/executor.hpp"
 #include "core/cleaning/tray_tasks.hpp"
 #include "core/ipc/json_rpc.hpp"
+#include "core/ipc/status.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/clock.hpp"
 #include "core/os/file_system.hpp"
-#include "core/rules/catalog.hpp"
-#include "core/rules/data_files.hpp"
+#include "core/packs/applies.hpp"
+#include "core/packs/loader.hpp"
+#include "core/packs/registry.hpp"
+#include "core/packs/schema.hpp"
 #include "core/safety/deny_list.hpp"
 #include "core/safety/safe_remove.hpp"
 #include "core/sched/scheduler.hpp"
@@ -72,8 +75,13 @@ struct ServiceSources {
   os::IFileSystem* file_system = nullptr;
   Probes probes;  // `environment` is taken from the owner context
   OwnerSource owner;
-  const rules::IDataFiles* files = nullptr;
-  std::filesystem::path data_dir;  // rules\*.toml and workspaces.toml
+  const packs::IPackFiles* files = nullptr;
+  std::filesystem::path data_dir;  // packs\ (knowledge packs) and workspaces.toml
+  // Whether a pack applies (docs/packs.md, applies_when); null: every loaded pack does.
+  const packs::IMachine* machine = nullptr;
+  // The owner's override packs folder (platform/packs: nullopt when there is none, an error when
+  // it is not admin-only); empty: no owner packs.
+  std::function<Result<std::optional<std::filesystem::path>>()> owner_packs;
   SpaceProbes space;
   // True while the system volume is critically busy: the auto run waits. Empty: never busy.
   std::function<bool()> busy;
@@ -118,6 +126,9 @@ class CleaningService {
   [[nodiscard]] std::vector<std::string> problems() const;
   // Whether scans and executions can run, and why not.
   [[nodiscard]] std::optional<std::string> unavailable() const;
+  // Every pack folder as last loaded (when the owner's session became available and at every
+  // scan); empty before.
+  [[nodiscard]] std::vector<ipc::PackStatus> pack_status() const;
 
  private:
   struct SpaceEntry {
@@ -129,6 +140,11 @@ class CleaningService {
 
   [[nodiscard]] Result<void> register_methods(ipc::Dispatcher& methods);
   void resolve_owner();
+  // Loads the knowledge packs again: the clean cases scans evaluate and the relocation recipes
+  // plans may use. The owner context must be resolved.
+  void reload_packs();
+  // The relocation recipe "<pack>/<case>" of the packs in effect; nullopt when there is none.
+  [[nodiscard]] std::optional<packs::RelocationRecipe> recipe(std::string_view id) const;
   // Starts the due jobs: the auto run (unless the system volume is critically busy) and the
   // quarantine purge.
   void run_jobs(const std::stop_token& stop);
@@ -168,7 +184,7 @@ class CleaningService {
   TrayTasks tasks_;
   sched::StoreScheduleRepository repository_;
   sched::Scheduler scheduler_;
-  rules::RuleCatalog catalog_;  // the cleaning worker only
+  packs::Registry registry_;  // the cleaning worker only
 
   // Built once, by the cleaning worker, when the owner context is first available.
   std::unique_ptr<OwnerContext> owner_;
@@ -182,6 +198,8 @@ class CleaningService {
   mutable std::mutex mutex_;  // guards the members below
   std::optional<std::string> owner_problem_;
   std::vector<std::string> problems_;
+  std::vector<packs::RelocationRecipe> recipes_;  // of registry_
+  std::vector<ipc::PackStatus> pack_status_;
   bool scan_requested_ = false;
   bool scanning_ = false;
   double progress_ = 0.0;

@@ -1,3 +1,5 @@
+#include "core/packs/fixtures.hpp"
+
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -10,7 +12,6 @@
 #include "core/model/result.hpp"
 #include "core/packs/loader.hpp"
 #include "core/packs/schema.hpp"
-#include "fixture_runner.hpp"
 #include "pack_fakes.hpp"
 
 // The fixture runner on a small pack: what each kind selects, and how failures are reported.
@@ -82,6 +83,9 @@ paths     = ['%USERPROFILE%\.tool\versions\*']
 algorithm = "lzx"
 exclude   = ["*.log", "tmp"]
 )");
+  files.put(folder / "kb.json", R"({"entries": [{"id": "agent", "image": "ToolAgent.exe",
+    "description": "Keeps the tool up to date.", "category": "updater",
+    "needed_at_startup": false, "safe_to_remove": true}]})");
   Result<Pack> pack =
       load_pack(files, folder, Origin::builtin, Version{.major = 0, .minor = 1, .patch = 0});
   if (!pack) {
@@ -116,6 +120,26 @@ case = "prune"
 match = ['C:\Users\owner\AppData\Local\tool\store']
 )");
   EXPECT_TRUE(failures.empty()) << failures.front();
+}
+
+TEST(Fixtures, KbCasesSelectTheirImageInAnyCase) {
+  const std::vector<std::string> failures = run(R"(
+[[expect]]
+kind = "kb"
+case = "agent"
+match = ['toolagent.exe']
+no_match = ['Tool.exe']
+)");
+  EXPECT_TRUE(failures.empty()) << failures.front();
+  const std::vector<std::string> wrong = run(R"(
+[[expect]]
+kind = "kb"
+case = "agent"
+match = ['Tool.exe']
+)");
+  ASSERT_EQ(wrong.size(), 1U);
+  EXPECT_NE(wrong.front().find("(kb 'tool/agent'): 'Tool.exe' is not selected"), std::string::npos)
+      << wrong.front();
 }
 
 // A file's folders exist once the file does, so a folder entry must come before its files.
@@ -220,9 +244,9 @@ TEST(Fixtures, RejectsInvalidFixtures) {
                 .at(0)
                 .find("field 'case' names no clean case of the pack"),
             std::string::npos);
-  EXPECT_NE(run("[[expect]]\nkind = \"kb\"\ncase = \"cache\"\nmatch = ['C:\\x']\n")
+  EXPECT_NE(run("[[expect]]\nkind = \"classes\"\ncase = \"cache\"\nmatch = ['C:\\x']\n")
                 .at(0)
-                .find("field 'kind' must be one of clean, attribution, relocate, compress"),
+                .find("field 'kind' must be one of clean, attribution, relocate, compress, kb"),
             std::string::npos);
   EXPECT_NE(run("[[expect]]\nkind = \"clean\"\ncase = \"cache\"\n")
                 .at(0)

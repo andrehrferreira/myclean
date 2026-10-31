@@ -1,0 +1,103 @@
+{
+  "entries": [
+    {
+      "id": "kaspersky.avp",
+      "image": "avp.exe",
+      "signer": "AO Kaspersky Lab",
+      "description": "Kaspersky antivirus protection. Scans files, web traffic and programs; several copies run.",
+      "category": "security",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "kaspersky.avp-service",
+      "image": "avp.exe",
+      "signer": "Kaspersky Labs GmbH",
+      "description": "Kaspersky antivirus service.",
+      "category": "security",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "kaspersky.avpui",
+      "image": "avpui.exe",
+      "signer": "AO Kaspersky Lab",
+      "description": "Kaspersky app window and taskbar icon.",
+      "category": "security",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "kaspersky.vpn-service",
+      "image": "ksde.exe",
+      "signer": "Kaspersky Labs GmbH",
+      "description": "Kaspersky VPN Secure Connection service.",
+      "category": "vpn",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "kaspersky.vpn-ui",
+      "image": "ksdeui.exe",
+      "signer": "AO Kaspersky Lab",
+      "description": "Kaspersky VPN app window and taskbar icon.",
+      "category": "vpn",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "anydesk",
+      "image": "AnyDesk.exe",
+      "signer": "AnyDesk Software GmbH",
+      "description": "AnyDesk remote desktop. Its service lets another computer connect to this one when allowed; during a session it can share the clipboard.",
+      "category": "remote-access",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "openvpn.connect",
+      "image": "OpenVPNConnect.exe",
+      "signer": "OpenVPN Inc.",
+      "description": "OpenVPN Connect. VPN client app.",
+      "category": "vpn",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "openvpn.agent",
+      "image": "agent_ovpnconnect.exe",
+      "signer": "OpenVPN Inc.",
+      "description": "OpenVPN Agent, a service of OpenVPN Connect.",
+      "category": "vpn",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "openvpn.helper-service",
+      "image": "ovpnhelper_service.exe",
+      "signer": "OpenVPN Inc.",
+      "description": "OpenVPN Connect Helper Service, which sets up the VPN connection for OpenVPN Connect.",
+      "category": "vpn",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "wireguard",
+      "image": "wireguard.exe",
+      "signer": "WireGuard LLC",
+      "description": "WireGuard VPN. Its manager service runs the configured VPN tunnels.",
+      "category": "vpn",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "exitlag.service",
+      "image": "ExitLagPmService.exe",
+      "signer": "Skowsand Tecnologia Ltda",
+      "description": "ExitLag service. ExitLag routes game network traffic over its own servers to lower lag.",
+      "category": "network",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

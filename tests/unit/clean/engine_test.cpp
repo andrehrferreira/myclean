@@ -62,11 +62,11 @@ TEST_F(RuleEngineTest, UserTempSelectsOnlyOldUnlockedEntries) {
   tree().add_file(temp / "busy" / "a.bin", 4_KiB, days_ago(6));
   usage().lock(temp / "busy" / "a.bin");
 
-  const Evaluation evaluation = evaluate(shipped_rule("windows.temp.user"));
+  const Evaluation evaluation = evaluate(shipped_rule("windows/temp-user"));
 
   EXPECT_EQ(paths_of(evaluation), (std::vector<fs::path>{temp / "old.tmp", temp / "old_dir"}));
   for (const Candidate& candidate : evaluation.candidates) {
-    EXPECT_EQ(candidate.rule_id, "windows.temp.user");
+    EXPECT_EQ(candidate.rule_id, "windows/temp-user");
     EXPECT_EQ(candidate.tier, Tier::automatic);
     EXPECT_EQ(candidate.scope, ExecutionContext::user);
     EXPECT_EQ(candidate.strategy, Strategy::remove);
@@ -94,7 +94,7 @@ TEST_F(RuleEngineTest, BrowserRuleSelectsOnlyHttpCodeAndGpuCaches) {
   }
   tree().add_file(chrome / "Local State", 1_KiB, days_ago(1));
 
-  const Evaluation evaluation = evaluate(shipped_rule("browser.chrome.cache"));
+  const Evaluation evaluation = evaluate(shipped_rule("browsers/chrome-cache"));
 
   EXPECT_EQ(paths_of(evaluation),
             (std::vector<fs::path>{chrome / "Default" / "Cache", chrome / "Default" / "Code Cache",
@@ -108,7 +108,7 @@ TEST_F(RuleEngineTest, RunningBrowserLeavesItsCacheAlone) {
   tree().add_file(chrome / "Default" / "Cache" / "Cache_Data" / "index", 1_MiB, days_ago(1));
   usage().lock(chrome / "Default" / "Cache" / "Cache_Data" / "index");
 
-  const Evaluation evaluation = evaluate(shipped_rule("browser.chrome.cache"));
+  const Evaluation evaluation = evaluate(shipped_rule("browsers/chrome-cache"));
 
   EXPECT_TRUE(evaluation.candidates.empty());
   EXPECT_EQ(dropped_at(evaluation, chrome / "Default" / "Cache")->reason, "in_use");
@@ -119,7 +119,7 @@ TEST_F(RuleEngineTest, ShaderCacheItemsAreAsk) {
   const fs::path dx_cache = R"(C:\Users\owner\AppData\Local\NVIDIA\DXCache)";
   tree().add_file(dx_cache / "shader.bin", 3_MiB, days_ago(10));
 
-  const Evaluation evaluation = evaluate(shipped_rule("gpu.nvidia.dxcache"));
+  const Evaluation evaluation = evaluate(shipped_rule("gpu/nvidia-dxcache"));
 
   ASSERT_EQ(evaluation.candidates.size(), 1U);
   EXPECT_EQ(evaluation.candidates.front().tier, Tier::ask);
@@ -133,10 +133,10 @@ TEST_F(RuleEngineTest, DenyListedItemsAreDroppedWithTheEntryName) {
   tree().add_file(R"(C:\Program Files (x86)\Steam\appcache\httpcache\00\a)", 1_MiB, days_ago(30));
 
   for (const char* id :
-       {"windows.live_kernel_reports", "windows.temp.system", "games.steam.httpcache"}) {
+       {"windows/live-kernel-reports", "windows/temp-system", "games/steam-httpcache"}) {
     SCOPED_TRACE(id);
     const Evaluation evaluation = evaluate(shipped_rule(id));
-    if (std::string(id) == "windows.temp.system") {
+    if (std::string(id) == "windows/temp-system") {
       EXPECT_EQ(paths_of(evaluation), (std::vector<fs::path>{R"(C:\Windows\Temp\setup.log)"}));
       EXPECT_EQ(evaluation.candidates.front().scope, ExecutionContext::service);
     } else {
@@ -152,7 +152,7 @@ TEST_F(RuleEngineTest, LinkInTheTargetPathIsDroppedAndNotEntered) {
   tree().add_file(chrome / "Profile 1" / "Cache" / "f", 1_MiB, days_ago(1));
   tree().add_directory(chrome / "Profile 1" / "GPUCache", days_ago(1), {.reparse_point = true});
 
-  const Evaluation evaluation = evaluate(shipped_rule("browser.chrome.cache"));
+  const Evaluation evaluation = evaluate(shipped_rule("browsers/chrome-cache"));
 
   EXPECT_EQ(paths_of(evaluation), (std::vector<fs::path>{chrome / "Profile 1" / "Cache"}));
   EXPECT_EQ(dropped_at(evaluation, chrome / "Default")->reason, "reparse_point_in_path");
@@ -164,7 +164,7 @@ TEST_F(RuleEngineTest, CloudPlaceholdersAndEmptyEntriesAreNotProposed) {
   tree().add_file(temp / "cloud.bin", 1_GiB, days_ago(10), {.recall_on_data_access = true});
   tree().add_directory(temp / "empty", days_ago(10));
 
-  EXPECT_TRUE(evaluate(shipped_rule("windows.temp.user")).candidates.empty());
+  EXPECT_TRUE(evaluate(shipped_rule("windows/temp-user")).candidates.empty());
 }
 
 TEST_F(RuleEngineTest, UnreadableFolderIsDroppedWhenAgeOrUseMustBeProven) {
@@ -172,7 +172,7 @@ TEST_F(RuleEngineTest, UnreadableFolderIsDroppedWhenAgeOrUseMustBeProven) {
   tree().add_file(temp / "sealed" / "b", 1_MiB, days_ago(10));
   tree().deny(temp / "sealed" / "inner");
 
-  const Evaluation evaluation = evaluate(shipped_rule("windows.temp.user"));
+  const Evaluation evaluation = evaluate(shipped_rule("windows/temp-user"));
 
   EXPECT_TRUE(evaluation.candidates.empty());
   EXPECT_EQ(dropped_at(evaluation, temp / "sealed")->reason, "unreadable");
@@ -187,7 +187,7 @@ TEST_F(RuleEngineTest, GradleVersionFoldersOlderThanTheRuleAgeOnly) {
   tree().add_file(caches / "8.5" / "file-hashes.bin", 5_MiB, days_ago(30));
   tree().add_file(caches / "modules-2" / "files-2.1" / "a.jar", 5_MiB, days_ago(200));
 
-  const Evaluation evaluation = evaluate(shipped_rule("pkg.gradle.versions"));
+  const Evaluation evaluation = evaluate(shipped_rule("java-gradle/gradle-versions"));
 
   EXPECT_EQ(paths_of(evaluation), (std::vector<fs::path>{caches / "7.6"}));
 }
@@ -197,13 +197,13 @@ TEST_F(RuleEngineTest, NativeRuleIsOneItemSizedByItsTargets) {
   tree().add_file(store / "v10" / "files" / "00" / "a", 2_MiB, days_ago(1));
   tree().add_file(store / "v10" / "files" / "01" / "b", 3_MiB, days_ago(1));
 
-  const std::vector<CleaningRule> rules = {shipped_rule("pkg.pnpm.store"),
-                                           shipped_rule("pkg.yarn.cache")};
+  const std::vector<CleaningRule> rules = {shipped_rule("node/pnpm-store"),
+                                           shipped_rule("node/yarn-cache")};
   const Evaluation evaluation = engine().evaluate(rules, now);
 
   ASSERT_EQ(evaluation.candidates.size(), 1U);  // no Yarn cache on this machine
   const Candidate& pnpm = evaluation.candidates.front();
-  EXPECT_EQ(pnpm.rule_id, "pkg.pnpm.store");
+  EXPECT_EQ(pnpm.rule_id, "node/pnpm-store");
   EXPECT_EQ(pnpm.strategy, Strategy::native);
   EXPECT_EQ(pnpm.command, "pnpm store prune");
   EXPECT_EQ(pnpm.scope, ExecutionContext::user);
@@ -212,7 +212,7 @@ TEST_F(RuleEngineTest, NativeRuleIsOneItemSizedByItsTargets) {
 }
 
 TEST_F(RuleEngineTest, HandlerRuleIsAlwaysOneItem) {
-  const Evaluation evaluation = evaluate(shipped_rule("windows.update_cleanup"));
+  const Evaluation evaluation = evaluate(shipped_rule("windows/update-cleanup"));
 
   ASSERT_EQ(evaluation.candidates.size(), 1U);
   EXPECT_EQ(evaluation.candidates.front().strategy, Strategy::handler);
@@ -278,7 +278,7 @@ TEST_F(RuleEngineTest, ProcessFolderInsideAnEntryMeansInUse) {
   tree().add_file(temp / "tool" / "tool.exe", 1_MiB, days_ago(10));
   usage().add_process_folder(temp / "tool");
 
-  const Evaluation evaluation = evaluate(shipped_rule("windows.temp.user"));
+  const Evaluation evaluation = evaluate(shipped_rule("windows/temp-user"));
 
   EXPECT_TRUE(evaluation.candidates.empty());
   EXPECT_EQ(dropped_at(evaluation, temp / "tool")->reason, "in_use");

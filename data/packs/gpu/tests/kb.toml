@@ -1,0 +1,18 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "amd.3d-vcache-optimizer"
+match    = ['amd3dvcacheSvc.exe']
+no_match = ['notepad++.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "amd.3d-vcache-optimizer-user"
+match    = ['amd3dvcacheUser.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "amd.crash-defender"
+match    = ['amdfendrsr.exe']

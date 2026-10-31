@@ -1,0 +1,15 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "gradle"
+paths    = ['%USERPROFILE%\.gradle']
+category = "dev-caches"
+label    = "Gradle caches and wrapper distributions"
+reclaim  = { kind = "relocate", ref = "gradle", note = "Rule java-gradle/gradle-versions also removes versions unused for 90 days." }
+
+[[area]]
+id       = "maven"
+paths    = ['%USERPROFILE%\.m2']
+category = "dev-caches"
+label    = "Maven local repository"
+reclaim  = { kind = "manual-review", note = "Set localRepository in .m2\\settings.xml to another drive, or delete it to download again." }

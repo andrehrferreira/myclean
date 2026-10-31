@@ -19,7 +19,8 @@
 #include "core/map/json.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
-#include "core/rules/data_files.hpp"
+#include "core/packs/loader.hpp"
+#include "core/packs/registry.hpp"
 #include "core/space/scanner.hpp"
 #include "space/space_fakes.hpp"
 
@@ -271,7 +272,7 @@ TEST(BuildMap, RejectsANegativeDepth) {
   EXPECT_EQ(map.error().code, Errc::invalid_argument);
 }
 
-// The shipped data/attribution.toml explains the large places measured on the owner's C:.
+// The attribution areas of the shipped packs explain the large places measured on the owner's C:.
 TEST(ShippedAttribution, ExplainsTheLargePlacesOfAWorkstation) {
   struct Expected {
     Expected(std::wstring path, std::string area, Category category, ReclaimKind kind)
@@ -283,57 +284,64 @@ TEST(ShippedAttribution, ExplainsTheLargePlacesOfAWorkstation) {
     ReclaimKind kind;
   };
   const std::vector<Expected> expected = {
-      {LR"(C:\hiberfil.sys)", "windows.hibernation", Category::page_hibernate,
+      {LR"(C:\hiberfil.sys)", "windows/hibernation", Category::page_hibernate,
        ReclaimKind::setting},
-      {LR"(C:\pagefile.sys)", "windows.page_file", Category::page_hibernate, ReclaimKind::setting},
-      {LR"(C:\Windows\WinSxS)", "windows.component_store", Category::windows_servicing,
+      {LR"(C:\pagefile.sys)", "windows/page-file", Category::page_hibernate, ReclaimKind::setting},
+      {LR"(C:\Windows\WinSxS)", "windows/component-store", Category::windows_servicing,
        ReclaimKind::clean_rule},
-      {LR"(C:\Windows\Panther)", "windows.setup_logs", Category::windows_servicing,
+      {LR"(C:\Windows\Panther)", "windows-setup-logs/panther", Category::windows_servicing,
        ReclaimKind::clean_rule},
-      {LR"(C:\Windows\assembly)", "windows.assembly", Category::system, ReclaimKind::none},
-      {LR"(C:\$Recycle.Bin)", "windows.recycle_bin", Category::recycle_bin,
+      {LR"(C:\Windows\assembly)", "windows/assembly", Category::system, ReclaimKind::none},
+      {LR"(C:\$Recycle.Bin)", "windows/recycle-bin", Category::recycle_bin,
        ReclaimKind::clean_rule},
-      {LR"(C:\Program Files\App)", "apps.program_files", Category::apps, ReclaimKind::uninstall},
-      {LR"(C:\vcpkg\buildtrees)", "dev.vcpkg_build", Category::dev_caches,
-       ReclaimKind::manual_review},
-      {LR"(C:\Users\Public\Documents)", "user.documents", Category::user_documents,
+      {LR"(C:\Program Files\App)", "windows/program-files", Category::apps, ReclaimKind::uninstall},
+      {LR"(C:\vcpkg\buildtrees)", "vcpkg/build-files", Category::dev_caches,
+       ReclaimKind::clean_rule},
+      {LR"(C:\vcpkg\ports)", "vcpkg/root", Category::dev_toolchains, ReclaimKind::manual_review},
+      {LR"(C:\Users\Public\Documents)", "windows/documents", Category::user_documents,
        ReclaimKind::manual_review},
       {LR"(AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_x\LocalState\ext4.vhdx)",
-       "dev.wsl", Category::vm_disks, ReclaimKind::relocate},
-      {LR"(AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_x\rootfs)", "dev.wsl",
-       Category::vm_disks, ReclaimKind::relocate},
-      {LR"(AppData\Local\Docker\wsl)", "dev.docker", Category::vm_disks, ReclaimKind::relocate},
-      {LR"(AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_x)", "dev.python_store",
+       "wsl-docker/distro-disks", Category::vm_disks, ReclaimKind::relocate},
+      {LR"(AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_x\rootfs)",
+       "wsl-docker/distro-files", Category::vm_disks, ReclaimKind::relocate},
+      {LR"(AppData\Local\Docker\wsl)", "wsl-docker/docker-data", Category::vm_disks,
+       ReclaimKind::relocate},
+      {LR"(AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_x)", "python-store/installs",
        Category::dev_toolchains, ReclaimKind::uninstall},
-      {LR"(AppData\Local\zig)", "dev.zig_cache", Category::dev_caches, ReclaimKind::manual_review},
-      {LR"(AppData\Local\UzPainter)", "apps.uzpainter", Category::apps, ReclaimKind::manual_review},
-      {LR"(AppData\Local\UzPainter\cache)", "apps.uzpainter_cache", Category::app_caches,
+      {LR"(AppData\Local\zig)", "zig/global-cache", Category::dev_caches, ReclaimKind::clean_rule},
+      {LR"(AppData\Local\UzPainter)", "uzpainter/app-data", Category::apps,
        ReclaimKind::manual_review},
-      {LR"(.codex)", "apps.ai_cli_history", Category::apps, ReclaimKind::manual_review},
-      {LR"(.claude)", "apps.ai_cli_history", Category::apps, ReclaimKind::manual_review},
-      {LR"(AppData\Local\Google\Chrome\User Data\OptGuideOnDeviceModel)", "browser.chrome_ai_model",
+      {LR"(AppData\Local\UzPainter\cache)", "uzpainter/cache", Category::app_caches,
+       ReclaimKind::manual_review},
+      {LR"(.codex)", "ai-tools/assistant-homes", Category::apps, ReclaimKind::manual_review},
+      {LR"(.codex\sessions)", "ai-tools/codex-sessions", Category::apps,
+       ReclaimKind::manual_review},
+      {LR"(.claude)", "ai-tools/assistant-homes", Category::apps, ReclaimKind::manual_review},
+      {LR"(AppData\Local\Google\Chrome\User Data\OptGuideOnDeviceModel)", "chrome/on-device-model",
        Category::browser_caches, ReclaimKind::manual_review},
-      {LR"(AppData\Local\Google\Chrome\User Data\Default\Cache)", "browser.chrome_cache",
+      {LR"(AppData\Local\Google\Chrome\User Data\Default\Cache)", "browsers/chrome-cache",
        Category::browser_caches, ReclaimKind::clean_rule},
-      {LR"(AppData\Local\Google\Chrome\User Data\Default\History)", "browser.profiles",
+      {LR"(AppData\Local\Google\Chrome\User Data\Default\History)", "browsers/profiles",
        Category::apps, ReclaimKind::manual_review},
-      {LR"(AppData\Roaming\Code\WebStorage)", "dev.vscode_web_storage", Category::dev_caches,
+      {LR"(AppData\Roaming\Code\WebStorage)", "vscode/web-storage", Category::dev_caches,
        ReclaimKind::manual_review},
-      {LR"(AppData\Roaming\Code\CachedExtensionVSIXs)", "dev.vscode_vsix_cache",
-       Category::app_caches, ReclaimKind::manual_review},
-      {LR"(.rustup)", "dev.rustup", Category::dev_toolchains, ReclaimKind::manual_review},
-      {LR"(.cargo)", "dev.cargo", Category::dev_caches, ReclaimKind::relocate},
-      {LR"(.gradle)", "dev.gradle", Category::dev_caches, ReclaimKind::relocate},
-      {LR"(.android\avd)", "dev.android_avd", Category::vm_disks, ReclaimKind::manual_review},
-      {LR"(AppData\Local\Android\Sdk)", "dev.android_sdk", Category::dev_toolchains,
+      {LR"(AppData\Roaming\Code\CachedExtensionVSIXs)", "vscode/vsix-cache", Category::app_caches,
+       ReclaimKind::clean_rule},
+      {LR"(.rustup)", "rust/toolchains", Category::dev_toolchains, ReclaimKind::relocate},
+      {LR"(.cargo)", "rust/cargo-home", Category::dev_caches, ReclaimKind::relocate},
+      {LR"(.gradle)", "java-gradle/gradle", Category::dev_caches, ReclaimKind::relocate},
+      {LR"(.android\avd)", "android/avd", Category::vm_disks, ReclaimKind::manual_review},
+      {LR"(AppData\Local\Android\Sdk)", "android/sdk", Category::dev_toolchains,
        ReclaimKind::manual_review},
-      {LR"(AppData\Local\vcpkg\archives)", "dev.vcpkg_build", Category::dev_caches,
+      {LR"(AppData\Local\vcpkg\archives)", "vcpkg/binary-cache", Category::dev_caches,
+       ReclaimKind::clean_rule},
+      {LR"(.elyriu-local-ai)", "ai-tools/model-tool-homes", Category::dev_caches,
        ReclaimKind::manual_review},
-      {LR"(.elyriu-local-ai)", "dev.ai_models", Category::dev_caches, ReclaimKind::manual_review},
-      {LR"(AppData\Local\ms-playwright)", "dev.playwright", Category::dev_caches,
-       ReclaimKind::manual_review},
-      {LR"(AppData\Local\Temp)", "apps.user_temp", Category::app_caches, ReclaimKind::clean_rule},
-      {LR"(Downloads)", "user.downloads", Category::downloads, ReclaimKind::manual_review},
+      {LR"(AppData\Local\ms-playwright)", "playwright/browsers", Category::dev_caches,
+       ReclaimKind::clean_rule},
+      {LR"(AppData\Local\Temp)", "windows/user-temp", Category::app_caches,
+       ReclaimKind::clean_rule},
+      {LR"(Downloads)", "windows/downloads", Category::downloads, ReclaimKind::manual_review},
   };
   const std::filesystem::path profile = LR"(C:\Users\me)";
   space::testing::FakeDirectoryReader reader;
@@ -365,10 +373,12 @@ TEST(ShippedAttribution, ExplainsTheLargePlacesOfAWorkstation) {
                         {L"APPDATA", (profile / LR"(AppData\Roaming)").native()},
                         {L"LOCALAPPDATA", (profile / LR"(AppData\Local)").native()},
                         {L"TEMP", (profile / LR"(AppData\Local\Temp)").native()}};
-  const rules::DiskDataFiles files;
-  Result<std::vector<Area>> shipped = load_attribution(files, MYCLEAN_DATA_DIR);
-  ASSERT_TRUE(shipped.has_value()) << shipped.error().message;
-  const DiskMap map = build(scan_ok(reader, R"(C:\)"), std::move(*shipped), environment);
+  const packs::LoadReport shipped =
+      packs::load_packs(packs::DiskPackFiles{}, std::filesystem::path{MYCLEAN_DATA_DIR} / "packs",
+                        std::nullopt, packs::this_version());
+  ASSERT_TRUE(shipped.errors.empty()) << shipped.errors.front().message;
+  const DiskMap map = build(scan_ok(reader, R"(C:\)"),
+                            packs::make_registry(shipped.packs).attribution, environment);
   EXPECT_EQ(map.unexplained, Bytes{});
   for (const Expected& entry : expected) {
     const std::filesystem::path path =

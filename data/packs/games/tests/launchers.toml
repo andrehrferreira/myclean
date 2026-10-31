@@ -1,0 +1,73 @@
+# Steam in its default folder (Program Files, kept by the deny-list) and the Epic Games
+# launcher's web caches; the launchers' game folders.
+
+[[entry]]
+path = 'C:\Program Files (x86)\Steam\appcache\httpcache\3a\3a1f2b4c5d6e7f80'
+[[entry]]
+path = 'C:\Program Files (x86)\Steam\depotcache\228988_5390135823457912345.manifest'
+[[entry]]
+path = 'C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo\pak01_dir.vpk'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\EpicGamesLauncher\Saved\webcache_4430\Cache\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\EpicGamesLauncher\Saved\webcache\Cache\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\EpicGamesLauncher\Saved\Config\Windows\GameUserSettings.ini'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\EpicGamesLauncher\Saved\Logs\EpicGamesLauncher.log'
+
+# Under Program Files the deny-list drops every item (see clean.toml).
+[[expect]]
+kind     = "clean"
+case     = "steam-httpcache"
+no_match = ['C:\Program Files (x86)\Steam\appcache\httpcache\3a']
+
+[[expect]]
+kind     = "clean"
+case     = "steam-depotcache"
+no_match = ['C:\Program Files (x86)\Steam\depotcache\228988_5390135823457912345.manifest',
+            'C:\Program Files (x86)\Steam\steamapps']
+
+[[expect]]
+kind     = "clean"
+case     = "epic-webcache"
+match    = ['C:\Users\owner\AppData\Local\EpicGamesLauncher\Saved\webcache_4430',
+            'C:\Users\owner\AppData\Local\EpicGamesLauncher\Saved\webcache']
+no_match = ['C:\Users\owner\AppData\Local\EpicGamesLauncher\Saved\Config',
+            'C:\Users\owner\AppData\Local\EpicGamesLauncher\Saved\Logs']
+
+[[expect]]
+kind     = "attribution"
+case     = "steam-client"
+match    = ['C:\Program Files (x86)\Steam']
+
+[[expect]]
+kind     = "attribution"
+case     = "steam-library"
+match    = ['C:\Program Files (x86)\Steam\steamapps', 'D:\SteamLibrary', 'E:\Program Files\Steam\steamapps']
+no_match = ['C:\Program Files (x86)\Steam\appcache']
+
+[[expect]]
+kind     = "attribution"
+case     = "steam-httpcache"
+match    = ['C:\Program Files (x86)\Steam\appcache\httpcache']
+
+[[expect]]
+kind     = "attribution"
+case     = "steam-depotcache"
+match    = ['C:\Program Files (x86)\Steam\depotcache']
+
+[[expect]]
+kind     = "attribution"
+case     = "epic"
+match    = ['C:\Program Files\Epic Games', 'D:\Epic Games']
+
+[[expect]]
+kind     = "attribution"
+case     = "epic-webcache"
+match    = ['C:\Users\owner\AppData\Local\EpicGamesLauncher\Saved\webcache_4430']
+
+[[expect]]
+kind     = "attribution"
+case     = "other-launchers"
+match    = ['D:\XboxGames', 'C:\Riot Games', 'C:\Program Files (x86)\Battle.net', 'D:\GOG Games']

@@ -1,15 +1,19 @@
 id          = "wsl-docker"
-version     = "1.0.0"
-title       = "WSL and Docker Desktop disks"
-description = "The virtual disks of WSL distributions and of Docker Desktop: where they are, and moving a distribution to another drive with WSL's own command."
+version     = "1.2.0"
+title       = "WSL and Docker Desktop"
+description = "The virtual disks of WSL distributions and of Docker Desktop and the file systems of WSL 1 distributions: where they are, and moving a distribution to another drive with WSL's own command; `docker system prune`; what the WSL and Docker processes are."
 sources     = [
   "https://learn.microsoft.com/windows/wsl/disk-space (the ext4.vhdx of a distribution is in the BasePath of its HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss\\{GUID} key, named by DistributionName)",
-  "https://learn.microsoft.com/windows/wsl/basic-commands (wsl --manage <distro> --move <location>, wsl --manage <distro> --set-sparse true, wsl --terminate)",
+  "https://learn.microsoft.com/windows/wsl/basic-commands (wsl --manage <distro> --move <location>, wsl --manage <distro> --set-sparse true, wsl --terminate, wsl --export <distro> <file>, wsl --import <distro> <location> <file> --version 1, wsl --unregister <distro>)",
+  "https://learn.microsoft.com/windows/wsl/use-custom-distro (an imported distribution starts as root; its default user is the DefaultUid of its Lxss key)",
   "https://docs.docker.com/desktop/settings-and-maintenance/settings/ (Resources > Advanced > Disk image location)",
-  "observed on reference machine: Ubuntu-24.04 in %LOCALAPPDATA%\\Packages\\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\\LocalState\\ext4.vhdx; the docker-desktop distribution registered by Docker Desktop; %LOCALAPPDATA%\\Docker\\wsl",
+  "https://docs.docker.com/reference/cli/docker/system/prune/ (`docker system prune` removes stopped containers, unused networks, dangling images and build cache; --force skips the prompt)",
+  "observed on reference machine: Ubuntu-24.04 in %LOCALAPPDATA%\\Packages\\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\\LocalState\\ext4.vhdx; the docker-desktop distribution registered by Docker Desktop (Lxss Flags 15, a WSL 2 disk) and Ubuntu-24.04 as WSL 1 (Flags 7, Version 2, a rootfs folder): bit 0x8 of Flags marks WSL 2; %LOCALAPPDATA%\\Docker\\wsl; WSL 1 distributions keep a rootfs folder in their package folder (analysis F-013, F-016)",
+  "observed on reference machine: wsl.exe, wslservice.exe, wslhost.exe and msrdc.exe of WSL and the Docker Desktop processes, their image paths and signers",
 ]
 min_myclean = "0.1.0"
 
 [applies_when]
 any = [{ path_exists = '%LOCALAPPDATA%\Packages\*\LocalState\ext4.vhdx' }, { path_exists = '%LOCALAPPDATA%\wsl' },
+       { path_exists = '%LOCALAPPDATA%\Packages\*\LocalState\rootfs' }, { path_exists = '%LOCALAPPDATA%\Packages\*\rootfs' },
        { path_exists = '%LOCALAPPDATA%\Docker\wsl' }, { app_installed = '^Docker Desktop' }]

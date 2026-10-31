@@ -49,3 +49,9 @@ no_match = ['C:\Users\owner\AppData\Roaming\Code\User\workspaceStorage\7a3e91c4b
 kind     = "attribution"
 case     = "web-storage"
 match    = ['C:\Users\owner\AppData\Roaming\Code\WebStorage']
+
+[[expect]]
+kind     = "attribution"
+case     = "editor-extensions"
+match    = ['C:\Users\owner\.vscode', 'C:\Users\owner\.cursor']
+no_match = ['C:\Users\owner\AppData\Roaming\Code']

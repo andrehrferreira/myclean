@@ -1,0 +1,23 @@
+# Sources: pack.toml. Store Pythons are areas of the python-store pack.
+
+[[area]]
+id       = "pip-cache"
+paths    = ['%LOCALAPPDATA%\pip']
+category = "dev-caches"
+label    = "pip cache"
+reclaim  = { kind = "relocate", ref = "pip", note = "Rule python/pip-cache purges it instead." }
+
+[[area]]
+id       = "uv-cache"
+paths    = ['%LOCALAPPDATA%\uv']
+category = "dev-caches"
+label    = "uv cache and Python installs"
+reclaim  = { kind = "clean-rule", ref = "uv-cache" }
+
+[[area]]
+id       = "installations"
+paths    = ['%LOCALAPPDATA%\Programs\Python', '%USERPROFILE%\miniconda3', '%USERPROFILE%\anaconda3',
+            '%ProgramData%\miniconda3', '%ProgramData%\anaconda3']
+category = "dev-toolchains"
+label    = "Python and Conda installations"
+reclaim  = { kind = "uninstall", note = "For Conda, `conda clean --all` removes cached packages." }

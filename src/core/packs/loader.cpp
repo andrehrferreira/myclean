@@ -77,6 +77,23 @@ void claim(std::vector<Claim>& claims, const std::string& owner, std::string_vie
   claims.push_back(Claim{.key = folded(what), .what = std::move(what), .owner = owner});
 }
 
+// The setting a relocation recipe changes: its text, key and instance filter.
+std::string setting_claim(const Setting& setting) {
+  std::string value = setting.text;
+  if (!setting.key.empty()) {
+    value.append("' key '").append(setting.key);
+  }
+  if (const std::optional<InstanceFilter>& where = setting.where) {
+    value.append("' where '")
+        .append(where->value)
+        .append(" & ")
+        .append(std::to_string(where->mask))
+        .append(" == ")
+        .append(std::to_string(where->equals));
+  }
+  return value;
+}
+
 std::vector<Claim> claims_of(const Pack& pack) {
   std::vector<Claim> claims;
   for (const rules::CleaningRule& rule : pack.clean) {
@@ -100,13 +117,8 @@ std::vector<Claim> claims_of(const Pack& pack) {
     }
   }
   for (const RelocationRecipe& recipe : pack.relocate) {
-    std::string kind = "relocation setting ";
-    kind.append(to_string(recipe.current.kind));
-    std::string value = recipe.current.text;
-    if (!recipe.current.key.empty()) {
-      value.append("' key '").append(recipe.current.key);
-    }
-    claim(claims, recipe.id, kind, value);
+    claim(claims, recipe.id, "relocation setting " + std::string(to_string(recipe.current.kind)),
+          setting_claim(recipe.current));
   }
   for (const CompressTarget& target : pack.compress) {
     for (const std::string& path : target.paths) {
@@ -451,6 +463,20 @@ LoadReport load_packs(const IPackFiles& files, const fs::path& builtin_dir,
   }
   visit(state, builtin_dir, Origin::builtin);
   return std::move(state.report);
+}
+
+Version this_version() {
+  return *parse_version(MYCLEAN_VERSION);
+}
+
+LoadReport load_installed(const IPackFiles& files, const fs::path& data_dir,
+                          const Result<std::optional<fs::path>>& owner_dir) {
+  LoadReport report =
+      load_packs(files, data_dir / "packs", owner_dir.value_or(std::nullopt), this_version());
+  if (!owner_dir) {
+    report.errors.insert(report.errors.begin(), owner_dir.error());
+  }
+  return report;
 }
 
 }  // namespace myclean::packs

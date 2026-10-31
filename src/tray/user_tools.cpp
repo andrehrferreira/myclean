@@ -16,6 +16,8 @@
 #include "platform/cleanup/win32_command_runner.hpp"
 #include "platform/cleanup/win32_handler_host.hpp"
 #include "platform/fs/win32_file_system.hpp"
+#include "platform/proc/nt_process_table.hpp"
+#include "platform/settings/registry.hpp"
 #include "platform/settings/tree_copier.hpp"
 #include "platform/settings/user_settings.hpp"
 #include "tray/poll_thread.hpp"
@@ -59,6 +61,8 @@ user_tasks::TaskReport run_user_task(const user_tasks::UserTask& task, const std
   platform::Win32UserEnvironment environment;
   platform::Win32TextFiles files;
   platform::Win32TreeCopier copier;
+  platform::Win32Registry registry;
+  platform::NtProcessTable processes;
   const PolledDriveFacts drives(shared);
   std::unique_ptr<platform::Win32HandlerHost> handlers;
   if (task.kind == user_tasks::TaskKind::handler) {
@@ -72,7 +76,9 @@ user_tasks::TaskReport run_user_task(const user_tasks::UserTask& task, const std
                                                 .files = &files,
                                                 .copier = &copier,
                                                 .file_system = &file_system,
-                                                .drives = &drives}};
+                                                .drives = &drives,
+                                                .registry = &registry,
+                                                .processes = &processes}};
   return user_tasks::run(task, tools, stop);
 }
 

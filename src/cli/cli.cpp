@@ -22,6 +22,7 @@
 #include <nlohmann/json.hpp>
 
 #include "cli/map_command.hpp"
+#include "cli/packs_command.hpp"
 #include "cli/text.hpp"
 #include "core/ipc/alerts.hpp"
 #include "core/ipc/disk_health.hpp"
@@ -297,6 +298,9 @@ std::string_view usage() {
          "                              scans here (no service needed, low priority) and\n"
          "                              explains what uses the space and how to reclaim it;\n"
          "                              default: the system drive, 1 GiB, 6 levels\n"
+         "  packs list | validate [<path>] [--data <dir>]\n"
+         "                              the knowledge packs and whether they apply here; or\n"
+         "                              validate packs and run their fixtures (no service)\n"
          "  mcp                         MCP server on stdin/stdout with read-only tools\n"
          "--json writes one JSON document to stdout; --pipe <name> talks to \\\\.\\pipe\\<name>\n"
          "instead of the service's pipe. Nothing here changes the system.\n";
@@ -333,6 +337,9 @@ mcp::Caller pipe_caller(std::wstring pipe, std::chrono::milliseconds timeout) {
 
 int run(std::span<const std::string> args, std::istream& in, std::ostream& out, std::ostream& err,
         const os::IClock& clock, std::chrono::milliseconds timeout) {
+  if (!args.empty() && args.front() == "packs") {
+    return packs_command(args.subspan(1), out, err);  // runs here, without the service
+  }
   const Result<CommandLine> line = parse(args);
   if (!line) {
     err << "myclean: " << line.error().message << '\n' << usage();

@@ -1,0 +1,33 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "kaspersky.avp"
+match    = ['avp.exe']
+no_match = ['notepad++.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "kaspersky.avp-service"
+match    = ['avp.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "anydesk"
+match    = ['AnyDesk.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "openvpn.connect"
+match    = ['OpenVPNConnect.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "wireguard"
+match    = ['wireguard.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "exitlag.service"
+match    = ['ExitLagPmService.exe']

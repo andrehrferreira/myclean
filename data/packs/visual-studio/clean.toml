@@ -1,0 +1,36 @@
+# Visual Studio's caches (analysis F-012, F-013, F-016; sources: pack.toml). Settings and
+# installed extensions are never targets. The bin and obj trees of solutions are cases of the
+# dotnet and cpp packs.
+
+# The MEF component cache, rebuilt when Visual Studio starts.
+[[rule]]
+id       = "component-model-cache"
+category = "ides"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\Microsoft\VisualStudio\*\ComponentModelCache']
+require  = { not_in_use = true }
+
+# Visual Studio's per-user solution state (open documents, breakpoints): regenerable, but the
+# owner may miss it. Artifact rules (cleaning spec, "Developer Artifact Qualification"): the
+# project must be in a git work tree that ignores the folder, unused and inactive.
+[[rule]]
+id       = "sln-state"
+category = "dev-artifacts"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "*.sln" }
+targets  = [".vs"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 14 }
+
+[[rule]]
+id       = "slnx-state"
+category = "dev-artifacts"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "*.slnx" }
+targets  = [".vs"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 14 }

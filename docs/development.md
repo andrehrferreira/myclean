@@ -219,24 +219,31 @@ started in this order (stopped in reverse), so that each starts after those it u
 | Component | Does | Methods |
 |---|---|---|
 | `alerts` | AlertEngine over `data/alerts.toml`; the alert sink of every producer | `alerts.*` |
-| `trust` | TrustEvaluator + knowledge base (`data/kb`); signer lookup for events | (used below) |
+| `trust` | TrustEvaluator + knowledge base (the `kb.json` of every loaded knowledge pack); signer lookup for events | (used below) |
 | `telemetry` | 1 s / 60 s collectors; volume facts to `alerts` | `metrics.*`, `processes.*`, `volumes.list` |
 | `disk_health` | HealthCollector on its own pipeline thread (a read may wait 60 s on WMI); health facts to `alerts` | `disks.health` |
 | `events` | ETW process and network events, connection snapshots | none yet |
 | `input` | `input_incident` table for the tray's watchdog | `input.*` |
-| `cleaning` | rule scans and plans by tier; runs approved service-scope plans; auto run daily at 03:00 (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge on the in-app scheduler; user tasks for the tray; space analyses | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*` |
+| `cleaning` | rule scans (the clean cases of the knowledge packs that apply, reloaded at every scan) and plans by tier; runs approved service-scope plans; auto run daily at 03:00 (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge on the in-app scheduler; user tasks for the tray; space analyses | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*` |
 
 The contracts of the cleaning methods are in `src/core/ipc/plans.hpp`. Approving, rejecting and
 undoing plans, the user tasks, recycling and quarantine restore are tray-only
 (`ipc::Access::tray`): the service checks each request's pipe client process
 (`GetNamedPipeClientProcessId`) and accepts it only from the configured `myclean-tray.exe`
 (`ServiceOptions::tray_image`) running as the owner in an interactive session. A console run
-(`myclean-svc --console`) executes no cleaning unless it gets `--sandbox <dir>`: the rules and
-workspaces then come from `<dir>\data`, quarantine goes to `<dir>\quarantine`, and Windows
+(`myclean-svc --console`) executes no cleaning unless it gets `--sandbox <dir>`: the packs and
+workspaces then come from `<dir>\data` (no owner packs), quarantine goes to `<dir>\quarantine`, and Windows
 handlers, DISM and system settings are never applied; `--tray <exe>` names its tray.
 
-Failures stay inside a component and show in `status` (`component_health`): a data file that
-fails its schema, a failed disk read, ETW unavailable without elevation (listed under
+Knowledge packs (`docs/packs.md`) are loaded by `cleaning` (with `applies_when` evaluated for the
+owner through `platform::Win32Machine`), `trust` and `myclean map` / `myclean packs`, each from
+`<install>\data\packs` plus `%ProgramData%\MyClean\packs` when `platform::owner_packs_folder`
+finds it writable by administrators only. `status` lists every pack folder the cleaning
+component loaded (`packs`: id, version, origin, status, whether it applies, why it was
+rejected).
+
+Failures stay inside a component and show in `status` (`component_health`): a data file or pack
+that fails its schema, a failed disk read, ETW unavailable without elevation (listed under
 `unavailable`). Only what would leave the service half-initialized fails the start (contract
 C7): the store refusing a component's tables or retention, or a method that cannot be
 registered. Tests drive each component on a `ComponentHarness` and the whole set in one

@@ -3,9 +3,11 @@
 myclean_add_test(cleaning
   SOURCES
     cleaning_fixture.hpp
+    executor_test.cpp
     service_test.cpp
   DEPENDS
     myclean::cleaning
-    myclean::fakes)
+    myclean::fakes
+    myclean::packs)
 # The fakes of other modules' tests: "clean/clean_fakes.hpp", "cleanup/fakes.hpp", ...
 target_include_directories(myclean_cleaning_tests PRIVATE "${PROJECT_SOURCE_DIR}/tests/unit")

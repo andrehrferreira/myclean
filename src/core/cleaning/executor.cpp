@@ -38,8 +38,10 @@
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/file_system.hpp"
+#include "core/packs/schema.hpp"
 #include "core/placement/drives.hpp"
 #include "core/placement/proposal.hpp"
+#include "core/placement/recipe.hpp"
 #include "core/placement/relocation.hpp"
 #include "core/placement/settings.hpp"
 #include "core/placement/system_space.hpp"
@@ -790,7 +792,8 @@ Result<Plan> Executor::propose_optimization(const Optimization& request, const A
     return propose_shadow_storage(request, *volumes, proposer);
   }
   if (request.kind == "relocate") {
-    return propose_relocation(request, *volumes, proposer);
+    return request.recipe ? propose_recipe(request, *volumes, proposer)
+                          : propose_relocation(request, *volumes, proposer);
   }
   return fail(Errc::invalid_argument, "unknown optimization \"" + request.kind + "\"");
 }
@@ -894,16 +897,9 @@ Result<Plan> Executor::propose_relocation(const Optimization& request,
   if (!cache) {
     return fail(Errc::invalid_argument, "unknown cache \"" + request.cache + "\"");
   }
-  const placement::TargetVolume* target = nullptr;
-  if (request.target.empty()) {
-    target = placement::best_target(volumes, options_.system_root, Bytes{});
-  } else if (Result<fs::path> root = drive_root_of(request.target); root) {
-    target = placement::volume_of(volumes, *root);
-  } else {
-    return tl::unexpected(root.error());
-  }
-  if (target == nullptr || !placement::unsuitable(*target, Bytes{}).empty()) {
-    return fail(Errc::invalid_state, "no healthy target volume with room");
+  Result<placement::TargetVolume> target = relocation_volume(request, volumes);
+  if (!target) {
+    return tl::unexpected(target.error());
   }
   const std::optional<placement::ContentMode> content =
       request.content.empty() ? placement::recommended_content(*cache)
@@ -930,6 +926,98 @@ Result<Plan> Executor::propose_relocation(const Optimization& request,
                      .proposer = proposer,
                      .created_at = environment_.clock->now(),
                      .items = {PlanItem{.path = from_utf8("relocate:" + cache_name)}}},
+                spec, {}, actions::AutomationLevel::suggest);
+}
+
+Result<placement::TargetVolume> Executor::relocation_volume(
+    const Optimization& request, std::span<const placement::TargetVolume> volumes) const {
+  const placement::TargetVolume* target = nullptr;
+  if (request.target.empty()) {
+    target = placement::best_target(volumes, options_.system_root, Bytes{});
+  } else if (Result<fs::path> root = drive_root_of(request.target); root) {
+    target = placement::volume_of(volumes, *root);
+  } else {
+    return tl::unexpected(root.error());
+  }
+  if (target == nullptr || !placement::unsuitable(*target, Bytes{}).empty()) {
+    return fail(Errc::invalid_state, "no healthy target volume with room");
+  }
+  return *target;
+}
+
+Result<Plan> Executor::propose_recipe(const Optimization& request,
+                                      std::vector<placement::TargetVolume> volumes,
+                                      const Actor& proposer) {
+  const packs::RelocationRecipe& recipe = *request.recipe;
+  const bool instances = !recipe.current.name.empty();
+  if (instances == request.instance.empty()) {
+    return fail(Errc::invalid_argument,
+                instances ? recipe.id + " moves one instance: name it with instance"
+                          : recipe.id + " names no instances, so instance must be left out");
+  }
+  const auto folded = [](std::string text) {
+    std::ranges::transform(text, text.begin(), [](unsigned char character) {
+      return static_cast<char>(std::tolower(character));
+    });
+    return text;
+  };
+  if (std::ranges::any_of(recipe.skip_names, [&](const std::string& skipped) {
+        return folded(skipped) == folded(request.instance);
+      })) {
+    return fail(Errc::refused, request.instance + " is never moved by " + recipe.id);
+  }
+  Result<placement::TargetVolume> target = relocation_volume(request, volumes);
+  if (!target) {
+    return tl::unexpected(target.error());
+  }
+  const std::optional<placement::ContentMode> content = placement::parse_content_mode(
+      request.content.empty() ? std::string(packs::to_string(recipe.content)) : request.content);
+  if (!content) {
+    return fail(Errc::invalid_argument, "content must be move or regenerate");
+  }
+  // "<pack>/<case>" as the folders <pack>\<case>.
+  std::string relative = recipe.id;
+  std::ranges::replace(relative, '/', '\\');
+  if (instances) {
+    relative += "\\" + request.instance;
+  }
+  const placement::RecipeRelocation relocation{
+      .recipe = recipe,
+      .instance = request.instance,
+      .target = target->root / L"Relocated" / from_utf8(relative),
+      .content = *content};
+  std::string what = recipe.label;
+  std::string item = "relocate:" + recipe.id;
+  if (instances) {
+    what += " " + request.instance;
+    item += ":" + request.instance;
+  }
+  std::vector<std::string> warnings = {
+      "the current location and size are measured by the tray when it applies"};
+  std::string undo = recipe.undo == packs::UndoKind::restore
+                         ? "restores " + recipe.current.text + " to its exact previous value"
+                         : "moves it back the same way to its previous folder";
+  if (recipe.undo == packs::UndoKind::none) {
+    undo = "not reversible: " + recipe.note;
+  } else if (!recipe.note.empty()) {
+    warnings.push_back(recipe.note);
+  }
+  const PlanSpec spec{.kind = PlanKind::relocate,
+                      .tier = Tier::ask,
+                      .scope = ExecutionContext::user,
+                      .title = "Relocate " + what + " to " + utf8(relocation.target),
+                      .commands = placement::recipe_commands(relocation),
+                      .undo = std::move(undo),
+                      .warnings = std::move(warnings),
+                      .params = Json{{"recipe", placement::recipe_json(recipe)},
+                                     {"instance", request.instance},
+                                     {"target", utf8(relocation.target)},
+                                     {"content", placement::to_string(*content)}}};
+  return submit(*engine_, *environment_.store,
+                Plan{.action = "RelocateRecipe",
+                     .proposer = proposer,
+                     .created_at = environment_.clock->now(),
+                     .items = {PlanItem{.path = from_utf8(item)}}},
                 spec, {}, actions::AutomationLevel::suggest);
 }
 

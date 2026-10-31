@@ -95,4 +95,15 @@ inline constexpr std::string_view settings_file = "packs.toml";
                                     const std::optional<std::filesystem::path>& owner_dir,
                                     const Version& running);
 
+// The version of this MyClean (the project version), which packs are loaded as.
+[[nodiscard]] Version this_version();
+
+// load_packs() of an installed MyClean as this version: the built-in packs of <data_dir>\packs,
+// and the owner's packs as the platform layer found their folder (platform/packs: nullopt when
+// there is none; an error when it is not writable by administrators only, which is reported in
+// `errors` and leaves the owner's packs out).
+[[nodiscard]] LoadReport load_installed(
+    const IPackFiles& files, const std::filesystem::path& data_dir,
+    const Result<std::optional<std::filesystem::path>>& owner_dir);
+
 }  // namespace myclean::packs

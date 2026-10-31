@@ -1,0 +1,23 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "svchost"
+match    = ['svchost.exe']
+no_match = ['notepad++.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "csrss"
+match    = ['csrss.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "lsass"
+match    = ['lsass.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "microsoft.powertoys.runner"
+match    = ['PowerToys.exe']

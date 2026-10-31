@@ -18,9 +18,10 @@
 #include "core/ipc/status.hpp"
 #include "core/model/result.hpp"
 #include "core/os/file_system.hpp"
+#include "core/packs/applies.hpp"
+#include "core/packs/loader.hpp"
 #include "core/placement/drives.hpp"
 #include "core/placement/settings.hpp"
-#include "core/rules/data_files.hpp"
 #include "core/space/downloads.hpp"
 #include "core/space/duplicates.hpp"
 #include "core/space/installers.hpp"
@@ -50,6 +51,11 @@ struct CleaningSources {
   // The owner's session context for the owner with this SID (see svc::owner_context).
   std::function<Result<cleaning::OwnerContext>(std::string_view owner_sid)> owner;
   std::function<bool()> busy;  // the system volume is critically busy
+  // What the knowledge packs ask about the machine, for the owner with this SID; empty: every
+  // loaded pack applies.
+  std::function<std::unique_ptr<packs::IMachine>(std::string_view owner_sid)> machine;
+  // The owner's override packs folder (platform/packs); empty: no owner packs.
+  std::function<Result<std::optional<std::filesystem::path>>()> owner_packs;
 };
 
 // How this service runs cleaning.
@@ -57,8 +63,8 @@ struct CleaningMode {
   // A console run executes nothing unless it has a sandbox, and never applies Windows
   // handlers, DISM or system settings.
   bool console = false;
-  // Console only: rules and workspaces come from <sandbox>\data, quarantined items go to
-  // <sandbox>\quarantine, and the plans run (on the files the sandbox rules select).
+  // Console only: packs and workspaces come from <sandbox>\data (no owner packs), quarantined items
+  // go to <sandbox>\quarantine, and the plans run (on the files the sandbox rules select).
   std::optional<std::filesystem::path> sandbox;
   std::filesystem::path system_root{L"C:\\"};
 };
@@ -72,7 +78,7 @@ class CleaningComponent final : public IComponent {
   static constexpr std::chrono::seconds poll_interval{5};
 
   // `files` must outlive the component.
-  CleaningComponent(CleaningSources sources, const rules::IDataFiles& files, CleaningMode mode);
+  CleaningComponent(CleaningSources sources, const packs::IPackFiles& files, CleaningMode mode);
   CleaningComponent(const CleaningComponent&) = delete;
   CleaningComponent& operator=(const CleaningComponent&) = delete;
   CleaningComponent(CleaningComponent&&) = delete;
@@ -84,13 +90,15 @@ class CleaningComponent final : public IComponent {
   [[nodiscard]] Result<void> start(const Context& context) override;
   void stop() override;
   [[nodiscard]] ipc::ComponentHealth health() const override;
+  [[nodiscard]] std::vector<ipc::PackStatus> pack_status() const override;
 
  private:
   void loop(const std::stop_token& stop, bool space);
   void wake();
 
   CleaningSources sources_;
-  const rules::IDataFiles* files_;
+  const packs::IPackFiles* files_;
+  std::unique_ptr<packs::IMachine> machine_;
   CleaningMode mode_;
   std::unique_ptr<cleaning::CleaningService> service_;
   std::mutex mutex_;

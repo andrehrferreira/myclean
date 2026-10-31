@@ -1,0 +1,11 @@
+id          = "uzpainter"
+version     = "1.0.0"
+title       = "UzPainter"
+description = "UzPainter's app data (work, verification and parity stores) and its cache, listed for review."
+sources     = [
+  "observed on reference machine: %LOCALAPPDATA%\\UzPainter holds the app's work, verification and parity stores and a cache folder",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%LOCALAPPDATA%\UzPainter' }]

@@ -4,6 +4,7 @@ myclean_add_test(placement
     npmrc_test.cpp
     placement_fakes.hpp
     proposal_test.cpp
+    recipe_test.cpp
     relocation_test.cpp
     system_space_test.cpp
   DEPENDS

@@ -24,6 +24,7 @@
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/packs/schema.hpp"
 #include "core/placement/drives.hpp"
 #include "core/placement/settings.hpp"
 #include "core/rules/schema.hpp"
@@ -83,6 +84,10 @@ struct Optimization {
   std::optional<double> maximum_gb;  // shadow_storage; nullopt: recommended
   std::string cache;                 // relocate: a placement::CacheKind text form
   std::string content;               // relocate: move | regenerate; empty: recommended
+  // relocate: a knowledge pack's recipe instead of a cache, and the instance it moves (empty
+  // when its setting names none)
+  std::optional<packs::RelocationRecipe> recipe;
+  std::string instance;
 };
 
 class Executor {
@@ -114,7 +119,10 @@ class Executor {
   // An approved user-scope plan that sends candidates `ids` to the Recycle Bin (the owner's
   // explicit deletion from a report view).
   [[nodiscard]] Result<Plan> recycle(std::span<const std::int64_t> ids);
-  // An approval-only plan for a system setting or a relocation.
+  // An approval-only plan for a system setting or a relocation (of a cache, or by a recipe: action
+  // "RelocateRecipe", one item "relocate:<pack>/<case>[:<instance>]", the target folder
+  // "<root>Relocated\<pack>\<case>[\<instance>]" on the best healthy volume, params
+  // {"recipe": placement::recipe_json(), "instance", "target", "content"}).
   [[nodiscard]] Result<Plan> propose_optimization(const Optimization& request,
                                                   const Actor& proposer);
 
@@ -145,6 +153,12 @@ class Executor {
   [[nodiscard]] Result<Plan> propose_relocation(const Optimization& request,
                                                 std::vector<placement::TargetVolume> volumes,
                                                 const Actor& proposer);
+  [[nodiscard]] Result<Plan> propose_recipe(const Optimization& request,
+                                            std::vector<placement::TargetVolume> volumes,
+                                            const Actor& proposer);
+  // The volume a relocation goes to: request.target, or the best healthy one with room.
+  [[nodiscard]] Result<placement::TargetVolume> relocation_volume(
+      const Optimization& request, std::span<const placement::TargetVolume> volumes) const;
   // The plan items of path candidates `ids` (identity read now), with their notes.
   [[nodiscard]] Result<std::vector<PlanItem>> items_of(std::span<const std::int64_t> ids,
                                                        std::vector<ItemNote>& notes) const;

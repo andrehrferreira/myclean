@@ -1,0 +1,69 @@
+# Discord, Slack and both Teams: caches and crash reports go; local storage, settings and logins
+# stay.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\discord\Cache\Cache_Data\f_000a1b'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\discord\Code Cache\js\index'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\discord\GPUCache\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\discord\Crashpad\reports\3c5d7e.dmp'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\discord\Local Storage\leveldb\000005.ldb'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\discord\settings.json'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Slack\Cache\Cache_Data\f_000001'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Slack\IndexedDB\https_app.slack.com_0.indexeddb.leveldb\000003.log'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Microsoft\Teams\GPUCache\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Microsoft\Teams\Cookies'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\WV2Profile_tfw\Cache\Cache_Data\f_000001'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\WV2Profile_tfw\Code Cache\js\index'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Crashpad\reports\a1b2c3.dmp'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\WV2Profile_tfw\Local Storage\leveldb\000003.log'
+
+[[expect]]
+kind     = "clean"
+case     = "discord"
+match    = ['C:\Users\owner\AppData\Roaming\discord\Cache', 'C:\Users\owner\AppData\Roaming\discord\Code Cache',
+            'C:\Users\owner\AppData\Roaming\discord\GPUCache', 'C:\Users\owner\AppData\Roaming\discord\Crashpad']
+no_match = ['C:\Users\owner\AppData\Roaming\discord\Local Storage', 'C:\Users\owner\AppData\Roaming\discord\settings.json']
+
+[[expect]]
+kind     = "clean"
+case     = "slack"
+match    = ['C:\Users\owner\AppData\Roaming\Slack\Cache']
+no_match = ['C:\Users\owner\AppData\Roaming\Slack\IndexedDB']
+
+[[expect]]
+kind     = "clean"
+case     = "teams-classic"
+match    = ['C:\Users\owner\AppData\Roaming\Microsoft\Teams\GPUCache']
+no_match = ['C:\Users\owner\AppData\Roaming\Microsoft\Teams\Cookies']
+
+[[expect]]
+kind     = "clean"
+case     = "teams"
+match    = ['C:\Users\owner\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\WV2Profile_tfw\Cache',
+            'C:\Users\owner\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\WV2Profile_tfw\Code Cache',
+            'C:\Users\owner\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Crashpad']
+no_match = ['C:\Users\owner\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\WV2Profile_tfw\Local Storage']
+
+[[expect]]
+kind     = "attribution"
+case     = "discord-cache"
+match    = ['C:\Users\owner\AppData\Roaming\discord\Cache']
+no_match = ['C:\Users\owner\AppData\Roaming\discord']
+
+[[expect]]
+kind     = "attribution"
+case     = "teams-cache"
+match    = ['C:\Users\owner\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\WV2Profile_tfw\GPUCache']

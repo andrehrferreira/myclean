@@ -1,0 +1,8 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "eclipse.temurin-java"
+match    = ['java.exe']
+no_match = ['notepad++.exe']

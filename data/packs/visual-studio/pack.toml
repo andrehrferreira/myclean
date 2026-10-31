@@ -1,0 +1,14 @@
+id          = "visual-studio"
+version     = "1.0.0"
+title       = "Visual Studio"
+description = "Visual Studio's component cache and the per-user solution state (.vs) of inactive projects (cleaned); installations, the installer's download cache and per-user data are listed for review or uninstall."
+sources     = [
+  "https://learn.microsoft.com/visualstudio/install/disable-or-move-the-package-cache (the installer's package cache in %ProgramData%\\Microsoft\\VisualStudio\\Packages; 'Keep download cache after the installation')",
+  "observed on reference machine: %LOCALAPPDATA%\\Microsoft\\VisualStudio\\<version>_<instance>\\ComponentModelCache; .vs folders beside .sln and .slnx files, ignored by git (analysis F-012, F-013, F-016)",
+  "observed on reference machine: vctip.exe, its image path and signer",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%ProgramFiles%\Microsoft Visual Studio' }, { path_exists = '%ProgramFiles(x86)%\Microsoft Visual Studio' },
+       { path_exists = '%LOCALAPPDATA%\Microsoft\VisualStudio' }, { path_exists = '%ProgramData%\Microsoft\VisualStudio\Packages' }]

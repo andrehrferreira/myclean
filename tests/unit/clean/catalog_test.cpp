@@ -1,5 +1,3 @@
-#include "core/rules/catalog.hpp"
-
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -17,7 +15,7 @@
 #include "core/rules/schema.hpp"
 #include "fixture.hpp"
 
-// The shipped data files: data/rules/*.toml and data/workspaces.toml.
+// The shipped clean cases (data/packs/*/clean.toml) and data/workspaces.toml.
 namespace myclean::clean {
 namespace {
 
@@ -25,14 +23,9 @@ using namespace myclean::clean::testing;
 using rules::CleaningRule;
 using rules::Strategy;
 
-TEST(ShippedCatalog, EveryRuleFileIsValid) {
-  rules::RuleCatalog catalog = rules::make_rule_catalog(MYCLEAN_DATA_DIR);
-  const std::vector<Error> errors = catalog.reload(rules::DiskDataFiles{});
-  for (const Error& error : errors) {
-    ADD_FAILURE() << error.message;
-  }
+TEST(ShippedCatalog, EveryCategoryHasCleanCases) {
   std::map<std::string, int> per_category;
-  for (const CleaningRule& rule : catalog.entries()) {
+  for (const CleaningRule& rule : shipped_rules()) {
     ++per_category[rule.category];
   }
   for (const char* category : {"windows", "browsers", "electron", "ides", "gpu-shader-caches",
@@ -48,7 +41,7 @@ TEST(ShippedCatalog, ShaderCachesAreAsk) {
       EXPECT_EQ(rule.tier, Tier::ask) << rule.id;
     }
   }
-  const CleaningRule& nvidia = shipped_rule("gpu.nvidia.dxcache");
+  const CleaningRule& nvidia = shipped_rule("gpu/nvidia-dxcache");
   EXPECT_EQ(nvidia.targets.front(), R"(%LOCALAPPDATA%\NVIDIA\DXCache\*)");
 }
 
@@ -61,8 +54,8 @@ TEST(ShippedCatalog, PackageManagersAreNativeUserAsk) {
       EXPECT_EQ(rule.tier, Tier::ask) << rule.id;
     }
   }
-  EXPECT_EQ(shipped_rule("pkg.pnpm.store").command, "pnpm store prune");
-  EXPECT_EQ(shipped_rule("windows.component_store").command,
+  EXPECT_EQ(shipped_rule("node/pnpm-store").command, "pnpm store prune");
+  EXPECT_EQ(shipped_rule("windows/component-store").command,
             "DISM /Online /Cleanup-Image /StartComponentCleanup");
 }
 
@@ -90,7 +83,7 @@ TEST(ShippedCatalog, HandlersHaveTheirScopeAndForbiddenOnesAreAbsent) {
     EXPECT_EQ(rule.tier, Tier::ask) << rule.id;
   }
   EXPECT_GT(handlers, 0);
-  EXPECT_EQ(shipped_rule("windows.update_cleanup").handler, "Update Cleanup");
+  EXPECT_EQ(shipped_rule("windows/update-cleanup").handler, "Update Cleanup");
 }
 
 // Cleaning spec, "Browser rule limits": no browser or Electron target names profile data.

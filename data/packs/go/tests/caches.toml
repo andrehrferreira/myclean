@@ -1,0 +1,25 @@
+# Go's default cache folders, measured for `go clean`; installed tools in go\bin are not.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\go-build\0a\0a1b2c3d4e5f-a'
+[[entry]]
+path = 'C:\Users\owner\go\pkg\mod\golang.org\x\sys@v0.26.0\go.mod'
+[[entry]]
+path = 'C:\Users\owner\go\bin\gopls.exe'
+
+[[expect]]
+kind     = "clean"
+case     = "cache"
+match    = ['C:\Users\owner\AppData\Local\go-build', 'C:\Users\owner\go\pkg\mod']
+no_match = ['C:\Users\owner\go\bin', 'C:\Users\owner\go']
+
+[[expect]]
+kind     = "attribution"
+case     = "build"
+match    = ['C:\Users\owner\AppData\Local\go-build']
+
+[[expect]]
+kind     = "attribution"
+case     = "modules"
+match    = ['C:\Users\owner\go\pkg\mod']
+no_match = ['C:\Users\owner\go\bin']

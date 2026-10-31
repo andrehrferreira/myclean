@@ -34,6 +34,7 @@ myclean_add_library(tray
     myclean::platform_fs
     myclean::platform_input
     myclean::platform_ipc
+    myclean::platform_proc
     myclean::platform_service
     myclean::platform_settings
     myclean::tray_model

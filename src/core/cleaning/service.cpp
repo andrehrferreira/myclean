@@ -32,7 +32,10 @@
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
-#include "core/rules/catalog.hpp"
+#include "core/packs/applies.hpp"
+#include "core/packs/loader.hpp"
+#include "core/packs/registry.hpp"
+#include "core/packs/schema.hpp"
 #include "core/safety/safe_remove.hpp"
 #include "core/sched/schedule_repository.hpp"
 #include "core/space/downloads.hpp"
@@ -125,8 +128,7 @@ CleaningService::CleaningService(ServiceSources sources, ServiceSettings setting
       plans_(*sources_.store),
       tasks_(*sources_.store, engine_, *sources_.clock),
       repository_(*sources_.store),
-      scheduler_(*sources_.clock, repository_),
-      catalog_(rules::make_rule_catalog(sources_.data_dir)) {}
+      scheduler_(*sources_.clock, repository_) {}
 
 CleaningService::~CleaningService() = default;
 
@@ -216,6 +218,51 @@ void CleaningService::resolve_owner() {
     owner_problem_.reset();
   }
   ready_ = executor_.get();
+  reload_packs();
+}
+
+void CleaningService::reload_packs() {
+  const Result<std::optional<fs::path>> owner_dir =
+      sources_.owner_packs ? sources_.owner_packs()
+                           : Result<std::optional<fs::path>>(std::optional<fs::path>{});
+  const packs::LoadReport report =
+      packs::load_installed(*sources_.files, sources_.data_dir, owner_dir);
+  for (const Error& error : report.errors) {
+    note("packs: " + error.message);
+  }
+  const packs::Probes probes{.machine = sources_.machine,
+                             .tree = sources_.probes.tree,
+                             .environment = owner_->environment.get()};
+  registry_ = sources_.machine == nullptr ? packs::make_registry(report.packs)
+                                          : packs::make_registry(report.packs, probes);
+  std::vector<ipc::PackStatus> status;
+  for (const packs::PackOutcome& outcome : report.outcomes) {
+    const auto loaded = std::ranges::find_if(report.packs, [&](const packs::Pack& pack) {
+      return pack.manifest.id == outcome.id && pack.origin == outcome.origin;
+    });
+    const bool found = loaded != report.packs.end() && outcome.status == packs::PackStatus::loaded;
+    status.push_back(ipc::PackStatus{
+        .id = outcome.id,
+        .version = found ? packs::to_string(loaded->manifest.version) : std::string{},
+        .origin = std::string(packs::to_string(outcome.origin)),
+        .status = std::string(packs::to_string(outcome.status)),
+        .applies = found && std::ranges::find(registry_.packs, outcome.id) != registry_.packs.end(),
+        .message = outcome.message.empty() ? std::nullopt : std::optional(outcome.message)});
+  }
+  const std::scoped_lock lock(mutex_);
+  recipes_ = registry_.relocate;
+  pack_status_ = std::move(status);
+}
+
+std::optional<packs::RelocationRecipe> CleaningService::recipe(std::string_view id) const {
+  const std::scoped_lock lock(mutex_);
+  const auto found = std::ranges::find(recipes_, id, &packs::RelocationRecipe::id);
+  return found == recipes_.end() ? std::nullopt : std::optional(*found);
+}
+
+std::vector<ipc::PackStatus> CleaningService::pack_status() const {
+  const std::scoped_lock lock(mutex_);
+  return pack_status_;
 }
 
 void CleaningService::run_jobs(const std::stop_token& stop) {
@@ -289,9 +336,7 @@ void CleaningService::run_scan(bool scheduled, const std::stop_token& stop) {
     scanning_ = true;
     progress_ = 0.0;
   }
-  for (const Error& error : catalog_.reload(*sources_.files)) {
-    note("rules: " + error.message);
-  }
+  reload_packs();
   std::optional<clean::Workspaces> workspaces;
   const fs::path workspace_file = sources_.data_dir / "workspaces.toml";
   if (Result<std::string> text = sources_.files->read(workspace_file); text) {
@@ -307,7 +352,7 @@ void CleaningService::run_scan(bool scheduled, const std::stop_token& stop) {
     progress_ = 0.1;
   }
   const Result<ScanResult> scanned = executor()->scan(
-      RuleSet{.rules = catalog_.entries(), .workspaces = workspaces ? &*workspaces : nullptr},
+      RuleSet{.rules = registry_.clean, .workspaces = workspaces ? &*workspaces : nullptr},
       scheduled, stop);
   Result<void> outcome;
   if (!scanned) {
@@ -448,6 +493,16 @@ Result<Json> CleaningService::propose_optimization(const Json& params, const Act
   if (!ready) {
     return tl::unexpected(ready.error());
   }
+  const std::string pack = text_param(params, "pack");
+  const std::string case_id = text_param(params, "recipe");
+  std::optional<packs::RelocationRecipe> found;
+  if (!pack.empty() || !case_id.empty()) {
+    found = recipe(pack + "/" + case_id);
+    if (!found) {
+      return fail(Errc::invalid_argument,
+                  "no relocation recipe \"" + pack + "/" + case_id + "\" is in effect");
+    }
+  }
   const auto maximum = params.find("maximum_gb");
   Result<Plan> plan = (*ready)->propose_optimization(
       Optimization{.kind = text_param(params, "kind"),
@@ -457,7 +512,9 @@ Result<Json> CleaningService::propose_optimization(const Json& params, const Act
                    .maximum_gb = maximum == params.end() ? std::nullopt
                                                          : std::optional(maximum->get<double>()),
                    .cache = text_param(params, "cache"),
-                   .content = text_param(params, "content")},
+                   .content = text_param(params, "content"),
+                   .recipe = std::move(found),
+                   .instance = text_param(params, "instance")},
       proposer);
   if (!plan) {
     return tl::unexpected(plan.error());
@@ -800,7 +857,10 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
                               Param{.name = "volume", .type = ParamType::token},
                               Param{.name = "maximum_gb", .type = ParamType::number},
                               Param{.name = "cache", .type = ParamType::token},
-                              Param{.name = "content", .type = ParamType::token}},
+                              Param{.name = "content", .type = ParamType::token},
+                              Param{.name = "pack", .type = ParamType::token},
+                              Param{.name = "recipe", .type = ParamType::token},
+                              Param{.name = "instance", .type = ParamType::token}},
                              [this](const Json& params, const ipc::Caller& caller) {
                                return propose_optimization(params, proposer_of(params, caller));
                              }));

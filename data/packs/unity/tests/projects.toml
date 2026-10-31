@@ -1,0 +1,53 @@
+# An inactive Unity project in a workspace: its ignored Library, Temp and Logs go; Assets,
+# Packages and ProjectSettings stay.
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'F:\Unity\KartRacer\.git'
+folder = true
+[[entry]]
+path = 'F:\Unity\KartRacer\ProjectSettings\ProjectVersion.txt'
+[[entry]]
+path = 'F:\Unity\KartRacer\ProjectSettings\ProjectSettings.asset'
+[[entry]]
+path = 'F:\Unity\KartRacer\Assets\Scenes\Track.unity'
+[[entry]]
+path = 'F:\Unity\KartRacer\Packages\manifest.json'
+[[entry]]
+path = 'F:\Unity\KartRacer\Library'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unity\KartRacer\Library\ArtifactDB'
+size = 104857600
+[[entry]]
+path = 'F:\Unity\KartRacer\Temp'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unity\KartRacer\Temp\UnityLockfile'
+[[entry]]
+path = 'F:\Unity\KartRacer\Logs'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unity\KartRacer\Logs\AssetImportWorker0.log'
+
+[[expect]]
+kind     = "clean"
+case     = "project-artifacts"
+match    = ['F:\Unity\KartRacer\Library', 'F:\Unity\KartRacer\Temp', 'F:\Unity\KartRacer\Logs']
+no_match = ['F:\Unity\KartRacer\Assets', 'F:\Unity\KartRacer\Packages', 'F:\Unity\KartRacer\ProjectSettings']
+
+[[expect]]
+kind     = "attribution"
+case     = "editors"
+match    = ['C:\Program Files\Unity', 'C:\Program Files\Unity Hub']
+
+[[expect]]
+kind     = "attribution"
+case     = "cache"
+match    = ['C:\Users\owner\AppData\Local\Unity\cache', 'C:\Users\owner\AppData\Roaming\Unity\Asset Store-5.x']
+no_match = ['C:\Users\owner\AppData\Local\Unity\Editor']

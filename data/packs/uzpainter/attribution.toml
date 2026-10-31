@@ -1,0 +1,15 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "app-data"
+paths    = ['%LOCALAPPDATA%\UzPainter']
+category = "apps"
+label    = "UzPainter app data (work, verification and parity stores)"
+reclaim  = { kind = "manual-review", note = "Only the app's owner knows which stores are still needed." }
+
+[[area]]
+id       = "cache"
+paths    = ['%LOCALAPPDATA%\UzPainter\cache']
+category = "app-caches"
+label    = "UzPainter cache"
+reclaim  = { kind = "manual-review", note = "A cache; no cleaning rule covers it yet." }

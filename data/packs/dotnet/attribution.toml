@@ -1,0 +1,15 @@
+# Sources: pack.toml. The .NET SDK in Program Files is an area of the dev-tools pack.
+
+[[area]]
+id       = "nuget-packages"
+paths    = ['%USERPROFILE%\.nuget\packages']
+category = "dev-caches"
+label    = "NuGet global packages"
+reclaim  = { kind = "relocate", ref = "nuget", note = "Rule dotnet/nuget-locals clears it instead." }
+
+[[area]]
+id       = "nuget-caches"
+paths    = ['%LOCALAPPDATA%\NuGet']
+category = "dev-caches"
+label    = "NuGet HTTP and v3 caches"
+reclaim  = { kind = "clean-rule", ref = "nuget-locals" }

@@ -1,0 +1,8 @@
+id          = "asus"
+version     = "1.0.0"
+title       = "ASUS utilities"
+description = "What the processes of ASUS Armoury Crate, Aura, ASUS system services and the bundled A-Volute (Nahimic, Sonic Studio) audio software are."
+sources     = [
+  "observed on reference machine: the Armoury Crate, Aura, ASUS service and A-Volute Nahimic processes, their image paths and signers",
+]
+min_myclean = "0.1.0"

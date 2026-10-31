@@ -35,7 +35,7 @@ namespace myclean::ipc {
 //   {"id": int, "path": string, "bytes": int, "rule": string|null, "reason": string,
 //    "approved": true|false|null (null: not decided yet)}
 //   path is a file system path, or "handler:<name>" / "dism:component-store" /
-//   "relocate:<cache>" for items that are not files.
+//   "relocate:<cache>" / "relocate:<pack>/<case>[:<instance>]" for items that are not files.
 
 // ---- cleaning.* -------------------------------------------------------------------------------
 
@@ -103,9 +103,11 @@ inline constexpr std::string_view plans_propose_cleanup_method = "plans.propose_
 //   page_file        target (token): drive letter ("D") for the system-managed page file
 //   shadow_storage   volume (token): drive letter (default the system drive);
 //                    maximum_gb (number > 0)
-//   relocate         cache (token, required): "temp"|"gradle"|"cargo"|"npm"|"nuget"|"pip"|
-//                    "go_modules"|"go_build"|"unreal_ddc"; target (token): drive letter;
-//                    content (token): "move" | "regenerate"
+//   relocate         cache (token): "temp"|"gradle"|"cargo"|"npm"|"nuget"|"pip"|
+//                    "go_modules"|"go_build"|"unreal_ddc"; or pack and recipe (tokens): a
+//                    relocation recipe "<pack>/<case>" of the packs in effect, with instance
+//                    (token) for a recipe whose setting names instances (a WSL distribution);
+//                    target (token): drive letter; content (token): "move" | "regenerate"
 // Creates an awaiting_approval plan (system settings never run without approval):
 // {"plan": int, "state": "awaiting_approval"}. Fails with invalid_state when nothing would
 // change (already at the requested value, or no healthy target with room).
@@ -128,6 +130,8 @@ inline constexpr std::string_view plans_recycle_method = "plans.recycle";
 //    "action": {"command"}                                   (native)
 //            | {"volume", "handlers": [name]}                (handler; user-profile handlers)
 //            | {"cache", "target", "content": "move"|"regenerate"}   (relocate)
+//            | {"recipe": {the recipe's fields}, "instance", "target", "content"}
+//                                                             (relocate by a recipe)
 //            | {"recycle": true}                              (cleanup: to the Recycle Bin),
 //    "undo": {"not_reversible": string, "items": [{"item", "data"}]} (undo only: as reported)}}
 // An apply task lists the items not rejected; the tray acts on no other. A task handed out is

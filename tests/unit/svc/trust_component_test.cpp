@@ -14,7 +14,7 @@
 #include <nlohmann/json.hpp>
 
 #include "core/model/result.hpp"
-#include "core/rules/data_files.hpp"
+#include "core/packs/loader.hpp"
 #include "core/trust/trust.hpp"
 #include "fakes/fake_clock.hpp"
 #include "phase1_fakes.hpp"
@@ -62,7 +62,7 @@ class TrustComponentTest : public ::testing::Test {
 
  private:
   fakes::FakeClock clock_{noon};
-  rules::DiskDataFiles files_;
+  packs::DiskPackFiles files_;
   testing::ComponentHarness harness_{clock_};
   TrustSources sources_ = sources();
   testing::FakeImageInspector* inspector_ =
@@ -130,12 +130,16 @@ TEST_F(TrustComponentTest, SignerLookupAnswersFromTheCacheAndVerifiesInTheBackgr
   EXPECT_EQ(inspector().verifications, 2);
 }
 
-TEST(TrustComponent, AnInvalidKnowledgeBaseFileOrUnknownFoldersAreProblems) {
+TEST(TrustComponent, AnInvalidKnowledgeBasePackOrUnknownFoldersAreProblems) {
   const fakes::FakeClock clock{noon};
-  const rules::DiskDataFiles files;
+  const packs::DiskPackFiles files;
   testing::ComponentHarness harness{clock};
-  std::filesystem::create_directories(harness.data_dir() / "kb");
-  std::ofstream(harness.data_dir() / "kb" / "bad.json") << R"({"entries": [{"id": "x"}]})";
+  const std::filesystem::path bad = harness.data_dir() / "packs" / "bad";
+  std::filesystem::create_directories(bad);
+  std::ofstream(bad / "pack.toml") << "id = \"bad\"\nversion = \"1.0.0\"\ntitle = \"Bad\"\n"
+                                      "description = \"An invalid knowledge base.\"\n"
+                                      "sources = [\"observed\"]\nmin_myclean = \"0.1.0\"\n";
+  std::ofstream(bad / "kb.json") << R"({"entries": [{"id": "x"}]})";
   TrustComponent trust{sources(fail(Errc::io_error, "profiles cannot be listed")), files};
   ASSERT_TRUE(harness.start(trust, harness.data_dir()).has_value());
 

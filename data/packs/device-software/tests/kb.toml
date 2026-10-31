@@ -1,0 +1,28 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "realtek.audio-universal-service"
+match    = ['RtkAudUService64.exe']
+no_match = ['notepad++.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "intel.proset-wireless"
+match    = ['Intel_PIE_Service.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "apple.bonjour"
+match    = ['mDNSResponder.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "epson.scanner-service"
+match    = ['EscSvc64.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "tchelicon.goxlr"
+match    = ['GoXLR App.exe']

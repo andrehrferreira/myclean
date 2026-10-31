@@ -1,0 +1,65 @@
+# Developer artifacts (cleaning spec, "Developer Artifact Qualification"; analysis F-012;
+# sources: pack.toml). The scanner walks the roots of data/workspaces.toml; a folder holding a
+# rule's marker is a project root, and the rule's targets are patterns relative to it. An
+# artifact is proposed only when the project is in a git work tree, git ignores the artifact and
+# tracks nothing inside it, no process uses it or the project, and the project is inactive for
+# require.inactive_days (newest of the last commit and every source file). One marker per rule:
+# toolchains with several markers have one rule per marker, and an artifact that several rules
+# select is proposed once.
+
+# Python: .venv is never a default target (it may hold packages that cannot be reinstalled).
+[[rule]]
+id       = "pyproject-artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "pyproject.toml" }
+targets  = ["__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", "*.egg-info",
+            "build", "dist"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+[[rule]]
+id       = "setup-artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "setup.py" }
+targets  = ["__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", "*.egg-info",
+            "build", "dist"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+[[rule]]
+id       = "requirements-artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "requirements*.txt" }
+targets  = ["__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", "*.egg-info",
+            "build", "dist"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+# Global package caches (cleaning spec, "Native Prune Commands Under the User Token"; analysis
+# F-013), pruned with the tool's own command, run by the tray under the owner's token. The
+# targets are only measured: the rule is offered when they hold anything, sized by what they
+# hold now.
+
+[[rule]]
+id       = "pip-cache"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "pip cache purge"
+targets  = ['%LOCALAPPDATA%\pip\cache']
+
+[[rule]]
+id       = "uv-cache"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "uv cache prune"
+targets  = ['%LOCALAPPDATA%\uv\cache']

@@ -16,13 +16,13 @@
 #include <windows.h>
 
 #include "cli/cli.hpp"
+#include "cli/packs_command.hpp"
 #include "cli/text.hpp"
 #include "core/map/attribution.hpp"
 #include "core/map/disk_map.hpp"
 #include "core/map/json.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
-#include "core/rules/data_files.hpp"
 #include "core/space/scanner.hpp"
 #include "platform/clean/win32_probes.hpp"
 #include "platform/scan/directory_reader.hpp"
@@ -34,6 +34,11 @@ namespace {
 namespace fs = std::filesystem;
 
 constexpr double gib = 1024.0 * 1024.0 * 1024.0;
+
+std::string utf8(const fs::path& path) {
+  const std::u8string text = path.u8string();
+  return {text.begin(), text.end()};
+}
 
 // Lowers this process to below-normal CPU priority and background I/O and memory priority for
 // its lifetime, then restores the previous priority class.
@@ -94,18 +99,6 @@ Result<fs::path> scan_root(const std::optional<std::string>& target) {
   return path;
 }
 
-fs::path default_data_dir() {
-  std::vector<wchar_t> buffer(MAX_PATH);
-  for (;;) {
-    const DWORD length =
-        ::GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
-    if (length < buffer.size()) {
-      return fs::path{std::wstring(buffer.data(), length)}.parent_path().parent_path() / "data";
-    }
-    buffer.resize(buffer.size() * 2);
-  }
-}
-
 std::optional<map::VolumeSpace> volume_space(const fs::path& root) {
   ULARGE_INTEGER total{};
   ULARGE_INTEGER free{};
@@ -118,6 +111,18 @@ std::optional<map::VolumeSpace> volume_space(const fs::path& root) {
 
 }  // namespace
 
+fs::path default_data_dir() {
+  std::vector<wchar_t> buffer(MAX_PATH);
+  for (;;) {
+    const DWORD length =
+        ::GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+    if (length < buffer.size()) {
+      return fs::path{std::wstring(buffer.data(), length)}.parent_path().parent_path() / "data";
+    }
+    buffer.resize(buffer.size() * 2);
+  }
+}
+
 int map_command(const MapRequest& request, std::ostream& out, std::ostream& err) {
   const Result<fs::path> root = scan_root(request.target);
   if (!root) {
@@ -125,10 +130,12 @@ int map_command(const MapRequest& request, std::ostream& out, std::ostream& err)
     return exit_usage;
   }
   const fs::path data_dir = request.data_dir.value_or(default_data_dir());
-  const rules::DiskDataFiles files;
-  Result<std::vector<map::Area>> areas = map::load_attribution(files, data_dir);
-  if (!areas) {
-    err << "myclean: map: " << areas.error().message << '\n';
+  LocalPacks local = load_local_packs(data_dir);
+  for (const Error& error : local.report.errors) {
+    err << "myclean: map: " << error.message << '\n';
+  }
+  if (local.report.packs.empty()) {
+    err << "myclean: map: no knowledge pack loaded from " << utf8(data_dir / "packs") << '\n';
     return exit_unavailable;
   }
 
@@ -154,8 +161,8 @@ int map_command(const MapRequest& request, std::ostream& out, std::ostream& err)
   const map::MapOptions options{
       .min_size = Bytes{static_cast<std::uint64_t>(std::llround(request.min_gb * gib))},
       .depth = request.depth};
-  const Result<map::DiskMap> disk_map =
-      map::build_map(*scan, std::move(*areas), environment, volume_space(*root), options);
+  const Result<map::DiskMap> disk_map = map::build_map(*scan, std::move(local.registry.attribution),
+                                                       environment, volume_space(*root), options);
   if (!disk_map) {
     err << "myclean: map: " << disk_map.error().message << '\n';
     return exit_usage;

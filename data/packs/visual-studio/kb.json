@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "id": "microsoft.vc-tools-telemetry",
+      "image": "vctip.exe",
+      "signer": "Microsoft Corporation",
+      "description": "Microsoft C++ compiler tools data uploader. Sends usage data of the Visual C++ build tools to Microsoft.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    }
+  ]
+}

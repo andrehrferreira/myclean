@@ -1,0 +1,12 @@
+id          = "windows"
+version     = "1.0.0"
+title       = "Windows"
+description = "Windows' own temporary files, crash data and servicing areas (cleaned through Windows' cleanup handlers and DISM where Windows owns them), the system files and folders of a volume, the owner's folders, and what the Windows processes are."
+sources     = [
+  "https://learn.microsoft.com/windows/win32/lwef/disk-cleanup (cleanup handlers registered under HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VolumeCaches)",
+  "https://learn.microsoft.com/windows-hardware/manufacture/desktop/clean-up-the-winsxs-folder (DISM /Online /Cleanup-Image /StartComponentCleanup removes superseded components)",
+  "https://learn.microsoft.com/windows/win32/wer/collecting-user-mode-dumps (application crash dumps in %LOCALAPPDATA%\\CrashDumps)",
+  "observed on reference machine: temp folders, crash dumps, Windows error reports and kernel reports, the cleanup handlers and their scopes (docs/spikes/X3-cleanup-handlers.md), the volume's system files and folders, the owner's folders (analysis F-011, F-016)",
+  "observed on reference machine: the running Windows processes, their image paths and signers",
+]
+min_myclean = "0.1.0"

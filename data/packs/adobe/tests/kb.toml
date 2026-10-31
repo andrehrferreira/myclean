@@ -1,0 +1,18 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "creative-cloud"
+match    = ['Creative Cloud.exe']
+no_match = ['notepad++.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "creative-cloud-helper"
+match    = ['Creative Cloud Helper.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "creative-cloud-ui-helper"
+match    = ['Creative Cloud UI Helper.exe']

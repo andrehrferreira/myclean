@@ -25,7 +25,9 @@
 #include "core/model/ids.hpp"
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
+#include "core/packs/schema.hpp"
 #include "core/placement/drives.hpp"
+#include "core/placement/recipe.hpp"
 #include "core/placement/relocation.hpp"
 #include "core/safety/paths.hpp"
 
@@ -110,6 +112,18 @@ void parse_action(const Json& action, UserTask& task) {
       task.handlers = action.at("handlers").get<std::vector<std::string>>();
       break;
     case TaskKind::relocate:
+      if (const auto recipe = action.find("recipe"); recipe != action.end()) {
+        Result<packs::RelocationRecipe> parsed = placement::recipe_from_json(*recipe);
+        if (!parsed) {
+          throw std::invalid_argument(parsed.error().message);
+        }
+        task.recipe = placement::RecipeRelocation{
+            .recipe = *std::move(parsed),
+            .instance = action.at("instance").get<std::string>(),
+            .target = path_of(action.at("target")),
+            .content = parse_text(action, "content", &placement::parse_content_mode)};
+        break;
+      }
       task.relocation = placement::Relocation{
           .kind = parse_text(action, "cache", &placement::parse_cache_kind),
           .target = path_of(action.at("target")),
@@ -162,6 +176,10 @@ Result<Built> build(const UserTask& task, const Toolbox& tools, const std::stop_
       return Built{.action = std::move(action), .handlers = handlers};
     }
     case TaskKind::relocate:
+      if (task.recipe) {
+        return Built{.action = std::make_unique<placement::RecipeAction>(
+                         tools.placement, *tools.runner, *task.recipe, stop)};
+      }
       break;
   }
   return Built{.action =

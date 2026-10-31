@@ -1,0 +1,87 @@
+# An inactive Unreal project in a workspace: its ignored build output, derived data, logs and
+# crash reports go; Content, Config, Saved\Config and Saved itself stay.
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\.git'
+folder = true
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\ShooterDemo.uproject'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Intermediate'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Intermediate\Build\Win64\UnrealEditor\Development\ShooterDemo.obj'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\DerivedDataCache'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\DerivedDataCache\Compressed.ddp'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Binaries'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Binaries\Win64\UnrealEditor-ShooterDemo.dll'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\Logs'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\Logs\ShooterDemo.log'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\Crashes'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\Crashes\UECC-Windows-1A2B3C\CrashContext.runtime-xml'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\Config\WindowsEditor\EditorPerProjectUserSettings.ini'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Content\Maps\Arena.umap'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Config\DefaultEngine.ini'
+
+[[expect]]
+kind     = "clean"
+case     = "project-artifacts"
+match    = ['F:\Unreal\ShooterDemo\Intermediate', 'F:\Unreal\ShooterDemo\DerivedDataCache', 'F:\Unreal\ShooterDemo\Binaries',
+            'F:\Unreal\ShooterDemo\Saved\Logs', 'F:\Unreal\ShooterDemo\Saved\Crashes']
+no_match = ['F:\Unreal\ShooterDemo\Saved', 'F:\Unreal\ShooterDemo\Saved\Config', 'F:\Unreal\ShooterDemo\Content',
+            'F:\Unreal\ShooterDemo\Config']
+
+[[expect]]
+kind     = "attribution"
+case     = "engine"
+match    = ['C:\Program Files\Epic Games\UE_5.6', 'D:\Epic Games\UE_5.4']
+no_match = ['C:\Program Files\Epic Games\Launcher']
+
+[[expect]]
+kind     = "attribution"
+case     = "ddc"
+match    = ['C:\Users\owner\AppData\Local\UnrealEngine\Common\DerivedDataCache']
+
+[[expect]]
+kind     = "attribution"
+case     = "user"
+match    = ['C:\Users\owner\AppData\Local\UnrealEngine']
+
+[[expect]]
+kind     = "attribution"
+case     = "vault"
+match    = ['C:\ProgramData\Epic\EpicGamesLauncher\VaultCache']
+
+[[expect]]
+kind     = "attribution"
+case     = "project-output"
+match    = ['C:\Users\owner\Documents\Unreal Projects\ShooterDemo\Intermediate',
+            'C:\Users\owner\Documents\Unreal Projects\ShooterDemo\Binaries']
+no_match = ['C:\Users\owner\Documents\Unreal Projects\ShooterDemo\Content']

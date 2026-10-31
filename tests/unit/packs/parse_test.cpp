@@ -187,6 +187,59 @@ TEST(Relocate, RejectsInconsistentRecipes) {
   expect_error(parse_relocate_file("", file), "field 'relocate' must be a non-empty array");
 }
 
+// `wsl_recipe` as the WSL 1 recipe: target_kind wsl-import, and `where` as its instance filter.
+std::string wsl1_with(std::string_view where) {
+  std::string text =
+      wsl_with("target_kind = \"command\"\ncommand     = \"wsl --manage {name} --move {target}\"",
+               "target_kind = \"wsl-import\"");
+  constexpr std::string_view name = R"(name = "DistributionName" })";
+  text.replace(text.find(name), name.size(),
+               "name = \"DistributionName\", where = " + std::string(where) + " }");
+  return text;
+}
+
+TEST(Relocate, ParsesAnInstanceFilterAndTheWslImportKind) {
+  const Result<std::vector<RelocationRecipe>> recipes =
+      parse_relocate_file(wsl1_with(R"({ value = "Flags", mask = 8, equals = 0 })"), file);
+  ASSERT_TRUE(recipes.has_value()) << recipes.error().message;
+  const RelocationRecipe& recipe = recipes->at(0);
+  EXPECT_EQ(recipe.target_kind, SettingKind::wsl_import);
+  EXPECT_EQ(recipe.undo, UndoKind::command);
+  ASSERT_TRUE(recipe.current.where.has_value());
+  const InstanceFilter filter = recipe.current.where.value_or(InstanceFilter{});
+  EXPECT_EQ(filter.value, "Flags");
+  EXPECT_EQ(filter.mask, 8U);
+  EXPECT_EQ(filter.equals, 0U);
+  EXPECT_EQ(parse_setting_kind("wsl-import"), SettingKind::wsl_import);
+  EXPECT_EQ(parse_undo_kind("restore"), UndoKind::restore);
+  EXPECT_EQ(parse_content_mode("copy"), std::nullopt);
+}
+
+TEST(Relocate, RejectsBadFiltersAndWslImportMisuse) {
+  expect_error(parse_relocate_file(wsl1_with(R"({ value = "Flags", mask = 8, equals = 9 })"), file),
+               "field 'current.where.equals' has bits that mask leaves out");
+  expect_error(parse_relocate_file(wsl1_with(R"({ value = "Flags", equals = 0 })"), file),
+               "field 'current.where.mask' is missing");
+  expect_error(
+      parse_relocate_file(wsl_with(R"(, name = "DistributionName" })",
+                                   R"(, where = { value = "Flags", mask = 8, equals = 8 } })"),
+                          file),
+      "field 'current.where' needs instances");
+  std::string restoring = wsl1_with(R"({ value = "Flags", mask = 8, equals = 0 })");
+  restoring.replace(restoring.find(R"(undo        = "command")"), 23, R"(undo = "restore")");
+  expect_error(parse_relocate_file(restoring, file),
+               "field 'undo' must be command or none for target_kind 'wsl-import'");
+  std::string nameless =
+      wsl_with("target_kind = \"command\"\ncommand     = \"wsl --manage {name} --move {target}\"",
+               "target_kind = \"wsl-import\"");
+  nameless.replace(nameless.find(R"(, name = "DistributionName")"), 27, "");
+  expect_error(parse_relocate_file(nameless, file),
+               "field 'target_kind' 'wsl-import' needs instances");
+  expect_error(
+      parse_relocate_file(wsl_with("{ registry = ", "{ wsl-import = 'x', registry = "), file),
+      "field 'current.wsl-import' is not a known field");
+}
+
 TEST(Relocate, RejectsMismatchedSettingKinds) {
   constexpr std::string_view env = R"([[relocate]]
 id          = "home"

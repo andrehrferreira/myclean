@@ -27,3 +27,17 @@ paths    = ['%USERPROFILE%\.android\cache', '%USERPROFILE%\.android\build-cache'
 category = "dev-caches"
 label    = "Android tools caches"
 reclaim  = { kind = "clean-rule", ref = "user-cache" }
+
+[[area]]
+id       = "sdk"
+paths    = ['%LOCALAPPDATA%\Android']
+category = "dev-toolchains"
+label    = "Android SDK"
+reclaim  = { kind = "manual-review", note = "Android Studio > SDK Manager removes platforms and system images you do not use." }
+
+[[area]]
+id       = "user-home"
+paths    = ['%USERPROFILE%\.android']
+category = "dev-caches"
+label    = "Android tools settings and caches"
+reclaim  = { kind = "manual-review" }

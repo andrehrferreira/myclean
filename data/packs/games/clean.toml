@@ -1,0 +1,31 @@
+# Game launcher caches (analysis F-016; sources: pack.toml). Steam's default install folder is
+# under Program Files, which the deny-list protects: there these items are dropped with
+# "deny_list:program_files".
+
+[[rule]]
+id       = "steam-httpcache"
+category = "game-launchers"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%ProgramFiles(x86)%\Steam\appcache\httpcache\*']
+require  = { not_in_use = true }
+
+# Manifests of past downloads; Steam fetches them again when needed.
+[[rule]]
+id       = "steam-depotcache"
+category = "game-launchers"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%ProgramFiles(x86)%\Steam\depotcache\*']
+require  = { not_in_use = true }
+
+[[rule]]
+id       = "epic-webcache"
+category = "game-launchers"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*']
+require  = { not_in_use = true }

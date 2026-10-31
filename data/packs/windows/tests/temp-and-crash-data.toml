@@ -1,0 +1,90 @@
+# Temp folders, crash dumps and error reports of the reference machine: what is old goes, what
+# is recent and the folders themselves stay; %WINDIR% beyond Temp is never deleted by MyClean.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Temp\vs_setup_bootstrapper_202509\vs_setup.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Temp\chrome_drag1234_567\image.png'
+age_days = 0
+[[entry]]
+path = 'C:\Windows\Temp\MpCmdRun.log'
+[[entry]]
+path = 'C:\Windows\Temp\CbsPersist_20261031.log'
+age_days = 1
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\CrashDumps\Discord.exe.14532.dmp'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\CrashDumps\explorer.exe.9120.dmp'
+age_days = 3
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\Windows\WER\ReportArchive\AppCrash_Code.exe_4a1b2c\Report.wer'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\Windows\WER\ReportQueue\AppHang_steam.exe_9f8e7d\Report.wer'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\Windows\WER\Temp\WER1A2B.tmp.xml'
+[[entry]]
+path = 'C:\Windows\LiveKernelReports\WATCHDOG\WATCHDOG-20250901-1200.dmp'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\Windows\Explorer\iconcache_32.db'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\Windows\Explorer\thumbcache_256.db'
+
+[[expect]]
+kind     = "clean"
+case     = "temp-user"
+match    = ['C:\Users\owner\AppData\Local\Temp\vs_setup_bootstrapper_202509']
+no_match = ['C:\Users\owner\AppData\Local\Temp\chrome_drag1234_567', 'C:\Users\owner\AppData\Local\Temp']
+
+[[expect]]
+kind     = "clean"
+case     = "temp-system"
+match    = ['C:\Windows\Temp\MpCmdRun.log']
+no_match = ['C:\Windows\Temp\CbsPersist_20261031.log', 'C:\Windows\Temp']
+
+[[expect]]
+kind     = "clean"
+case     = "crash-dumps"
+match    = ['C:\Users\owner\AppData\Local\CrashDumps\Discord.exe.14532.dmp']
+no_match = ['C:\Users\owner\AppData\Local\CrashDumps\explorer.exe.9120.dmp']
+
+[[expect]]
+kind     = "clean"
+case     = "wer-user"
+match    = ['C:\Users\owner\AppData\Local\Microsoft\Windows\WER\ReportArchive\AppCrash_Code.exe_4a1b2c',
+            'C:\Users\owner\AppData\Local\Microsoft\Windows\WER\ReportQueue\AppHang_steam.exe_9f8e7d']
+no_match = ['C:\Users\owner\AppData\Local\Microsoft\Windows\WER\Temp',
+            'C:\Users\owner\AppData\Local\Microsoft\Windows\WER\ReportArchive']
+
+# The deny-list keeps %WINDIR%\LiveKernelReports (see clean.toml).
+[[expect]]
+kind     = "clean"
+case     = "live-kernel-reports"
+no_match = ['C:\Windows\LiveKernelReports\WATCHDOG']
+
+[[expect]]
+kind     = "clean"
+case     = "icon-cache"
+match    = ['C:\Users\owner\AppData\Local\Microsoft\Windows\Explorer\iconcache_32.db']
+no_match = ['C:\Users\owner\AppData\Local\Microsoft\Windows\Explorer\thumbcache_256.db']
+
+[[expect]]
+kind     = "attribution"
+case     = "user-temp"
+match    = ['C:\Users\owner\AppData\Local\Temp']
+
+[[expect]]
+kind     = "attribution"
+case     = "temp"
+match    = ['C:\Windows\Temp']
+no_match = ['C:\Windows\System32']
+
+[[expect]]
+kind     = "attribution"
+case     = "wer-user"
+match    = ['C:\Users\owner\AppData\Local\Microsoft\Windows\WER']
+
+[[expect]]
+kind     = "attribution"
+case     = "thumbnail-cache"
+match    = ['C:\Users\owner\AppData\Local\Microsoft\Windows\Explorer']
+no_match = ['C:\Users\owner\AppData\Local\Microsoft\Windows\INetCache']

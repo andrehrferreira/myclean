@@ -1,0 +1,15 @@
+id          = "java-gradle"
+version     = "1.0.0"
+title       = "Java, Gradle and Maven"
+description = "Build output of inactive Gradle and Maven projects and Gradle's unused cache and wrapper versions (cleaned), the Gradle home and Maven's local repository (move or review), and what the Temurin java.exe is."
+sources     = [
+  "https://docs.gradle.org/current/userguide/directory_layout.html (GRADLE_USER_HOME, default %USERPROFILE%\\.gradle, holds caches\\<version> and wrapper\\dists; the project's build and .gradle folders)",
+  "https://maven.apache.org/settings.html (localRepository, default ${user.home}\\.m2\\repository)",
+  "observed on reference machine: %USERPROFILE%\\.gradle\\caches with version folders such as 8.10 beside modules-2, wrapper\\dists\\gradle-<version>-bin; Gradle (build.gradle, build.gradle.kts) and Maven (pom.xml) projects with build, .gradle and target ignored by git (analysis F-012, F-013); java.exe of Eclipse Temurin, its image path and signer",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%USERPROFILE%\.gradle' }, { path_exists = '%GRADLE_USER_HOME%' },
+       { path_exists = '%USERPROFILE%\.m2' }, { path_exists = '%ProgramFiles%\Eclipse Adoptium' },
+       { path_exists = '%ProgramFiles%\Java' }]

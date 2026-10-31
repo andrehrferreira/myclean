@@ -1,0 +1,18 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "valve.steam"
+match    = ['steam.exe']
+no_match = ['notepad++.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "valve.steam-webhelper"
+match    = ['steamwebhelper.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "valve.steam-service"
+match    = ['steamservice.exe']

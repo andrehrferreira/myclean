@@ -23,7 +23,7 @@
 
 namespace myclean::svc {
 
-CleaningComponent::CleaningComponent(CleaningSources sources, const rules::IDataFiles& files,
+CleaningComponent::CleaningComponent(CleaningSources sources, const packs::IPackFiles& files,
                                      CleaningMode mode)
     : sources_(std::move(sources)), files_(&files), mode_(std::move(mode)) {}
 
@@ -42,6 +42,9 @@ Result<void> CleaningComponent::start(const Context& context) {
       .execute = execute};
   if (mode_.sandbox) {
     settings.executor.quarantine_root = *mode_.sandbox / "quarantine";
+  }
+  if (sources_.machine) {
+    machine_ = sources_.machine(context.owner_sid());
   }
   cleaning::ServiceSources sources{
       .store = &context.store(),
@@ -65,6 +68,8 @@ Result<void> CleaningComponent::start(const Context& context) {
       },
       .files = files_,
       .data_dir = mode_.sandbox ? *mode_.sandbox / "data" : context.data_dir(),
+      .machine = machine_.get(),
+      .owner_packs = mode_.sandbox ? decltype(sources_.owner_packs){} : sources_.owner_packs,
       .space = {.reader = sources_.reader.get(),
                 .zones = sources_.zones.get(),
                 .hasher = sources_.hasher.get(),
@@ -129,6 +134,10 @@ ipc::ComponentHealth CleaningComponent::health() const {
   }
   health.healthy = health.problems.empty();
   return health;
+}
+
+std::vector<ipc::PackStatus> CleaningComponent::pack_status() const {
+  return service_ ? service_->pack_status() : std::vector<ipc::PackStatus>{};
 }
 
 }  // namespace myclean::svc

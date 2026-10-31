@@ -1,0 +1,52 @@
+# Sources: pack.toml. Unreal Engine installations under Epic Games are areas of the unreal pack.
+
+[[area]]
+id       = "steam-client"
+paths    = ['%ProgramFiles(x86)%\Steam']
+category = "games"
+label    = "Steam client"
+reclaim  = { kind = "none" }
+
+[[area]]
+id       = "steam-library"
+paths    = ['%ProgramFiles(x86)%\Steam\steamapps', '?:\SteamLibrary', '?:\Program Files\Steam\steamapps']
+category = "games"
+label    = "Steam games"
+reclaim  = { kind = "uninstall", note = "Uninstall games you no longer play, or move them in Steam > Settings > Storage." }
+
+[[area]]
+id       = "steam-httpcache"
+paths    = ['%ProgramFiles(x86)%\Steam\appcache\httpcache']
+category = "app-caches"
+label    = "Steam web cache"
+reclaim  = { kind = "clean-rule", ref = "steam-httpcache" }
+
+[[area]]
+id       = "steam-depotcache"
+paths    = ['%ProgramFiles(x86)%\Steam\depotcache']
+category = "app-caches"
+label    = "Steam download cache"
+reclaim  = { kind = "clean-rule", ref = "steam-depotcache" }
+
+[[area]]
+id       = "epic"
+paths    = ['%ProgramFiles%\Epic Games', '?:\Epic Games']
+category = "games"
+label    = "Epic Games launcher and games"
+reclaim  = { kind = "uninstall", note = "Uninstall games in the Epic Games launcher (Library > ... > Uninstall)." }
+
+[[area]]
+id       = "epic-webcache"
+paths    = ['%LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*']
+category = "app-caches"
+label    = "Epic Games launcher web cache"
+reclaim  = { kind = "clean-rule", ref = "epic-webcache" }
+
+[[area]]
+id       = "other-launchers"
+paths    = ['?:\XboxGames', '?:\Riot Games', '%ProgramFiles%\EA Games', '%ProgramFiles(x86)%\Origin Games',
+            '%ProgramFiles(x86)%\Ubisoft\Ubisoft Game Launcher\games', '%ProgramFiles(x86)%\GOG Galaxy\Games',
+            '?:\GOG Games', '%ProgramFiles(x86)%\Battle.net']
+category = "games"
+label    = "Games from other launchers"
+reclaim  = { kind = "uninstall", note = "Uninstall games you no longer play in their launcher." }

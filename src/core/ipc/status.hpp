@@ -28,6 +28,16 @@ struct ComponentHealth {
   std::vector<std::string> unavailable;  // parts this machine does not offer ("gpu: ...")
 };
 
+// One knowledge pack folder (docs/packs.md) as the service last loaded it.
+struct PackStatus {
+  std::string id;
+  std::string version;                 // empty when the pack was not loaded
+  std::string origin;                  // builtin | owner
+  std::string status;                  // loaded | disabled | shadowed | rejected
+  bool applies = false;                // loaded, and its applies_when holds on this machine
+  std::optional<std::string> message;  // why it was rejected
+};
+
 // Health of the running service, for `myclean status --json` and the tray.
 struct StatusReply {
   bool healthy = false;                // false when the store or any component reports an error
@@ -39,13 +49,16 @@ struct StatusReply {
   StoreStatus store;
   std::vector<std::string> components;            // running components, in start order
   std::vector<ComponentHealth> component_health;  // the same components, in the same order
+  std::vector<PackStatus> packs;                  // empty until the owner's session is known
 };
 
 // {"health": "ok"|"degraded", "version": string|null, "build", "mode", "pid", "uptime_s",
 //  "store": {"path", "error": string|null}, "components": [names],
 //  "component_health": [{"name", "health": "ok"|"degraded", "problems": [text],
-//                        "unavailable": [text]}]}
-// parse_status() accepts a reply without "component_health" (a service older than the member).
+//                        "unavailable": [text]}],
+//  "packs": [{"id", "version", "origin", "status", "applies", "message": string|null}]}
+// parse_status() accepts a reply without "component_health" or "packs" (a service older than
+// the member).
 [[nodiscard]] nlohmann::json to_json(const StatusReply& status);
 // Fails with invalid_data when a member is missing or has the wrong type.
 [[nodiscard]] Result<StatusReply> parse_status(const nlohmann::json& value);

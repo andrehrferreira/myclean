@@ -1,14 +1,18 @@
 # Moving a WSL distribution (sources: learn.microsoft.com/windows/wsl, see pack.toml). Each
-# subkey of Lxss is one distribution: BasePath is the folder of its ext4.vhdx, DistributionName
-# its name. `wsl --manage <name> --move <folder>` moves the disk and updates BasePath; moving it
-# back the same way undoes it. The distribution must be stopped (`wsl --terminate <name>`).
-# Docker Desktop's own distributions move in Docker Desktop's settings, never with this.
+# subkey of Lxss is one distribution: BasePath is its folder, DistributionName its name, and bit
+# 0x8 of Flags is set for a WSL 2 distribution (its ext4.vhdx) and clear for a WSL 1 one (its
+# rootfs folder; observed on reference machine: Ubuntu-24.04 with Flags 7, Version 2 and a
+# rootfs, docker-desktop with Flags 15). Version is the registration format, not the WSL
+# version. The distribution must be stopped (`wsl --terminate <name>`). Docker Desktop's own
+# distributions move in Docker Desktop's settings, never with this.
 
+# WSL 2: `wsl --manage <name> --move <folder>` moves the disk and updates BasePath; moving it
+# back the same way undoes it.
 [[relocate]]
 id          = "distro"
 label       = "WSL distribution disk (ext4.vhdx)"
 locations   = ['%LOCALAPPDATA%\Packages\*\LocalState\ext4.vhdx', '%LOCALAPPDATA%\wsl\*\ext4.vhdx']
-current     = { registry = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss\*\BasePath', name = "DistributionName" }
+current     = { registry = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss\*\BasePath', name = "DistributionName", where = { value = "Flags", mask = 8, equals = 8 } }
 target_kind = "command"
 command     = "wsl --manage {name} --move {target}"
 content     = "move"
@@ -16,3 +20,20 @@ needs       = ["wsl.exe", "wslhost.exe"]
 skip_names  = ["docker-desktop", "docker-desktop-data"]
 undo        = "command"
 note        = "Stop the distribution first: wsl --terminate <name>. The disk never shrinks by itself; `wsl --manage <name> --set-sparse true` lets it give freed space back."
+
+# WSL 1: --manage --move does not move a rootfs folder. The distribution is exported to
+# <target>\<name>.tar, imported under a temporary name into the target, checked (registered with
+# BasePath = the target, and `wsl -d <temporary> -e true` runs), and only then the original is
+# unregistered (which deletes its files) and the copy gets the original name and default user.
+# The archive stays in the target as a backup. Moving it back the same way undoes it.
+[[relocate]]
+id          = "distro-files"
+label       = "WSL 1 distribution file system (rootfs)"
+locations   = ['%LOCALAPPDATA%\Packages\*\LocalState\rootfs', '%LOCALAPPDATA%\Packages\*\rootfs']
+current     = { registry = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss\*\BasePath', name = "DistributionName", where = { value = "Flags", mask = 8, equals = 0 } }
+target_kind = "wsl-import"
+content     = "move"
+needs       = ["wsl.exe", "wslhost.exe"]
+skip_names  = ["docker-desktop", "docker-desktop-data"]
+undo        = "command"
+note        = "Stop the distribution first: wsl --terminate <name>. The target needs room for the archive and the files; the archive <target>\\<name>.tar is kept as a backup and may be deleted afterwards. A distribution installed from the Store keeps its name, but its Store entry no longer owns it."

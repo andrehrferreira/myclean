@@ -1,0 +1,33 @@
+# An inactive Flutter app: its ignored .dart_tool and build go; its sources and platform folders
+# stay.
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'F:\code\habit_tracker\.git'
+folder = true
+[[entry]]
+path = 'F:\code\habit_tracker\pubspec.yaml'
+[[entry]]
+path = 'F:\code\habit_tracker\.dart_tool'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\habit_tracker\.dart_tool\package_config.json'
+[[entry]]
+path = 'F:\code\habit_tracker\build'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\habit_tracker\build\windows\x64\runner\Release\habit_tracker.exe'
+[[entry]]
+path = 'F:\code\habit_tracker\lib\main.dart'
+[[entry]]
+path = 'F:\code\habit_tracker\windows\runner\main.cpp'
+
+[[expect]]
+kind     = "clean"
+case     = "artifacts"
+match    = ['F:\code\habit_tracker\.dart_tool', 'F:\code\habit_tracker\build']
+no_match = ['F:\code\habit_tracker\lib', 'F:\code\habit_tracker\windows']

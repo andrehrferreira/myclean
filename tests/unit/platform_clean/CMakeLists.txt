@@ -7,11 +7,13 @@ myclean_add_test(platform_clean
     ../platform_fs/sandbox.hpp
     git_test.cpp
     probes_test.cpp
+    shipped_rules.hpp
     smoke_test.cpp
   DEPENDS
     myclean::platform_clean
     myclean::platform_fs
-    myclean::platform_git)
+    myclean::platform_git
+    myclean::packs)
 
 target_include_directories(myclean_platform_clean_tests
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../platform_fs")

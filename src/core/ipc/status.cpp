@@ -47,6 +47,15 @@ Json to_json(const StatusReply& status) {
                               {"problems", component.problems},
                               {"unavailable", component.unavailable}});
   }
+  Json packs = Json::array();
+  for (const PackStatus& pack : status.packs) {
+    packs.push_back(Json{{"id", pack.id},
+                         {"version", pack.version},
+                         {"origin", pack.origin},
+                         {"status", pack.status},
+                         {"applies", pack.applies},
+                         {"message", optional_text(pack.message)}});
+  }
   return Json{
       {"health", health_name(status.healthy)},
       {"version", optional_text(status.version)},
@@ -56,7 +65,8 @@ Json to_json(const StatusReply& status) {
       {"uptime_s", status.uptime_seconds},
       {"store", Json{{"path", status.store.path}, {"error", optional_text(status.store.error)}}},
       {"components", status.components},
-      {"component_health", std::move(components)}};
+      {"component_health", std::move(components)},
+      {"packs", std::move(packs)}};
 }
 
 Result<StatusReply> parse_status(const Json& value) {
@@ -77,6 +87,15 @@ Result<StatusReply> parse_status(const Json& value) {
           .problems = component.at("problems").get<std::vector<std::string>>(),
           .unavailable = component.at("unavailable").get<std::vector<std::string>>()});
     }
+    std::vector<PackStatus> packs;
+    for (const Json& pack : value.value("packs", Json::array())) {
+      packs.push_back(PackStatus{.id = pack.at("id").get<std::string>(),
+                                 .version = pack.at("version").get<std::string>(),
+                                 .origin = pack.at("origin").get<std::string>(),
+                                 .status = pack.at("status").get<std::string>(),
+                                 .applies = pack.at("applies").get<bool>(),
+                                 .message = parse_optional_text(pack.at("message"))});
+    }
     const Json& store = value.at("store");
     return StatusReply{.healthy = *healthy,
                        .version = parse_optional_text(value.at("version")),
@@ -87,7 +106,8 @@ Result<StatusReply> parse_status(const Json& value) {
                        .store = StoreStatus{.path = store.at("path").get<std::string>(),
                                             .error = parse_optional_text(store.at("error"))},
                        .components = value.at("components").get<std::vector<std::string>>(),
-                       .component_health = std::move(components)};
+                       .component_health = std::move(components),
+                       .packs = std::move(packs)};
   } catch (const Json::exception& error) {
     return fail(Errc::invalid_data, std::string("status: ") + error.what());
   }

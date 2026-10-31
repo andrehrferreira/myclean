@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "id": "eclipse.temurin-java",
+      "image": "java.exe",
+      "signer": "Eclipse Foundation",
+      "description": "Java runtime (Eclipse Temurin OpenJDK). Runs Java programs.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

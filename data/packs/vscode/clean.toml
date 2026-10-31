@@ -30,3 +30,16 @@ scope    = "user"
 strategy = "delete"
 targets  = ['%APPDATA%\Code\User\workspaceStorage\*']
 require  = { min_age_days = 90, not_in_use = true }
+
+# Chromium's HTTP, code and GPU caches and crash reports of the VS Code (Electron) window. Local
+# Storage, IndexedDB and cookies are never targets. A running VS Code keeps its cache files
+# open, so not_in_use skips it.
+[[rule]]
+id       = "electron-cache"
+category = "electron"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%APPDATA%\Code\Cache', '%APPDATA%\Code\Code Cache', '%APPDATA%\Code\GPUCache',
+            '%APPDATA%\Code\Crashpad']
+require  = { not_in_use = true }

@@ -1,0 +1,14 @@
+id          = "go"
+version     = "1.0.0"
+title       = "Go"
+description = "Go's build cache and module cache: cleaned with `go clean`, or moved to another drive."
+sources     = [
+  "https://pkg.go.dev/cmd/go#hdr-Build_and_test_caching (GOCACHE, default %LocalAppData%\\go-build; `go clean -cache`)",
+  "https://go.dev/ref/mod#module-cache (the module cache in GOPATH\\pkg\\mod, default %USERPROFILE%\\go\\pkg\\mod; `go clean -modcache`)",
+  "observed on reference machine: %LOCALAPPDATA%\\go-build and %USERPROFILE%\\go\\pkg\\mod (analysis F-013)",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%ProgramFiles%\Go' }, { path_exists = '%LOCALAPPDATA%\go-build' },
+       { path_exists = '%USERPROFILE%\go\pkg\mod' }]

@@ -1,0 +1,8 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "autodesk-installers"
+paths    = ['?:\Autodesk']
+category = "app-caches"
+label    = "Installer files left behind by Autodesk setup programs"
+reclaim  = { kind = "manual-review", note = "Not needed once the program is installed; no cleaning rule covers them yet." }

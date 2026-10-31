@@ -1,0 +1,14 @@
+id          = "unreal"
+version     = "1.0.0"
+title       = "Unreal Engine"
+description = "Build output and derived data of inactive Unreal projects (cleaned, asking first), the shared derived data cache (movable), engine installations, per-user data and the Marketplace (Fab) download cache (for review or uninstall)."
+sources     = [
+  "https://dev.epicgames.com/documentation/en-us/unreal-engine/derived-data-cache-in-unreal-engine (the local shared DDC in %LOCALAPPDATA%\\UnrealEngine\\Common\\DerivedDataCache; projects rebuild derived data)",
+  "observed on reference machine: engines in %ProgramFiles%\\Epic Games\\UE_<version>; %LOCALAPPDATA%\\UnrealEngine; the launcher's VaultCache in %ProgramData%\\Epic\\EpicGamesLauncher; projects (*.uproject) with Intermediate, DerivedDataCache, Binaries and Saved (Logs, Crashes, Config) (analysis F-012, F-016)",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%LOCALAPPDATA%\UnrealEngine' }, { path_exists = '%ProgramFiles%\Epic Games\UE_*' },
+       { path_exists = '%SystemDrive%\Epic Games\UE_*' }, { path_exists = '%ProgramData%\Epic\EpicGamesLauncher\VaultCache' },
+       { path_exists = '%USERPROFILE%\Documents\Unreal Projects' }]

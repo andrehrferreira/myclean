@@ -1,0 +1,103 @@
+{
+  "entries": [
+    {
+      "id": "creative-cloud",
+      "image": "Creative Cloud.exe",
+      "signer": "Adobe Inc.",
+      "description": "Adobe Creative Cloud app. Installs, updates and licenses Adobe apps.",
+      "category": "creative",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "creative-cloud-helper",
+      "image": "Creative Cloud Helper.exe",
+      "signer": "Adobe Inc.",
+      "description": "Adobe Creative Cloud helper, a background part of Creative Cloud.",
+      "category": "creative",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "creative-cloud-ui-helper",
+      "image": "Creative Cloud UI Helper.exe",
+      "signer": "Adobe Inc.",
+      "description": "Adobe Creative Cloud UI helper, which shows parts of the Creative Cloud app.",
+      "category": "creative",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "desktop-service",
+      "image": "Adobe Desktop Service.exe",
+      "signer": "Adobe Inc.",
+      "description": "Creative Cloud Core Service. Background service of Adobe Creative Cloud.",
+      "category": "creative",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "ipc-broker",
+      "image": "AdobeIPCBroker.exe",
+      "signer": "Adobe Inc.",
+      "description": "Creative Cloud Interprocess Service. Lets the parts of Creative Cloud talk to each other.",
+      "category": "creative",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "notification-client",
+      "image": "AdobeNotificationClient.exe",
+      "signer": "Adobe Inc.",
+      "description": "Adobe Notification Client. Shows notifications of Adobe apps in Windows.",
+      "category": "creative",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "ccx-process",
+      "image": "CCXProcess.exe",
+      "signer": "Adobe Inc.",
+      "description": "Creative Cloud Content Manager. Background part of the Creative Cloud app.",
+      "category": "creative",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "core-sync",
+      "image": "CoreSync.exe",
+      "signer": "Adobe Inc.",
+      "description": "Adobe Content Synchronizer. Syncs Creative Cloud files and libraries.",
+      "category": "cloud-sync",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "update-service",
+      "image": "AdobeUpdateService.exe",
+      "signer": "Adobe Inc.",
+      "description": "Adobe Update Service. Installs updates of Adobe Creative Cloud apps.",
+      "category": "updater",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "acrobat-update-service",
+      "image": "armsvc.exe",
+      "signer": "Adobe Inc.",
+      "description": "Adobe Acrobat Update Service. Keeps Acrobat and Acrobat Reader up to date.",
+      "category": "updater",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "acrobat-collab-sync",
+      "image": "AdobeCollabSync.exe",
+      "signer": "Adobe Inc.",
+      "description": "Acrobat Collaboration Synchronizer. Syncs shared and reviewed PDF documents of Adobe Acrobat.",
+      "category": "creative",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

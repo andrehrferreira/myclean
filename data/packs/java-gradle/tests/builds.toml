@@ -1,0 +1,111 @@
+# Gradle's home with an old and a current version, and three inactive projects (Groovy and
+# Kotlin Gradle scripts, Maven): old versions and ignored build output go; shared caches,
+# current versions and sources stay.
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'C:\Users\owner\.gradle\caches\8.10\kotlin-dsl\accessors\a1b2c3\classes.jar'
+age_days = 200
+[[entry]]
+path = 'C:\Users\owner\.gradle\caches\8.14\kotlin-dsl\accessors\d4e5f6\classes.jar'
+age_days = 5
+[[entry]]
+path = 'C:\Users\owner\.gradle\caches\modules-2\files-2.1\com.google.guava\guava\33.3.1-jre\guava.jar'
+age_days = 200
+[[entry]]
+path = 'C:\Users\owner\.gradle\caches\transforms-4\0a1b2c\transformed\out.jar'
+age_days = 200
+[[entry]]
+path = 'C:\Users\owner\.gradle\wrapper\dists\gradle-8.10-bin\5t9huq95ubn472n8rpzujfbqh\gradle-8.10\bin\gradle.bat'
+age_days = 200
+[[entry]]
+path = 'C:\Users\owner\.gradle\wrapper\dists\gradle-8.14-bin\38aieal9i53h9rfe7vjup95b9\gradle-8.14\bin\gradle.bat'
+age_days = 5
+[[entry]]
+path = 'C:\Users\owner\.m2\repository\org\slf4j\slf4j-api\2.0.16\slf4j-api-2.0.16.jar'
+
+[[entry]]
+path = 'F:\code\android-sample\.git'
+folder = true
+[[entry]]
+path = 'F:\code\android-sample\build.gradle'
+[[entry]]
+path = 'F:\code\android-sample\build'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\android-sample\build\outputs\apk\debug\app-debug.apk'
+[[entry]]
+path = 'F:\code\android-sample\.gradle'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\android-sample\.gradle\8.10\checksums\checksums.lock'
+[[entry]]
+path = 'F:\code\android-sample\src\main\java\Main.java'
+
+[[entry]]
+path = 'F:\code\ktor-api\.git'
+folder = true
+[[entry]]
+path = 'F:\code\ktor-api\build.gradle.kts'
+[[entry]]
+path = 'F:\code\ktor-api\build'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\ktor-api\build\libs\ktor-api.jar'
+[[entry]]
+path = 'F:\code\ktor-api\src\main\kotlin\Application.kt'
+
+[[entry]]
+path = 'F:\code\billing\.git'
+folder = true
+[[entry]]
+path = 'F:\code\billing\pom.xml'
+[[entry]]
+path = 'F:\code\billing\target'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\billing\target\billing-1.0.jar'
+[[entry]]
+path = 'F:\code\billing\src\main\java\Billing.java'
+
+[[expect]]
+kind     = "clean"
+case     = "gradle-versions"
+match    = ['C:\Users\owner\.gradle\caches\8.10', 'C:\Users\owner\.gradle\wrapper\dists\gradle-8.10-bin']
+no_match = ['C:\Users\owner\.gradle\caches\8.14', 'C:\Users\owner\.gradle\caches\modules-2',
+            'C:\Users\owner\.gradle\caches\transforms-4', 'C:\Users\owner\.gradle\wrapper\dists\gradle-8.14-bin',
+            'C:\Users\owner\.m2\repository']
+
+[[expect]]
+kind     = "clean"
+case     = "gradle-artifacts"
+match    = ['F:\code\android-sample\build', 'F:\code\android-sample\.gradle']
+no_match = ['F:\code\android-sample\src']
+
+[[expect]]
+kind     = "clean"
+case     = "gradle-kts-artifacts"
+match    = ['F:\code\ktor-api\build']
+no_match = ['F:\code\ktor-api\src']
+
+[[expect]]
+kind     = "clean"
+case     = "maven-artifacts"
+match    = ['F:\code\billing\target']
+no_match = ['F:\code\billing\src', 'F:\code\billing\pom.xml']
+
+[[expect]]
+kind     = "attribution"
+case     = "gradle"
+match    = ['C:\Users\owner\.gradle']
+
+[[expect]]
+kind     = "attribution"
+case     = "maven"
+match    = ['C:\Users\owner\.m2']

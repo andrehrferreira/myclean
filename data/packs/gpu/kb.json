@@ -1,0 +1,82 @@
+{
+  "entries": [
+    {
+      "id": "amd.3d-vcache-optimizer",
+      "image": "amd3dvcacheSvc.exe",
+      "signer": "Microsoft Windows Hardware Compatibility Publisher",
+      "path": "\\\\DriverStore\\\\FileRepository\\\\",
+      "description": "AMD 3D V-Cache Performance Optimizer service, part of the AMD chipset driver for Ryzen processors with 3D V-Cache.",
+      "category": "driver",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "amd.3d-vcache-optimizer-user",
+      "image": "amd3dvcacheUser.exe",
+      "signer": "Microsoft Windows Hardware Compatibility Publisher",
+      "path": "\\\\DriverStore\\\\FileRepository\\\\",
+      "description": "AMD 3D V-Cache Performance Optimizer, the part that runs in your sign-in session.",
+      "category": "driver",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "amd.crash-defender",
+      "image": "amdfendrsr.exe",
+      "signer": "Microsoft Windows Hardware Compatibility Publisher",
+      "path": "\\\\DriverStore\\\\FileRepository\\\\",
+      "description": "AMD Crash Defender Service, installed with the AMD graphics driver.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "amd.external-events-service",
+      "image": "atiesrxx.exe",
+      "signer": "Microsoft Windows Hardware Compatibility Publisher",
+      "path": "\\\\DriverStore\\\\FileRepository\\\\",
+      "description": "AMD External Events Utility, a service of the AMD graphics driver.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "amd.external-events-client",
+      "image": "atieclxx.exe",
+      "signer": "Microsoft Windows Hardware Compatibility Publisher",
+      "path": "\\\\DriverStore\\\\FileRepository\\\\",
+      "description": "AMD External Events client, started by the AMD External Events Utility of the AMD graphics driver.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "amd.provisioning-packages",
+      "image": "AmdPpkgSvc.exe",
+      "signer": "Advanced Micro Devices",
+      "path": "\\\\DriverStore\\\\FileRepository\\\\",
+      "description": "AMD Provisioning Packages Service, installed with the AMD chipset driver.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "nvidia.display-container",
+      "image": "NVDisplay.Container.exe",
+      "signer": "NVIDIA Corporation",
+      "description": "NVIDIA Display Container. Part of the NVIDIA graphics driver; hosts display-related parts such as the NVIDIA Control Panel.",
+      "category": "driver",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "nvidia.container",
+      "image": "nvcontainer.exe",
+      "signer": "NVIDIA Corporation",
+      "description": "NVIDIA Container. Hosts the background parts of NVIDIA software such as the NVIDIA App.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    }
+  ]
+}

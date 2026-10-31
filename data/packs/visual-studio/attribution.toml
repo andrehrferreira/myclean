@@ -1,0 +1,29 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "installations"
+paths    = ['%ProgramFiles%\Microsoft Visual Studio', '%ProgramFiles(x86)%\Microsoft Visual Studio']
+category = "dev-toolchains"
+label    = "Visual Studio installations"
+reclaim  = { kind = "uninstall", note = "Visual Studio Installer > Modify removes workloads you do not use." }
+
+[[area]]
+id       = "packages"
+paths    = ['%ProgramData%\Microsoft\VisualStudio\Packages']
+category = "dev-caches"
+label    = "Visual Studio installer download cache"
+reclaim  = { kind = "manual-review", note = "Visual Studio Installer > More > Settings: turn off 'Keep download cache after the installation', which removes it." }
+
+[[area]]
+id       = "user"
+paths    = ['%LOCALAPPDATA%\Microsoft\VisualStudio']
+category = "dev-caches"
+label    = "Visual Studio per-user settings and caches"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "mef-cache"
+paths    = ['%LOCALAPPDATA%\Microsoft\VisualStudio\*\ComponentModelCache']
+category = "dev-caches"
+label    = "Visual Studio component cache"
+reclaim  = { kind = "clean-rule", ref = "component-model-cache" }

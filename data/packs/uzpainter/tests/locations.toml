@@ -1,0 +1,12 @@
+# UzPainter's folders on the reference machine.
+
+[[expect]]
+kind     = "attribution"
+case     = "app-data"
+match    = ['C:\Users\owner\AppData\Local\UzPainter']
+
+[[expect]]
+kind     = "attribution"
+case     = "cache"
+match    = ['C:\Users\owner\AppData\Local\UzPainter\cache']
+no_match = ['C:\Users\owner\AppData\Local\UzPainter']

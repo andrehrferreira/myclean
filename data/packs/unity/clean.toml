@@ -1,0 +1,18 @@
+# Developer artifacts (cleaning spec, "Developer Artifact Qualification"; analysis F-012;
+# sources: pack.toml). The scanner walks the roots of data/workspaces.toml; a folder holding the
+# marker is a project root, and the targets are patterns relative to it. An artifact is proposed
+# only when the project is in a git work tree, git ignores the artifact and tracks nothing inside
+# it, no process uses it or the project, and the project is inactive for require.inactive_days
+# (newest of the last commit and every source file).
+
+# Unity: a project has Assets/ and ProjectSettings/ProjectVersion.txt. Reimporting Library takes
+# long, so it is "ask".
+[[rule]]
+id       = "project-artifacts"
+category = "dev-artifacts"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+project  = { marker = 'ProjectSettings\ProjectVersion.txt' }
+targets  = ["Library", "Temp", "Obj", "Logs"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 14 }

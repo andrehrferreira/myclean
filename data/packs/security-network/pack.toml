@@ -1,0 +1,8 @@
+id          = "security-network"
+version     = "1.0.0"
+title       = "Security, VPN and remote access"
+description = "What the processes of antivirus, VPN, remote desktop and network routing software (Kaspersky, OpenVPN, WireGuard, AnyDesk, ExitLag) are."
+sources     = [
+  "observed on reference machine: the Kaspersky, OpenVPN Connect, WireGuard, AnyDesk and ExitLag processes, their image paths and signers",
+]
+min_myclean = "0.1.0"

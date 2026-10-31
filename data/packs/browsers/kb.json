@@ -1,0 +1,22 @@
+{
+  "entries": [
+    {
+      "id": "microsoft.edge-webview2",
+      "image": "msedgewebview2.exe",
+      "signer": "Microsoft Corporation",
+      "description": "Microsoft Edge WebView2. Shows web content inside other apps; many apps use it, so several copies often run.",
+      "category": "runtime",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "microsoft.edge",
+      "image": "msedge.exe",
+      "signer": "Microsoft Corporation",
+      "description": "Microsoft Edge web browser.",
+      "category": "browser",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    }
+  ]
+}

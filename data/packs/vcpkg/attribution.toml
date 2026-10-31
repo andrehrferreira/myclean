@@ -22,3 +22,11 @@ paths    = ['?:\vcpkg\installed', '%USERPROFILE%\vcpkg\installed', '%VCPKG_ROOT%
 category = "dev-toolchains"
 label    = "Libraries installed with vcpkg (classic mode)"
 reclaim  = { kind = "uninstall", note = "`vcpkg remove <port>` removes a library no project uses." }
+
+# The vcpkg root as a whole: the tool, its ports and scripts beside the folders above.
+[[area]]
+id       = "root"
+paths    = ['?:\vcpkg', '%USERPROFILE%\vcpkg']
+category = "dev-toolchains"
+label    = "vcpkg package manager"
+reclaim  = { kind = "manual-review" }

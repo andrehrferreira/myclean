@@ -51,3 +51,15 @@ no_match = ['C:\Users\owner\.ollama\history']
 kind     = "relocate"
 case     = "huggingface-home"
 match    = ['C:\Users\owner\.cache\huggingface']
+
+[[expect]]
+kind     = "attribution"
+case     = "assistant-homes"
+match    = ['C:\Users\owner\.codex', 'C:\Users\owner\.claude']
+no_match = ['C:\Users\owner\.codex\sessions']
+
+[[expect]]
+kind     = "attribution"
+case     = "model-tool-homes"
+match    = ['C:\Users\owner\.ollama', 'C:\Users\owner\.lmstudio', 'C:\Users\owner\.elyriu-local-ai']
+no_match = ['C:\Users\owner\.cache\huggingface', 'C:\Users\owner\.ollama\models']

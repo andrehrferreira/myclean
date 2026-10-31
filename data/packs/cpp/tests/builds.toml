@@ -1,0 +1,70 @@
+# An inactive Visual C++ project and an inactive CMake project: their ignored build folders go;
+# sources, a vendored folder git tracks and a project outside git stay.
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'F:\src\RayTracer\.git'
+folder = true
+[[entry]]
+path = 'F:\src\RayTracer\RayTracer.vcxproj'
+[[entry]]
+path = 'F:\src\RayTracer\x64'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\src\RayTracer\x64\Debug\RayTracer.exe'
+[[entry]]
+path = 'F:\src\RayTracer\Debug'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\src\RayTracer\Debug\RayTracer.pdb'
+[[entry]]
+path = 'F:\src\RayTracer\main.cpp'
+
+[[entry]]
+path = 'F:\src\physics\.git'
+folder = true
+[[entry]]
+path = 'F:\src\physics\CMakeLists.txt'
+[[entry]]
+path = 'F:\src\physics\build-release'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\src\physics\build-release\physics.lib'
+[[entry]]
+path = 'F:\src\physics\out'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\src\physics\out\build\x64-Debug\CMakeCache.txt'
+[[entry]]
+path = 'F:\src\physics\cmake-build-debug'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\src\physics\cmake-build-debug\physics.exe'
+[[entry]]
+path = 'F:\src\physics\buildtools\toolchain.cmake'
+[[entry]]
+path = 'F:\src\physics\src\solver.cpp'
+
+[[entry]]
+path = 'F:\archive\physics-copy\CMakeLists.txt'
+[[entry]]
+path = 'F:\archive\physics-copy\build\physics.lib'
+
+[[expect]]
+kind     = "clean"
+case     = "vcxproj-artifacts"
+match    = ['F:\src\RayTracer\x64', 'F:\src\RayTracer\Debug']
+no_match = ['F:\src\RayTracer\main.cpp']
+
+[[expect]]
+kind     = "clean"
+case     = "cmake-artifacts"
+match    = ['F:\src\physics\build-release', 'F:\src\physics\out', 'F:\src\physics\cmake-build-debug']
+no_match = ['F:\src\physics\buildtools', 'F:\src\physics\src', 'F:\archive\physics-copy\build']

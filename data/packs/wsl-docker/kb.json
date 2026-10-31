@@ -1,0 +1,78 @@
+{
+  "entries": [
+    {
+      "id": "windows.wsl-launcher",
+      "image": "wsl.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Windows Subsystem for Linux command. Starts and manages Linux distributions on Windows.",
+      "category": "virtualization",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "microsoft.wsl.service",
+      "image": "wslservice.exe",
+      "signer": "Microsoft Corporation",
+      "description": "Windows Subsystem for Linux service. Runs the installed Linux distributions.",
+      "category": "virtualization",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "microsoft.wsl.host",
+      "image": "wslhost.exe",
+      "signer": "Microsoft Corporation",
+      "description": "Windows Subsystem for Linux host. Keeps a running Linux distribution connected to Windows.",
+      "category": "virtualization",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "microsoft.wsl.remote-desktop",
+      "image": "msrdc.exe",
+      "signer": "Microsoft Corporation",
+      "path": "\\\\WSL\\\\",
+      "description": "Remote Desktop client used by Windows Subsystem for Linux to show the windows of Linux apps.",
+      "category": "virtualization",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "docker.desktop",
+      "image": "Docker Desktop.exe",
+      "signer": "Docker Inc",
+      "description": "Docker Desktop. Runs software containers in a small virtual machine.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "docker.backend",
+      "image": "com.docker.backend.exe",
+      "signer": "Docker Inc",
+      "description": "Docker Desktop backend, the background part of Docker Desktop.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "docker.build",
+      "image": "com.docker.build.exe",
+      "signer": "Docker Inc",
+      "description": "Docker Desktop build component.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "docker.agent",
+      "image": "docker-agent.exe",
+      "signer": "Docker Inc",
+      "description": "Docker CLI plug-in installed with Docker Desktop.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

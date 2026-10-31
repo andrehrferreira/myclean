@@ -17,13 +17,14 @@
 #include "core/clean/engine.hpp"
 #include "core/clean/workspaces.hpp"
 #include "core/model/result.hpp"
-#include "core/rules/catalog.hpp"
 #include "core/rules/data_files.hpp"
+#include "core/rules/schema.hpp"
 #include "core/safety/deny_list.hpp"
 #include "core/safety/paths.hpp"
 #include "platform/clean/win32_probes.hpp"
 #include "platform/fs/protected_locations.hpp"
 #include "platform/git/git_cli.hpp"
+#include "shipped_rules.hpp"
 
 // A read-only report of what the shipped catalog would select on this machine. Disabled: it
 // reads the owner's real folders and repositories. Nothing is deleted or written. Run with
@@ -88,8 +89,8 @@ long long seconds_since(std::chrono::steady_clock::time_point started) {
 }
 
 TEST(Smoke, DISABLED_ShippedCatalogOnThisMachine) {
-  rules::RuleCatalog catalog = rules::make_rule_catalog(MYCLEAN_DATA_DIR);
-  ASSERT_TRUE(catalog.reload(rules::DiskDataFiles{}).empty());
+  const std::vector<rules::CleaningRule> shipped = testing::shipped_rules();
+  ASSERT_FALSE(shipped.empty());
   const fs::path workspace_file = fs::path{MYCLEAN_DATA_DIR} / "workspaces.toml";
   Result<clean::Workspaces> workspaces =
       rules::DiskDataFiles{}.read(workspace_file).and_then([&](const std::string& text) {
@@ -109,10 +110,10 @@ TEST(Smoke, DISABLED_ShippedCatalogOnThisMachine) {
   const WallTime now = std::chrono::system_clock::now();
 
   auto started = std::chrono::steady_clock::now();
-  report("rules", engine.evaluate(catalog.entries(), now));
+  report("rules", engine.evaluate(shipped, now));
   std::cout << std::format("  ({} s)\n", seconds_since(started));
   started = std::chrono::steady_clock::now();
-  report("developer artifacts", engine.scan_artifacts(catalog.entries(), *workspaces, git, now));
+  report("developer artifacts", engine.scan_artifacts(shipped, *workspaces, git, now));
   std::cout << std::format("  ({} s, max_depth {})\n", seconds_since(started),
                            workspaces->max_depth);
 }

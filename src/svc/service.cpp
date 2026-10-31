@@ -1,5 +1,6 @@
 #include "svc/service.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -156,11 +157,13 @@ ipc::StatusReply Service::status() const {
   std::vector<ipc::ComponentHealth> health;
   components.reserve(running_.size());
   health.reserve(running_.size());
+  std::vector<ipc::PackStatus> packs;
   bool healthy = true;
   for (const std::unique_ptr<IComponent>& component : running_) {
     components.emplace_back(component->name());
     health.push_back(component->health());
     healthy = healthy && health.back().healthy;
+    std::ranges::move(component->pack_status(), std::back_inserter(packs));
   }
   const std::scoped_lock lock(mutex_);
   return ipc::StatusReply{
@@ -173,7 +176,8 @@ ipc::StatusReply Service::status() const {
           std::chrono::duration_cast<std::chrono::seconds>(clock_->monotonic() - started_).count(),
       .store = ipc::StoreStatus{.path = utf8(options_.database), .error = store_error_},
       .components = std::move(components),
-      .component_health = std::move(health)};
+      .component_health = std::move(health),
+      .packs = std::move(packs)};
 }
 
 }  // namespace myclean::svc

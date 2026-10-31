@@ -27,3 +27,17 @@ paths    = ['%APPDATA%\Code\WebStorage']
 category = "dev-caches"
 label    = "VS Code extension web storage"
 reclaim  = { kind = "manual-review", note = "Data extensions keep for themselves; removing an extension's data resets it." }
+
+[[area]]
+id       = "electron-cache"
+paths    = ['%APPDATA%\Code\Cache', '%APPDATA%\Code\Code Cache', '%APPDATA%\Code\GPUCache', '%APPDATA%\Code\Crashpad']
+category = "app-caches"
+label    = "VS Code cache"
+reclaim  = { kind = "clean-rule", ref = "electron-cache" }
+
+[[area]]
+id       = "editor-extensions"
+paths    = ['%USERPROFILE%\.vscode', '%USERPROFILE%\.cursor']
+category = "dev-toolchains"
+label    = "Code editor extensions"
+reclaim  = { kind = "manual-review" }

@@ -1,0 +1,40 @@
+{
+  "entries": [
+    {
+      "id": "google.android-emulator",
+      "image": "emulator.exe",
+      "signer": "Google LLC",
+      "description": "Android Emulator from the Android SDK.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "google.android-emulator-qemu",
+      "image": "qemu-system-x86_64.exe",
+      "signer": "Google LLC",
+      "description": "The virtual machine that runs the Android Emulator.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "google.android-emulator-netsim",
+      "image": "netsimd.exe",
+      "signer": "Google LLC",
+      "description": "Network simulator of the Android Emulator (emulated Wi-Fi and Bluetooth).",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "google.crashpad-handler",
+      "image": "crashpad_handler.exe",
+      "signer": "Google LLC",
+      "description": "Crash reporter of a Google program, such as the Android Emulator.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

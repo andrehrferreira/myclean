@@ -1,0 +1,43 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "armoury-crate.service"
+match    = ['ArmouryCrate.Service.exe']
+no_match = ['notepad++.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "aura.motherboard"
+match    = ['Aac3572MbHal_x86.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "certificate-service"
+match    = ['AsusCertService.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "fan-control-service"
+match    = ['AsusFanControlService.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "com-service"
+match    = ['atkexComSvc.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "update-check"
+match    = ['AsusUpdateCheck.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "rog-live-service"
+match    = ['ROGLiveService.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "avolute.sonic-studio-notifications"
+match    = ['asusns.exe']

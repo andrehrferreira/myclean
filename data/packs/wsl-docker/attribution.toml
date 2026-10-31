@@ -14,3 +14,12 @@ paths    = ['%LOCALAPPDATA%\Docker\wsl', '%ProgramData%\DockerDesktop\vm-data']
 category = "vm-disks"
 label    = "Docker Desktop disk (images, containers, volumes)"
 reclaim  = { kind = "relocate", ref = "docker", note = "Docker Desktop > Settings > Resources > Advanced > Disk image location moves it; `docker system prune` frees space inside it." }
+
+# A WSL 1 distribution keeps its Linux files in a rootfs folder instead of a disk (observed on
+# reference machine).
+[[area]]
+id       = "distro-files"
+paths    = ['%LOCALAPPDATA%\Packages\*\LocalState\rootfs', '%LOCALAPPDATA%\Packages\*\rootfs']
+category = "vm-disks"
+label    = "WSL 1 Linux distribution file systems"
+reclaim  = { kind = "relocate", ref = "distro-files", note = "WSL 1: `wsl --export`, then `wsl --import` on another drive." }

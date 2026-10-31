@@ -1,8 +1,6 @@
 myclean_add_test(packs
   SOURCES
     applies_test.cpp
-    fixture_runner.cpp
-    fixture_runner.hpp
     fixtures_test.cpp
     loader_test.cpp
     pack_fakes.hpp
@@ -11,7 +9,7 @@ myclean_add_test(packs
   DEPENDS
     myclean::packs)
 
-# The fixture runner uses the cleaning engine's in-memory probes (FakeTree, FakeEnvironment).
+# The applicability tests use the cleaning engine's in-memory probes (FakeTree, FakeEnvironment).
 target_include_directories(myclean_packs_tests PRIVATE "${PROJECT_SOURCE_DIR}/tests/unit/clean")
 # The shipped packs (data/packs) and the version they are loaded as.
 target_compile_definitions(myclean_packs_tests PRIVATE

@@ -20,10 +20,10 @@
 #include "core/model/units.hpp"
 #include "fakes/fake_clock.hpp"
 #include "fakes/fake_file_system.hpp"
+#include "packs/pack_fakes.hpp"
 #include "phase1_fakes.hpp"
 #include "platform/ipc/pipe_client.hpp"
 #include "platform/ipc/security.hpp"
-#include "rules/fake_data_files.hpp"
 #include "svc/owner_session.hpp"
 #include "svc/service.hpp"
 #include "svc_test_support.hpp"
@@ -51,7 +51,7 @@ bool interactive_session() {
 }
 
 // A cleaning component over an in-memory file system holding F:\cache\s1.bin.
-std::unique_ptr<CleaningComponent> fake_cleaning(const rules::IDataFiles& files) {
+std::unique_ptr<CleaningComponent> fake_cleaning(const packs::IPackFiles& files) {
   auto file_system = std::make_unique<fakes::FakeFileSystem>();
   file_system->add_file(L"F:\\cache\\s1.bin", 1_MiB);
   auto tree =
@@ -68,16 +68,11 @@ std::unique_ptr<CleaningComponent> fake_cleaning(const rules::IDataFiles& files)
   return std::make_unique<CleaningComponent>(std::move(sources), files, CleaningMode{});
 }
 
-void put_test_rules(rules::FakeDataFiles& files) {
-  files.put(cleaning::testing::data_dir / "rules" / "test.toml",
-            std::string(cleaning::testing::test_rules));
-}
-
 TEST(CleaningComponentTest, ScansOnItsOwnThreadAndRegistersThePlanMethods) {
   const fakes::FakeClock clock{noon};
   testing::ComponentHarness harness{clock};
-  rules::FakeDataFiles files;
-  put_test_rules(files);
+  packs::testing::FakePackFiles files;
+  cleaning::testing::put_test_pack(files);
   const std::unique_ptr<CleaningComponent> component = fake_cleaning(files);
   ASSERT_TRUE(harness.start(*component, cleaning::testing::data_dir).has_value());
   ASSERT_TRUE(testing::eventually([&] {
@@ -117,7 +112,7 @@ class PipeGuardTest : public ::testing::Test {
   [[nodiscard]] std::unique_ptr<Service> start(const fs::path& tray_image) {
     const Result<std::string> owner = platform::current_user_sid();
     EXPECT_TRUE(owner.has_value());
-    put_test_rules(files_);
+    cleaning::testing::put_test_pack(files_);
     std::vector<std::unique_ptr<IComponent>> components;
     components.push_back(fake_cleaning(files_));
     Result<std::unique_ptr<Service>> service =
@@ -149,7 +144,7 @@ class PipeGuardTest : public ::testing::Test {
   testing::TempDir dir_;
   fakes::FakeClock clock_{noon};
   std::wstring pipe_ = testing::unique_pipe_name();
-  rules::FakeDataFiles files_;
+  packs::testing::FakePackFiles files_;
 };
 
 TEST_F(PipeGuardTest, AnotherProcessImageIsRefusedBeforeAnythingRuns) {

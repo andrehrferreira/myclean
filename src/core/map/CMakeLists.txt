@@ -1,4 +1,4 @@
-# "Where did my disk go": data/attribution.toml, its loader, the map of a scan (what each place
+# "Where did my disk go": the attribution areas (packs' attribution.toml), their loader, the map of a scan (what each place
 # is and how it can be reclaimed) and its JSON form. Read-only.
 myclean_add_library(map
   SOURCES

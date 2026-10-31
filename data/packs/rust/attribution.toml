@@ -13,3 +13,10 @@ paths    = ['%USERPROFILE%\.cargo\registry', '%CARGO_HOME%\registry', '%USERPROF
 category = "dev-caches"
 label    = "Cargo downloaded crates and git dependencies"
 reclaim  = { kind = "clean-rule", ref = "registry-cache", note = "Crates unused for 90 days are offered; Cargo downloads them again when a build needs them." }
+
+[[area]]
+id       = "cargo-home"
+paths    = ['%USERPROFILE%\.cargo']
+category = "dev-caches"
+label    = "Cargo registry, git checkouts and installed tools"
+reclaim  = { kind = "relocate", ref = "cargo" }

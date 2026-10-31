@@ -1,5 +1,6 @@
 #include "cli/cli.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -397,25 +398,81 @@ TEST(CliMapTest, MapsAFolderWithoutTheService) {
   EXPECT_TRUE(map.at("not_visible").is_null());
   EXPECT_TRUE(map.at("volume").is_object());
   EXPECT_GE(map.at("scanned").get<std::uint64_t>(), 250'000U);
-  // %TEMP% is an area of data/attribution.toml: everything is explained, as the user's temp.
+  // %TEMP% is an area of the windows pack: everything is explained, as the user's temp.
   EXPECT_EQ(map.at("explained"), map.at("scanned"));
-  EXPECT_EQ(map.at("tree").at("area"), "apps.user_temp");
+  EXPECT_EQ(map.at("tree").at("area"), "windows/user-temp");
   EXPECT_EQ(map.at("tree").at("children").size(), 2U);  // depth 1: "work" and "loose.bin"
 
   const Outcome text =
       run_cli({"map", sandbox.utf8(), "--min-gb", "0", "--data", MYCLEAN_DATA_DIR});
   ASSERT_EQ(text.code, exit_ok) << text.err;
-  EXPECT_NE(text.out.find("Your temporary files (clean rule windows.temp.user)"), std::string::npos)
+  EXPECT_NE(text.out.find("Your temporary files (clean rule windows/temp-user)"), std::string::npos)
       << text.out;
   EXPECT_NE(text.err.find("scanning:"), std::string::npos);
 }
 
-TEST(CliMapTest, ReportsAMissingAttributionFile) {
+TEST(CliMapTest, ReportsMissingPacks) {
   const MapSandbox sandbox;
   const Outcome outcome = run_cli({"map", sandbox.utf8(), "--data", sandbox.utf8()});
   EXPECT_EQ(outcome.code, exit_unavailable);
   EXPECT_TRUE(outcome.out.empty());
-  EXPECT_NE(outcome.err.find("attribution.toml"), std::string::npos) << outcome.err;
+  EXPECT_NE(outcome.err.find("no knowledge pack loaded"), std::string::npos) << outcome.err;
+}
+
+// `packs list` and `packs validate` run here, without the service.
+TEST(CliPacksTest, ListsAndValidatesTheShippedPacks) {
+  const Outcome list = run_cli({"packs", "list", "--json", "--data", MYCLEAN_DATA_DIR});
+  ASSERT_EQ(list.code, exit_ok) << list.err;
+  const Json packs = document(list).at("packs");
+  ASSERT_GE(packs.size(), 30U);
+  for (const Json& pack : packs) {
+    EXPECT_EQ(pack.at("status"), "loaded") << pack;
+    EXPECT_EQ(pack.at("origin"), "builtin") << pack;
+  }
+  const auto windows =
+      std::ranges::find(packs, Json("windows"), [](const Json& pack) { return pack.at("id"); });
+  ASSERT_NE(windows, packs.end());
+  EXPECT_TRUE(windows->at("applies").get<bool>());  // no applies_when: every machine
+  EXPECT_GT(windows->at("cases").at("clean").get<int>(), 10);
+
+  const Outcome text = run_cli({"packs", "list", "--data", MYCLEAN_DATA_DIR});
+  EXPECT_EQ(text.code, exit_ok) << text.err;
+  EXPECT_NE(text.out.find("windows "), std::string::npos) << text.out;
+
+  const Outcome validate = run_cli({"packs", "validate", "--data", MYCLEAN_DATA_DIR});
+  EXPECT_EQ(validate.code, exit_ok) << validate.out;
+  EXPECT_NE(validate.out.find("ok   zig: 2 fixtures"), std::string::npos) << validate.out;
+}
+
+TEST(CliPacksTest, ValidateReportsAnInvalidPackAndAFailingFixture) {
+  const MapSandbox sandbox;
+  const std::filesystem::path tool = std::filesystem::path(sandbox.utf8()) / "packs" / "tool";
+  std::filesystem::create_directories(tool / "tests");
+  std::ofstream(tool / "pack.toml") << "id = \"tool\"\nversion = \"1.0.0\"\ntitle = \"Tool\"\n"
+                                       "description = \"A tool.\"\nsources = [\"observed\"]\n"
+                                       "min_myclean = \"0.1.0\"\n";
+  std::ofstream(tool / "attribution.toml")
+      << "[[area]]\nid = \"home\"\npaths = ['%USERPROFILE%\\.tool']\ncategory = \"dev-caches\"\n"
+         "label = \"Tool\"\nreclaim = { kind = \"none\" }\n";
+  std::ofstream(tool / "tests" / "home.toml") << "[[expect]]\nkind = \"attribution\"\ncase = "
+                                                 "\"home\"\nmatch = ['C:\\Users\\owner\\.other']\n";
+  const Outcome failing = run_cli({"packs", "validate", tool.string(), "--json"});
+  EXPECT_EQ(failing.code, exit_unavailable);
+  const Json report = document(failing);
+  EXPECT_FALSE(report.at("valid").get<bool>());
+  ASSERT_EQ(report.at("packs").size(), 1U);
+  EXPECT_EQ(report.at("packs")[0].at("fixtures"), 1);
+  EXPECT_NE(report.at("packs")[0].at("failures")[0].get<std::string>().find("is not selected"),
+            std::string::npos)
+      << report;
+
+  std::ofstream(tool / "clean.tml") << "";
+  const Outcome invalid = run_cli({"packs", "validate", tool.parent_path().string()});
+  EXPECT_EQ(invalid.code, exit_unavailable);
+  EXPECT_NE(invalid.out.find("FAIL tool"), std::string::npos) << invalid.out;
+  EXPECT_NE(invalid.out.find("clean.tml: is not a pack file"), std::string::npos) << invalid.out;
+
+  EXPECT_EQ(run_cli({"packs", "frobnicate"}).code, exit_usage);
 }
 
 TEST_F(CliTest, McpAnswersFromTheService) {

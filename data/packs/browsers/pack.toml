@@ -1,0 +1,15 @@
+id          = "browsers"
+version     = "1.0.0"
+title       = "Web browsers"
+description = "The HTTP, code and GPU caches of Chrome, Edge, Brave and Firefox (cleaned), their profiles and service worker caches (for review), and what Edge's processes are."
+sources     = [
+  "https://support.mozilla.org/kb/profiles-where-firefox-stores-user-data (profiles in %APPDATA%\\Mozilla\\Firefox\\Profiles; the local profile folder holds the cache)",
+  "observed on reference machine: each Chromium profile (Default, Profile 1) of Chrome, Edge and Brave holds Cache, Code Cache, GPUCache and Service Worker; User Data holds ShaderCache, GrShaderCache and GraphiteDawnCache; Firefox's local profile holds cache2 and startupCache (analysis F-011, F-016)",
+  "observed on reference machine: msedge.exe and msedgewebview2.exe, their image paths and signers",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%LOCALAPPDATA%\Google\Chrome\User Data' }, { path_exists = '%LOCALAPPDATA%\Microsoft\Edge\User Data' },
+       { path_exists = '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data' },
+       { path_exists = '%APPDATA%\Mozilla\Firefox\Profiles' }, { path_exists = '%LOCALAPPDATA%\Mozilla\Firefox\Profiles' }]

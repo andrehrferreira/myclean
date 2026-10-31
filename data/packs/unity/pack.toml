@@ -1,0 +1,13 @@
+id          = "unity"
+version     = "1.0.0"
+title       = "Unity"
+description = "Library, Temp, Obj and Logs of inactive Unity projects (cleaned, asking first), Unity editors (uninstall) and the package and Asset Store caches (for review)."
+sources     = [
+  "https://docs.unity3d.com/Manual/upm-cache.html (the global package cache in %LOCALAPPDATA%\\Unity\\cache)",
+  "observed on reference machine: Unity Hub and editors in %ProgramFiles%\\Unity and %ProgramFiles%\\Unity Hub; Asset Store downloads in %APPDATA%\\Unity\\Asset Store-5.x; projects (Assets, ProjectSettings\\ProjectVersion.txt) with Library, Temp, Obj and Logs ignored by git (analysis F-012)",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%ProgramFiles%\Unity' }, { path_exists = '%ProgramFiles%\Unity Hub' },
+       { path_exists = '%LOCALAPPDATA%\Unity' }, { path_exists = '%APPDATA%\Unity' }]

@@ -9,7 +9,8 @@
 #include "core/model/result.hpp"
 #include "core/rules/data_files.hpp"
 
-// What the well-known locations of a volume are: data/attribution.toml.
+// What the well-known locations of a volume are: the attribution.toml of each knowledge pack
+// (docs/packs.md).
 //
 //   [[area]]
 //   id       = "windows.hibernation"            # required, unique
@@ -19,11 +20,11 @@
 //   category = "page-hibernate"                 # required: see Category
 //   label    = "Hibernation file"               # required: plain English
 //   reclaim  = { kind = "setting", ref = "hibernation", note = "..." }
-//            # required. kind: see ReclaimKind. ref is required for clean-rule (a rule id of
-//            # data/rules), handler (a Windows cleanup handler name), relocate (a relocation
-//            # target: placement::CacheKind, or a tool's own move: wsl, docker) and setting
-//            # (hibernation, page_file or shadow_storage), and not allowed for the other
-//            # kinds. note is optional.
+//            # required. kind: see ReclaimKind. ref is required for clean-rule (a clean case of
+//            # the pack), handler (a Windows cleanup handler name), relocate (a relocation
+//            # recipe of the pack, or a built-in target: placement::CacheKind, wsl, docker)
+//            # and setting (hibernation, page_file or shadow_storage), and not allowed for the
+//            # other kinds. note is optional.
 namespace myclean::map {
 
 enum class Category {

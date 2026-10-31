@@ -1,0 +1,12 @@
+id          = "cpp"
+version     = "1.0.0"
+title       = "C and C++ builds (MSBuild, CMake)"
+description = "Build output of inactive Visual C++ (vcxproj) and CMake projects, cleaned when git ignores it."
+sources     = [
+  "observed on reference machine: Visual C++ projects (*.vcxproj) with bin, obj, x64, Debug and Release, and CMake projects (CMakeLists.txt) with build*, out and cmake-build-* folders, ignored by git (analysis F-012)",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%ProgramFiles%\Microsoft Visual Studio' }, { path_exists = '%ProgramFiles(x86)%\Microsoft Visual Studio' },
+       { path_exists = '%ProgramFiles%\CMake' }, { path_exists = '%ProgramFiles%\LLVM' }]

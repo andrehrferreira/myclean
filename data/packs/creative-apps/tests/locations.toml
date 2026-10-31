@@ -1,0 +1,7 @@
+# Autodesk setup leftovers at the root of a drive; the installed programs are elsewhere.
+
+[[expect]]
+kind     = "attribution"
+case     = "autodesk-installers"
+match    = ['C:\Autodesk', 'D:\Autodesk']
+no_match = ['C:\Program Files\Autodesk', 'C:\Autodesk\WI\Autodesk Maya 2025\setup.exe']

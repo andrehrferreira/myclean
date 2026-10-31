@@ -1,0 +1,176 @@
+{
+  "entries": [
+    {
+      "id": "armoury-crate.service",
+      "image": "ArmouryCrate.Service.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS Armoury Crate service. Background service of Armoury Crate, the ASUS app for device settings, RGB lighting and ASUS driver and software updates.",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "armoury-crate.session-helper",
+      "image": "ArmouryCrate.UserSessionHelper.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS Armoury Crate user session helper. The part of Armoury Crate that runs in your sign-in session.",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "armoury-crate.framework",
+      "image": "asus_framework.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS framework of Armoury Crate's device support (ArmouryDevice). Several copies run.",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "armoury-crate.socket-server",
+      "image": "ArmourySocketServer.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "Background component of ASUS Armoury Crate's device support (ArmouryDevice).",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "armoury-crate.software-agent",
+      "image": "ArmourySwAgent.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "Background component of ASUS Armoury Crate's device support (ArmouryDevice).",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "armoury-crate.power-notification",
+      "image": "AcPowerNotification.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "Background component of ASUS Armoury Crate's device support (ArmouryDevice).",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "armoury-crate.noise-canceling",
+      "image": "NoiseCancelingEngine.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS noise-canceling engine, installed with Armoury Crate's device support (ArmouryDevice).",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "armoury-crate.audio-led",
+      "image": "ledcontrolservice3.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS Armoury Crate lighting control for ASUS audio devices.",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "aura.motherboard",
+      "image": "Aac3572MbHal_x86.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS lighting module for the motherboard (AAC MB HAL), used by Armoury Crate to control RGB lighting.",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "aura.kingston-memory",
+      "image": "AacKingstonDramHal_x64.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS lighting module for Kingston memory modules, used by Armoury Crate to control their RGB lighting.",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "certificate-service",
+      "image": "AsusCertService.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS Certificate Service, installed with ASUS software such as Armoury Crate.",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "fan-control-service",
+      "image": "AsusFanControlService.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS fan control service, installed with ASUS software such as Armoury Crate.",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "com-service",
+      "image": "atkexComSvc.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS Com Service, a background service installed with ASUS motherboard software.",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "update-check",
+      "image": "AsusUpdateCheck.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS update check service. Looks for updates of ASUS software.",
+      "category": "updater",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "rog-live-service",
+      "image": "ROGLiveService.exe",
+      "signer": "ASUSTeK COMPUTER INC.",
+      "description": "ASUS ROG Live Service, installed with Armoury Crate.",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "avolute.sonic-studio-notifications",
+      "image": "asusns.exe",
+      "signer": "A-Volute SAS",
+      "path": "\\\\NhNotifSys\\\\",
+      "description": "Notification helper of ASUS Sonic Studio, the audio software made by A-Volute for ASUS.",
+      "category": "oem-utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "avolute.nahimic-service",
+      "image": "NahimicService.exe",
+      "signer": "A-Volute SAS",
+      "description": "Nahimic service. Sound effects software by A-Volute that comes with the audio driver of the motherboard.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "avolute.nahimic-svc64",
+      "image": "NahimicSvc64.exe",
+      "signer": "A-Volute SAS",
+      "description": "Nahimic helper (64-bit). Part of the Nahimic sound effects that come with the audio driver.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "avolute.nahimic-svc32",
+      "image": "NahimicSvc32.exe",
+      "signer": "A-Volute SAS",
+      "description": "Nahimic helper (32-bit). Part of the Nahimic sound effects that come with the audio driver.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    }
+  ]
+}

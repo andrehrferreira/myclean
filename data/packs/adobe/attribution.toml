@@ -1,0 +1,15 @@
+# Sources: pack.toml. Each Adobe app clears its own caches; MyClean only lists them.
+
+[[area]]
+id       = "app-data"
+paths    = ['%LOCALAPPDATA%\Adobe', '%APPDATA%\Adobe']
+category = "app-caches"
+label    = "Adobe app data and caches (including Substance 3D)"
+reclaim  = { kind = "manual-review", note = "Each Adobe app clears its cache in its preferences." }
+
+[[area]]
+id       = "media-cache"
+paths    = ['%APPDATA%\Adobe\Common\Media Cache Files', '%APPDATA%\Adobe\Common\Media Cache']
+category = "app-caches"
+label    = "Adobe media cache (Premiere Pro, After Effects)"
+reclaim  = { kind = "manual-review", note = "Preferences > Media Cache > Delete; it is rebuilt when footage is opened." }

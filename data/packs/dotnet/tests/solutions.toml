@@ -1,0 +1,100 @@
+# Three inactive .NET code bases, one per marker: their ignored bin and obj go; sources and a
+# solution outside git stay. NuGet's folders are measured where they are on the reference
+# machine.
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'F:\src\Payroll\.git'
+folder = true
+[[entry]]
+path = 'F:\src\Payroll\Payroll.sln'
+[[entry]]
+path = 'F:\src\Payroll\bin'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\src\Payroll\bin\Debug\net8.0\Payroll.dll'
+[[entry]]
+path = 'F:\src\Payroll\obj'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\src\Payroll\obj\project.assets.json'
+[[entry]]
+path = 'F:\src\Payroll\Program.cs'
+
+[[entry]]
+path = 'F:\src\Chat\.git'
+folder = true
+[[entry]]
+path = 'F:\src\Chat\Chat.slnx'
+[[entry]]
+path = 'F:\src\Chat\Release'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\src\Chat\Release\Chat.exe'
+[[entry]]
+path = 'F:\src\Chat\Hub.cs'
+
+[[entry]]
+path = 'F:\src\Toolkit\.git'
+folder = true
+[[entry]]
+path = 'F:\src\Toolkit\Toolkit.csproj'
+[[entry]]
+path = 'F:\src\Toolkit\obj'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\src\Toolkit\obj\Debug\net8.0\Toolkit.dll'
+[[entry]]
+path = 'F:\src\Toolkit\Extensions.cs'
+
+[[entry]]
+path = 'F:\backup\Payroll-old\Payroll.sln'
+[[entry]]
+path = 'F:\backup\Payroll-old\bin\Payroll.dll'
+
+[[entry]]
+path = 'C:\Users\owner\.nuget\packages\newtonsoft.json\13.0.3\lib\net6.0\Newtonsoft.Json.dll'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\NuGet\v3-cache\670c1461c29885f9aa22c281d8b7da90845b38e4$ps:_api.nuget.org_v3_index.json\nupkg_newtonsoft.json.13.0.3.dat'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\NuGet\plugins-cache\a1b2c3.dat'
+
+[[expect]]
+kind     = "clean"
+case     = "sln-artifacts"
+match    = ['F:\src\Payroll\bin', 'F:\src\Payroll\obj']
+no_match = ['F:\src\Payroll\Program.cs', 'F:\backup\Payroll-old\bin']
+
+[[expect]]
+kind     = "clean"
+case     = "slnx-artifacts"
+match    = ['F:\src\Chat\Release']
+no_match = ['F:\src\Chat\Hub.cs']
+
+[[expect]]
+kind     = "clean"
+case     = "csproj-artifacts"
+match    = ['F:\src\Toolkit\obj']
+no_match = ['F:\src\Toolkit\Extensions.cs']
+
+[[expect]]
+kind     = "clean"
+case     = "nuget-locals"
+match    = ['C:\Users\owner\.nuget\packages', 'C:\Users\owner\AppData\Local\NuGet\v3-cache']
+no_match = ['C:\Users\owner\AppData\Local\NuGet\plugins-cache']
+
+[[expect]]
+kind     = "attribution"
+case     = "nuget-packages"
+match    = ['C:\Users\owner\.nuget\packages']
+
+[[expect]]
+kind     = "attribution"
+case     = "nuget-caches"
+match    = ['C:\Users\owner\AppData\Local\NuGet']

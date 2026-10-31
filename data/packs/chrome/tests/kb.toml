@@ -1,0 +1,8 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "google.chrome"
+match    = ['chrome.exe']
+no_match = ['notepad++.exe']

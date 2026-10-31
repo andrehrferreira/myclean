@@ -1,10 +1,12 @@
 # Win32 adapters of the placement settings (core/placement): user environment variables,
-# tool configuration files, folder copies, system tools (powercfg, vssadmin), hibernation,
-# page-file and shadow-storage settings, and the disk seek penalty.
+# registry values, tool configuration files, folder copies, system tools (powercfg, vssadmin),
+# hibernation, page-file and shadow-storage settings, and the disk seek penalty.
 myclean_add_library(platform_settings
   SOURCES
     process_runner.cpp
     process_runner.hpp
+    registry.cpp
+    registry.hpp
     seek_penalty.cpp
     seek_penalty.hpp
     system_space.cpp

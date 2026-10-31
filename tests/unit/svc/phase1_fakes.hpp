@@ -27,7 +27,7 @@
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/clock.hpp"
-#include "core/rules/data_files.hpp"
+#include "core/packs/loader.hpp"
 #include "core/store/migrations.hpp"
 #include "core/store/store.hpp"
 #include "core/trust/trust.hpp"
@@ -214,7 +214,7 @@ struct Phase1Fakes {
   FakeProcessImages* images = nullptr;
   FakeDiskHealthSource* disks = nullptr;
   events::testing::FakeEventSource* events = nullptr;
-  rules::DiskDataFiles files;
+  packs::DiskPackFiles files;
 };
 
 inline const std::wstring powertoys_path = LR"(C:\Program Files\PowerToys\PowerToys.exe)";

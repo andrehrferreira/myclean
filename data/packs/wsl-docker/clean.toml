@@ -1,0 +1,13 @@
+# Docker's own prune (cleaning spec, "Native Prune Commands Under the User Token"; analysis
+# F-013; source: docs.docker.com, see pack.toml), run by the tray under the owner's token.
+# --force: without a terminal the confirmation prompt would abort the command. Docker keeps its
+# data inside a virtual disk whose location varies, so there is no folder to measure: the rule
+# is always offered and the command reports what it frees.
+
+[[rule]]
+id       = "docker-prune"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "docker system prune --force"

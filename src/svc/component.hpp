@@ -71,6 +71,9 @@ class IComponent {
   [[nodiscard]] virtual ipc::ComponentHealth health() const {
     return ipc::ComponentHealth{.name = std::string(name())};
   }
+  // The knowledge packs the component loaded (docs/packs.md), for `status`. Thread-safe like
+  // health(); none unless overridden.
+  [[nodiscard]] virtual std::vector<ipc::PackStatus> pack_status() const { return {}; }
 
  protected:
   IComponent() = default;

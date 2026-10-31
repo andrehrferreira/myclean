@@ -1,0 +1,13 @@
+id          = "dotnet"
+version     = "1.0.0"
+title       = ".NET and NuGet"
+description = "Build output (bin, obj) of inactive .NET solutions and projects (cleaned), and NuGet's global packages and caches (cleared with `dotnet nuget locals`, or moved to another drive)."
+sources     = [
+  "https://learn.microsoft.com/nuget/consume-packages/managing-the-global-packages-and-cache-folders (global-packages in %USERPROFILE%\\.nuget\\packages, http-cache in %LOCALAPPDATA%\\NuGet\\v3-cache; `dotnet nuget locals all --clear`)",
+  "observed on reference machine: .NET solutions and projects (*.sln, *.slnx, *.csproj) with bin, obj, x64, Debug and Release ignored by git; %USERPROFILE%\\.nuget\\packages and %LOCALAPPDATA%\\NuGet (analysis F-012, F-013)",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%ProgramFiles%\dotnet' }, { path_exists = '%USERPROFILE%\.nuget' },
+       { path_exists = '%LOCALAPPDATA%\NuGet' }]

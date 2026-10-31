@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "id": "nodejs.node",
+      "image": "node.exe",
+      "signer": "OpenJS Foundation",
+      "description": "Node.js. Runs JavaScript programs; many developer tools start it.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

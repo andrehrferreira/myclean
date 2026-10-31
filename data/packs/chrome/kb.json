@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "id": "google.chrome",
+      "image": "chrome.exe",
+      "signer": "Google LLC",
+      "description": "Google Chrome web browser; it runs one process per tab and extension.",
+      "category": "browser",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+# Three inactive Python projects, one per marker: their ignored caches and build output go;
+# sources, virtual environments and a project outside git stay. pip's and uv's caches are
+# measured where they are on the reference machine.
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'F:\code\scraper\.git'
+folder = true
+[[entry]]
+path = 'F:\code\scraper\pyproject.toml'
+[[entry]]
+path = 'F:\code\scraper\scraper\__init__.py'
+[[entry]]
+path = 'F:\code\scraper\__pycache__'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\scraper\__pycache__\conftest.cpython-312.pyc'
+[[entry]]
+path = 'F:\code\scraper\.pytest_cache'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\scraper\.pytest_cache\v\cache\lastfailed'
+[[entry]]
+path = 'F:\code\scraper\scraper.egg-info'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\scraper\scraper.egg-info\PKG-INFO'
+[[entry]]
+path = 'F:\code\scraper\.venv'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\scraper\.venv\Scripts\python.exe'
+
+[[entry]]
+path = 'F:\code\legacy-tool\.git'
+folder = true
+[[entry]]
+path = 'F:\code\legacy-tool\setup.py'
+[[entry]]
+path = 'F:\code\legacy-tool\build'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\legacy-tool\build\lib\tool.py'
+[[entry]]
+path = 'F:\code\legacy-tool\dist'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\legacy-tool\dist\legacy_tool-1.0-py3-none-any.whl'
+
+[[entry]]
+path = 'F:\code\notebooks\.git'
+folder = true
+[[entry]]
+path = 'F:\code\notebooks\requirements-dev.txt'
+[[entry]]
+path = 'F:\code\notebooks\.mypy_cache'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\notebooks\.mypy_cache\3.12\cache.db'
+[[entry]]
+path = 'F:\code\notebooks\analysis.ipynb'
+
+[[entry]]
+path = 'F:\downloads\sample\pyproject.toml'
+[[entry]]
+path = 'F:\downloads\sample\dist\sample-0.1.tar.gz'
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\pip\cache\http-v2\a\b\c\0d1e2f'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\uv\cache\wheels-v5\pypi\numpy\2.1.0\numpy.whl'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\uv\python\cpython-3.12.7-windows-x86_64-none\python.exe'
+
+[[expect]]
+kind     = "clean"
+case     = "pyproject-artifacts"
+match    = ['F:\code\scraper\__pycache__', 'F:\code\scraper\.pytest_cache', 'F:\code\scraper\scraper.egg-info']
+no_match = ['F:\code\scraper\.venv', 'F:\code\scraper\scraper', 'F:\downloads\sample\dist']
+
+[[expect]]
+kind     = "clean"
+case     = "setup-artifacts"
+match    = ['F:\code\legacy-tool\build', 'F:\code\legacy-tool\dist']
+no_match = ['F:\code\legacy-tool\setup.py']
+
+[[expect]]
+kind     = "clean"
+case     = "requirements-artifacts"
+match    = ['F:\code\notebooks\.mypy_cache']
+no_match = ['F:\code\notebooks\analysis.ipynb']
+
+[[expect]]
+kind     = "clean"
+case     = "pip-cache"
+match    = ['C:\Users\owner\AppData\Local\pip\cache']
+
+[[expect]]
+kind     = "clean"
+case     = "uv-cache"
+match    = ['C:\Users\owner\AppData\Local\uv\cache']
+no_match = ['C:\Users\owner\AppData\Local\uv\python']
+
+[[expect]]
+kind     = "attribution"
+case     = "pip-cache"
+match    = ['C:\Users\owner\AppData\Local\pip']
+
+[[expect]]
+kind     = "attribution"
+case     = "uv-cache"
+match    = ['C:\Users\owner\AppData\Local\uv']
+
+[[expect]]
+kind     = "attribution"
+case     = "installations"
+match    = ['C:\Users\owner\AppData\Local\Programs\Python', 'C:\Users\owner\miniconda3', 'C:\ProgramData\anaconda3']
+no_match = ['C:\Users\owner\AppData\Local\Programs']

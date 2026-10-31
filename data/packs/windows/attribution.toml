@@ -1,0 +1,264 @@
+# The volume's system files and Windows' own folders, programs, the owner's folders and Windows'
+# caches (sources: pack.toml; analysis F-011, F-016). A folder belongs to the area whose
+# location names it most precisely (the most path components); between two equally precise
+# locations the first wins. Locations with a variable that is not set on this machine are
+# skipped. Panther and the setup logs are areas of the windows-setup-logs pack.
+
+[[area]]
+id       = "hibernation"
+paths    = ['?:\hiberfil.sys']
+category = "page-hibernate"
+label    = "Hibernation file (memory saved for Fast Startup and hibernate)"
+reclaim  = { kind = "setting", ref = "hibernation", note = "Reduced hibernation halves it and keeps Fast Startup; off removes it." }
+
+[[area]]
+id       = "page-file"
+paths    = ['?:\pagefile.sys', '?:\swapfile.sys']
+category = "page-hibernate"
+label    = "Page file (virtual memory)"
+reclaim  = { kind = "setting", ref = "page_file", note = "Move most of it to another drive, keeping a small one here for crash dumps." }
+
+[[area]]
+id       = "restore-points"
+paths    = ['?:\System Volume Information']
+category = "restore-points"
+label    = "Restore points and shadow copies (needs admin to size)"
+reclaim  = { kind = "setting", ref = "shadow_storage", note = "Cap the shadow storage; the oldest restore points that no longer fit are removed." }
+
+[[area]]
+id       = "recycle-bin"
+paths    = ['?:\$Recycle.Bin']
+category = "recycle-bin"
+label    = "Recycle Bin"
+reclaim  = { kind = "clean-rule", ref = "recycle-bin", note = "Empties the Recycle Bin; other users' bins need admin." }
+
+[[area]]
+id       = "system"
+paths    = ['%WINDIR%']
+category = "system"
+label    = "Windows"
+reclaim  = { kind = "none" }
+
+[[area]]
+id       = "component-store"
+paths    = ['%WINDIR%\WinSxS']
+category = "windows-servicing"
+label    = "Component store (WinSxS); most files are hard links shared with Windows, counted once"
+reclaim  = { kind = "clean-rule", ref = "component-store", note = "DISM StartComponentCleanup removes superseded components only; DISM reports the exact amount." }
+
+[[area]]
+id       = "installer-cache"
+paths    = ['%WINDIR%\Installer']
+category = "windows-servicing"
+label    = "Windows Installer cache (needed to repair and uninstall programs)"
+reclaim  = { kind = "manual-review", note = "Never delete. Orphaned packages can later be moved to another drive." }
+
+[[area]]
+id       = "update-downloads"
+paths    = ['%WINDIR%\SoftwareDistribution']
+category = "windows-servicing"
+label    = "Windows Update downloads and history"
+reclaim  = { kind = "manual-review", note = "Windows removes downloads after updates install; a large folder usually means a stuck update." }
+
+[[area]]
+id       = "driver-store"
+paths    = ['%WINDIR%\System32\DriverStore']
+category = "windows-servicing"
+label    = "Driver store (installed and older drivers)"
+reclaim  = { kind = "clean-rule", ref = "driver-packages", note = "Removes older versions of drivers only." }
+
+[[area]]
+id       = "temp"
+paths    = ['%WINDIR%\Temp']
+category = "app-caches"
+label    = "Windows temporary files"
+reclaim  = { kind = "clean-rule", ref = "temp-system" }
+
+[[area]]
+id       = "live-kernel-reports"
+paths    = ['%WINDIR%\LiveKernelReports']
+category = "system"
+label    = "Kernel crash reports"
+reclaim  = { kind = "clean-rule", ref = "live-kernel-reports" }
+
+[[area]]
+id       = "memory-dump"
+paths    = ['%WINDIR%\MEMORY.DMP']
+category = "system"
+label    = "System crash memory dump"
+reclaim  = { kind = "clean-rule", ref = "memory-dumps" }
+
+[[area]]
+id       = "minidumps"
+paths    = ['%WINDIR%\Minidump']
+category = "system"
+label    = "System crash minidumps"
+reclaim  = { kind = "clean-rule", ref = "minidumps" }
+
+[[area]]
+id       = "wer-system"
+paths    = ['%ProgramData%\Microsoft\Windows\WER']
+category = "system"
+label    = "Windows error reports (all users)"
+reclaim  = { kind = "clean-rule", ref = "wer-system" }
+
+[[area]]
+id       = "old"
+paths    = ['?:\Windows.old']
+category = "windows-servicing"
+label    = "Previous Windows installation (allows rolling back an upgrade)"
+reclaim  = { kind = "clean-rule", ref = "previous-installations", note = "Removing it ends the option to go back to the previous Windows version." }
+
+[[area]]
+id       = "setup-files"
+paths    = ['?:\$WINDOWS.~BT', '?:\$WINDOWS.~WS', '?:\$GetCurrent']
+category = "windows-servicing"
+label    = "Windows upgrade setup files"
+reclaim  = { kind = "clean-rule", ref = "temporary-setup-files" }
+
+[[area]]
+id       = "esd"
+paths    = ['?:\ESD']
+category = "windows-servicing"
+label    = "Windows installation images (ESD) used to reset the PC"
+reclaim  = { kind = "clean-rule", ref = "esd-files", note = "Reset this PC can download them again." }
+
+[[area]]
+id       = "recovery"
+paths    = ['?:\Recovery', '?:\$SysReset']
+category = "system"
+label    = "Windows recovery environment"
+reclaim  = { kind = "none" }
+
+[[area]]
+id       = "assembly"
+paths    = ['%WINDIR%\assembly']
+category = "system"
+label    = ".NET Framework global assembly cache"
+reclaim  = { kind = "none" }
+
+[[area]]
+id       = "hyperv-disks"
+paths    = ['%ProgramData%\Microsoft\Windows\Virtual Hard Disks', '%PUBLIC%\Documents\Hyper-V']
+category = "vm-disks"
+label    = "Hyper-V virtual machine disks"
+reclaim  = { kind = "manual-review", note = "Delete unused virtual machines in Hyper-V Manager, or move them to another drive." }
+
+# ---- Programs ---------------------------------------------------------------------------------
+
+[[area]]
+id       = "program-files"
+paths    = ['%ProgramFiles%', '%ProgramFiles(x86)%']
+category = "apps"
+label    = "Installed programs"
+reclaim  = { kind = "uninstall", note = "Uninstall programs you no longer use: Settings > Apps > Installed apps." }
+
+[[area]]
+id       = "store-apps"
+paths    = ['%ProgramFiles%\WindowsApps']
+category = "apps"
+label    = "Microsoft Store apps and Xbox app games"
+reclaim  = { kind = "uninstall", note = "Uninstall in Settings > Apps, or move an app to another drive there." }
+
+[[area]]
+id       = "user-programs"
+paths    = ['%LOCALAPPDATA%\Programs', '%LOCALAPPDATA%\Discord']
+category = "apps"
+label    = "Programs installed for this user only"
+reclaim  = { kind = "uninstall", note = "Uninstall programs you no longer use: Settings > Apps > Installed apps." }
+
+[[area]]
+id       = "store-app-data"
+paths    = ['%LOCALAPPDATA%\Packages']
+category = "apps"
+label    = "Microsoft Store app data"
+reclaim  = { kind = "manual-review", note = "Settings > Apps > (app) > Advanced options > Reset clears one app's data." }
+
+# PowerToys keeps the installers of its updates (observed on reference machine).
+[[area]]
+id       = "powertoys-updates"
+paths    = ['%LOCALAPPDATA%\Microsoft\PowerToys\Updates']
+category = "app-caches"
+label    = "PowerToys update installers left behind"
+reclaim  = { kind = "manual-review", note = "Not needed once the program is installed; no cleaning rule covers them yet." }
+
+[[area]]
+id       = "local-low"
+paths    = ['%USERPROFILE%\AppData\LocalLow']
+category = "apps"
+label    = "Low-integrity app data (games, sandboxed apps)"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "package-cache"
+paths    = ['%ProgramData%\Package Cache']
+category = "app-caches"
+label    = "Installer copies kept to repair and uninstall programs"
+reclaim  = { kind = "manual-review", note = "Do not delete: repairs and uninstalls need these copies." }
+
+[[area]]
+id       = "onedrive"
+paths    = ['%USERPROFILE%\OneDrive', '%USERPROFILE%\OneDrive - *']
+category = "user-documents"
+label    = "OneDrive files kept on this PC"
+reclaim  = { kind = "manual-review", note = "Right-click > Free up space keeps files online only; they download again when opened." }
+
+# ---- Windows caches of the owner --------------------------------------------------------------
+
+[[area]]
+id       = "user-temp"
+paths    = ['%TEMP%']
+category = "app-caches"
+label    = "Your temporary files"
+reclaim  = { kind = "clean-rule", ref = "temp-user", note = "Relocating TEMP (relocation 'temp') keeps it off this drive for good." }
+
+[[area]]
+id       = "crash-dumps"
+paths    = ['%LOCALAPPDATA%\CrashDumps']
+category = "app-caches"
+label    = "App crash dumps"
+reclaim  = { kind = "clean-rule", ref = "crash-dumps" }
+
+[[area]]
+id       = "wer-user"
+paths    = ['%LOCALAPPDATA%\Microsoft\Windows\WER']
+category = "app-caches"
+label    = "Your Windows error reports"
+reclaim  = { kind = "clean-rule", ref = "wer-user" }
+
+[[area]]
+id       = "thumbnail-cache"
+paths    = ['%LOCALAPPDATA%\Microsoft\Windows\Explorer']
+category = "app-caches"
+label    = "Thumbnail and icon caches"
+reclaim  = { kind = "clean-rule", ref = "thumbnail-cache" }
+
+[[area]]
+id       = "internet-cache"
+paths    = ['%LOCALAPPDATA%\Microsoft\Windows\INetCache']
+category = "app-caches"
+label    = "Internet cache of Windows components"
+reclaim  = { kind = "clean-rule", ref = "internet-cache" }
+
+# ---- Your files -------------------------------------------------------------------------------
+
+[[area]]
+id       = "documents"
+paths    = ['%USERPROFILE%\Documents', '%USERPROFILE%\Desktop', '%PUBLIC%\Documents']
+category = "user-documents"
+label    = "Documents and desktop (yours and the shared Public Documents)"
+reclaim  = { kind = "manual-review", note = "Move or archive what you do not need on this drive." }
+
+[[area]]
+id       = "media"
+paths    = ['%USERPROFILE%\Pictures', '%USERPROFILE%\Videos', '%USERPROFILE%\Music']
+category = "user-media"
+label    = "Your pictures, videos and music"
+reclaim  = { kind = "manual-review", note = "Move libraries to another drive: right-click the folder > Properties > Location." }
+
+[[area]]
+id       = "downloads"
+paths    = ['%USERPROFILE%\Downloads']
+category = "downloads"
+label    = "Your downloads"
+reclaim  = { kind = "manual-review", note = "Old installers and archives are usually safe to delete after a look." }

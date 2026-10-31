@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 
+#include "core/clean/patterns.hpp"
 #include "core/model/enum_names.hpp"
 #include "core/model/units.hpp"
 #include "core/space/scanner.hpp"
@@ -21,7 +22,7 @@ constexpr auto algorithm_names =
     std::to_array<std::string_view>({"xpress4k", "xpress8k", "xpress16k", "lzx", "lznt1"});
 constexpr auto exclusion_names = std::to_array<std::string_view>(
     {"none", "link", "placeholder", "extra_link", "small", "compressed", "media", "disk_image",
-     "database", "system_file", "recent", "windows", "incompressible"});
+     "database", "system_file", "recent", "windows", "incompressible", "pack_excluded"});
 constexpr auto category_names =
     std::to_array<std::string_view>({"toolchain", "engine", "game", "program", "other"});
 
@@ -94,6 +95,21 @@ constexpr auto toolchain_markers = std::to_array<std::string_view>({R"(\.rustup\
                                                                     R"(\microsoft sdks\)"});
 constexpr auto program_markers =
     std::to_array<std::string_view>({R"(\program files\)", R"(\program files (x86)\)"});
+
+// True when a file or folder of `path` below `rules.excluded_below` has an excluded name.
+bool excluded_by_name(const std::filesystem::path& path, const Rules& rules) {
+  if (rules.excluded_names.empty() || !is_within(path, rules.excluded_below)) {
+    return false;
+  }
+  const std::filesystem::path inside = path.lexically_relative(rules.excluded_below);
+  return std::ranges::any_of(inside, [&rules](const std::filesystem::path& name) {
+    return std::ranges::any_of(rules.excluded_names, [&name](const std::string& pattern) {
+      return clean::wildcard_match(
+          name.native(),
+          std::filesystem::path{std::u8string(pattern.begin(), pattern.end())}.native());
+    });
+  });
+}
 
 }  // namespace
 
@@ -185,6 +201,9 @@ Exclusion exclusion(const space::Folder& folder, const space::FileItem& file, co
   }
   if (std::ranges::find(rules.incompressible, extension) != rules.incompressible.end()) {
     return Exclusion::incompressible;
+  }
+  if (excluded_by_name(folder.path / file.name, rules)) {
+    return Exclusion::pack_excluded;
   }
   if (file.modified > now - rules.recent) {
     return Exclusion::recent;

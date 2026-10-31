@@ -61,8 +61,12 @@ class CleaningSmokeTest : public ::testing::Test {
     write(sandbox_ / "items" / "old.bin", std::string(4096, 'o'));
     write(sandbox_ / "items" / "keep.bin", std::string(4096, 'k'));
     fs::create_directories(sandbox_ / "ws");
-    write(sandbox_ / "data" / "rules" / "sandbox.toml",
-          "[[rule]]\nid = \"sandbox.ask\"\ncategory = \"sandbox\"\ntier = \"ask\"\n"
+    write(sandbox_ / "data" / "packs" / "sandbox" / "pack.toml",
+          "id = \"sandbox\"\nversion = \"1.0.0\"\ntitle = \"Sandbox\"\n"
+          "description = \"The smoke test's case.\"\nsources = [\"observed on reference "
+          "machine\"]\nmin_myclean = \"0.1.0\"\n");
+    write(sandbox_ / "data" / "packs" / "sandbox" / "clean.toml",
+          "[[rule]]\nid = \"ask\"\ncategory = \"sandbox\"\ntier = \"ask\"\n"
           "scope = \"user\"\nstrategy = \"quarantine\"\ntargets = ['" +
               utf8(sandbox_ / "items" / "*") + "']\n");
     write(sandbox_ / "data" / "workspaces.toml", "roots = ['" + utf8(sandbox_ / "ws") + "']\n");

@@ -1,0 +1,80 @@
+# Visual Studio 2022's component cache, and the .vs state of two inactive solutions in a
+# workspace: the ignored .vs folders go, sources and a .vs outside git stay.
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\VisualStudio\17.0_8a3c1f2e\ComponentModelCache\Microsoft.VisualStudio.Default.cache'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\VisualStudio\17.0_8a3c1f2e\privateregistry.bin'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\VisualStudio\17.0_8a3c1f2e\Extensions\a1b2c3\extension.vsixmanifest'
+
+[[entry]]
+path = 'F:\src\Inventory\.git'
+folder = true
+[[entry]]
+path = 'F:\src\Inventory\Inventory.sln'
+[[entry]]
+path = 'F:\src\Inventory\.vs'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\src\Inventory\.vs\Inventory\v17\.suo'
+[[entry]]
+path = 'F:\src\Inventory\Inventory.Core\Order.cs'
+
+[[entry]]
+path = 'F:\src\Ledger\.git'
+folder = true
+[[entry]]
+path = 'F:\src\Ledger\Ledger.slnx'
+[[entry]]
+path = 'F:\src\Ledger\.vs'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\src\Ledger\.vs\Ledger\v17\DocumentLayout.json'
+[[entry]]
+path = 'F:\src\Ledger\Ledger.App\Program.cs'
+
+[[entry]]
+path = 'F:\exports\Prototype\Prototype.sln'
+[[entry]]
+path = 'F:\exports\Prototype\.vs\Prototype\v17\.suo'
+
+[[expect]]
+kind     = "clean"
+case     = "component-model-cache"
+match    = ['C:\Users\owner\AppData\Local\Microsoft\VisualStudio\17.0_8a3c1f2e\ComponentModelCache']
+no_match = ['C:\Users\owner\AppData\Local\Microsoft\VisualStudio\17.0_8a3c1f2e\privateregistry.bin',
+            'C:\Users\owner\AppData\Local\Microsoft\VisualStudio\17.0_8a3c1f2e\Extensions']
+
+[[expect]]
+kind     = "clean"
+case     = "sln-state"
+match    = ['F:\src\Inventory\.vs']
+no_match = ['F:\src\Inventory\Inventory.Core', 'F:\exports\Prototype\.vs']
+
+[[expect]]
+kind     = "clean"
+case     = "slnx-state"
+match    = ['F:\src\Ledger\.vs']
+no_match = ['F:\src\Ledger\Ledger.App']
+
+[[expect]]
+kind     = "attribution"
+case     = "installations"
+match    = ['C:\Program Files\Microsoft Visual Studio', 'C:\Program Files (x86)\Microsoft Visual Studio']
+
+[[expect]]
+kind     = "attribution"
+case     = "packages"
+match    = ['C:\ProgramData\Microsoft\VisualStudio\Packages']
+
+[[expect]]
+kind     = "attribution"
+case     = "mef-cache"
+match    = ['C:\Users\owner\AppData\Local\Microsoft\VisualStudio\17.0_8a3c1f2e\ComponentModelCache']
+no_match = ['C:\Users\owner\AppData\Local\Microsoft\VisualStudio\17.0_8a3c1f2e']

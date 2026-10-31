@@ -1,0 +1,95 @@
+# Profiles of the reference machine's browsers: their caches go; site data, logins, history and
+# the profiles themselves stay.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Cache\Cache_Data\f_000001'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Code Cache\js\index'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Profile 1\GPUCache\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\ShaderCache\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\GrShaderCache\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\GraphiteDawnCache\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Login Data'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Local Storage\leveldb\000003.log'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Service Worker\CacheStorage\index.txt'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\Edge\User Data\Default\Cache\Cache_Data\f_000001'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\Edge\User Data\Default\GPUCache\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\Edge\User Data\Default\History'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\BraveSoftware\Brave-Browser\User Data\Default\Code Cache\wasm\index'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\BraveSoftware\Brave-Browser\User Data\Default\Cookies'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Mozilla\Firefox\Profiles\x7k2m9qa.default-release\cache2\entries\0A1B2C3D'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Mozilla\Firefox\Profiles\x7k2m9qa.default-release\startupCache\startupCache.8.little'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Mozilla\Firefox\Profiles\x7k2m9qa.default-release\safebrowsing\google4\goog-phish-proto.vlpset'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Mozilla\Firefox\Profiles\x7k2m9qa.default-release\places.sqlite'
+
+[[expect]]
+kind     = "clean"
+case     = "chrome-cache"
+match    = ['C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Cache',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Code Cache',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Profile 1\GPUCache',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\ShaderCache',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\GrShaderCache',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\GraphiteDawnCache']
+no_match = ['C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Login Data',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Local Storage',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Service Worker',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default']
+
+[[expect]]
+kind     = "clean"
+case     = "edge-cache"
+match    = ['C:\Users\owner\AppData\Local\Microsoft\Edge\User Data\Default\Cache',
+            'C:\Users\owner\AppData\Local\Microsoft\Edge\User Data\Default\GPUCache']
+no_match = ['C:\Users\owner\AppData\Local\Microsoft\Edge\User Data\Default\History']
+
+[[expect]]
+kind     = "clean"
+case     = "brave-cache"
+match    = ['C:\Users\owner\AppData\Local\BraveSoftware\Brave-Browser\User Data\Default\Code Cache']
+no_match = ['C:\Users\owner\AppData\Local\BraveSoftware\Brave-Browser\User Data\Default\Cookies']
+
+[[expect]]
+kind     = "clean"
+case     = "firefox-cache"
+match    = ['C:\Users\owner\AppData\Local\Mozilla\Firefox\Profiles\x7k2m9qa.default-release\cache2',
+            'C:\Users\owner\AppData\Local\Mozilla\Firefox\Profiles\x7k2m9qa.default-release\startupCache']
+no_match = ['C:\Users\owner\AppData\Local\Mozilla\Firefox\Profiles\x7k2m9qa.default-release\safebrowsing',
+            'C:\Users\owner\AppData\Roaming\Mozilla\Firefox\Profiles\x7k2m9qa.default-release\places.sqlite']
+
+[[expect]]
+kind     = "attribution"
+case     = "profiles"
+match    = ['C:\Users\owner\AppData\Local\Google\Chrome\User Data', 'C:\Users\owner\AppData\Roaming\Mozilla\Firefox\Profiles']
+
+[[expect]]
+kind     = "attribution"
+case     = "service-worker-cache"
+match    = ['C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Service Worker']
+
+[[expect]]
+kind     = "attribution"
+case     = "chrome-cache"
+match    = ['C:\Users\owner\AppData\Local\Google\Chrome\User Data\Profile 1\GPUCache']
+no_match = ['C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\DawnCache']
+
+[[expect]]
+kind     = "attribution"
+case     = "firefox-cache"
+match    = ['C:\Users\owner\AppData\Local\Mozilla\Firefox\Profiles\x7k2m9qa.default-release\cache2']

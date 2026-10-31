@@ -1,0 +1,38 @@
+# An inactive Cargo project in a workspace: its ignored target goes; sources and a project
+# outside git stay. The Cargo home as a whole is an area of its own.
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'F:\code\tilemap\.git'
+folder = true
+[[entry]]
+path = 'F:\code\tilemap\Cargo.toml'
+[[entry]]
+path = 'F:\code\tilemap\Cargo.lock'
+[[entry]]
+path = 'F:\code\tilemap\target'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\tilemap\target\debug\tilemap.exe'
+size = 8388608
+[[entry]]
+path = 'F:\code\tilemap\src\main.rs'
+[[entry]]
+path = 'F:\crates\vendored\Cargo.toml'
+[[entry]]
+path = 'F:\crates\vendored\target\release\libvendored.rlib'
+
+[[expect]]
+kind     = "clean"
+case     = "target"
+match    = ['F:\code\tilemap\target']
+no_match = ['F:\code\tilemap\src', 'F:\code\tilemap\Cargo.lock', 'F:\crates\vendored\target']
+
+[[expect]]
+kind     = "attribution"
+case     = "cargo-home"
+match    = ['C:\Users\owner\.cargo']
+no_match = ['C:\Users\owner\.rustup']

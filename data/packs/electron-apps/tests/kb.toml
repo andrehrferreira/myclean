@@ -1,0 +1,13 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "microsoft.teams"
+match    = ['ms-teams.exe']
+no_match = ['notepad++.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "discord"
+match    = ['Discord.exe']

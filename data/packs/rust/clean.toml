@@ -13,3 +13,18 @@ targets  = ['%USERPROFILE%\.cargo\registry\cache\*\*', '%USERPROFILE%\.cargo\reg
             '%USERPROFILE%\.cargo\git\checkouts\*',
             '%CARGO_HOME%\registry\cache\*\*', '%CARGO_HOME%\registry\src\*\*', '%CARGO_HOME%\git\checkouts\*']
 require  = { min_age_days = 90, not_in_use = true }
+
+# Build output of inactive Cargo projects (source: The Cargo Book, "Build cache", see
+# pack.toml; analysis F-012). The scanner walks the roots of data/workspaces.toml; a folder
+# holding Cargo.toml is a project root. target is proposed only when the project is in a git
+# work tree, git ignores target and tracks nothing inside it, no process uses it or the project,
+# and the project is inactive for 30 days (newest of the last commit and every source file).
+[[rule]]
+id       = "target"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "Cargo.toml" }
+targets  = ["target"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }

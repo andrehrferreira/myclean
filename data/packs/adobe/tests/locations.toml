@@ -1,0 +1,13 @@
+# Where Adobe apps keep their data and media cache on the reference machine.
+
+[[expect]]
+kind     = "attribution"
+case     = "app-data"
+match    = ['C:\Users\owner\AppData\Local\Adobe', 'C:\Users\owner\AppData\Roaming\Adobe']
+no_match = ['C:\Users\owner\AppData\Roaming\Adobe\Common']
+
+[[expect]]
+kind     = "attribution"
+case     = "media-cache"
+match    = ['C:\Users\owner\AppData\Roaming\Adobe\Common\Media Cache Files', 'C:\Users\owner\AppData\Roaming\Adobe\Common\Media Cache']
+no_match = ['C:\Users\owner\AppData\Roaming\Adobe\Common\Peak Files']

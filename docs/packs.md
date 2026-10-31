@@ -4,8 +4,9 @@ What MyClean knows about where space goes and how to get it back lives in data, 
 **packs**: one pack per tool or ecosystem (`zig`, `vcpkg`, `chrome`, ...). Adding a case, or a
 whole new ecosystem, is a data change with its own tests; no code changes.
 
-Code: `src/core/packs` (loader, validation, applicability, registry). Tests:
-`tests/unit/packs`. Task: `.rulebook/tasks/phase2c_knowledge-packs`.
+Code: `src/core/packs` (loader, validation, applicability, registry, fixture runner),
+`src/platform/packs` (the machine `applies_when` asks about, the owner folder's ACL check),
+`src/cli/packs_command.cpp` (`myclean packs`). Tests: `tests/unit/packs`, `tests/unit/platform_packs`. Task: `.rulebook/tasks/phase2c_knowledge-packs`.
 
 ## Layout
 
@@ -95,20 +96,35 @@ note        = "..."                             # optional; required with undo =
 |---|---|
 | `{ env = "NAME" }` | the owner's environment variable |
 | `{ config = 'path', key = "k", format = "ini" \| "json" }` | a key of a tool's configuration file (`ini`: `key = value` lines such as `.npmrc`; `json`: a top-level key) |
-| `{ registry = 'HKCU\...\Value', name = "Value" }` | a registry value (HKCU or HKLM). A `*` in the key matches every subkey: each is one instance, named by its value `name` |
+| `{ registry = 'HKCU\...\Value', name = "Value" }` | a registry value (HKCU or HKLM). A `*` in the key matches every subkey: each is one instance, named by its value `name` (in the same key). `where = { value = "Flags", mask = 8, equals = 8 }` keeps only the instances whose DWORD value `value`, masked, equals `equals`; an instance without it is not offered |
 | `{ command = "..." }` | what a command prints |
 
 `target_kind` is `env`, `config` or `registry` (then it must equal the kind of `current`: the
-same setting is written) or `command`, which runs `command` with `{target}` (the new folder,
-required) and `{name}` (the instance name, only with `current.name`). `skip_names` lists
-instances that are never offered.
+same setting is written), `command`, which runs `command` with `{target}` (the new folder,
+required) and `{name}` (the instance name, only with `current.name`; each placeholder stays
+inside one argument), or `wsl-import` (instances required), which moves a WSL 1 distribution:
+`wsl --export <name> <target>\<name>.tar`, `wsl --import <name>-myclean-move <target> <archive>
+--version 1`, a check (its Lxss key has BasePath = the target and `wsl -d <temporary> -e true`
+succeeds), only then `wsl --unregister <name>`, after which the copy gets the original
+DistributionName and DefaultUid. A failed import or check removes the copy and leaves the original
+registered; the archive stays as a backup. `skip_names` lists instances that are never offered.
+The instance name given to a command is the one read from the registry, never the approved
+text.
 
 `undo` is `restore` (the previous value is written back exactly, deleting a setting that was
-absent; env, config and registry only), `command` (the command runs again with `{target}` = the
-previous folder; command only) or `none` (the `note` says how to go back).
+absent; env, config and registry only), `command` (the move runs again with `{target}` = the
+previous folder; `command` and `wsl-import`) or `none` (the `note` says how to go back).
 
 `content`: `move` copies and verifies before the setting changes; `regenerate` leaves the old
 content behind for a cleaning plan, the tool rebuilds what it needs.
+
+**Approval.** A recipe never runs by itself: `plans.propose_optimization` with `kind = "relocate"`,
+`pack` and `recipe` (the case id) and, for instances, `instance` creates an approval-only
+user-scope plan `RelocateRecipe` (target `<drive>\Relocated\<pack>\<case>[\<instance>]` on the
+best healthy volume, or the drive given in `target`); the tray runs it with the owner's token,
+with exact undo where the recipe allows it (`placement::RecipeAction`). In `wsl-docker`, `distro`
+(Lxss `Flags` bit 0x8 set: WSL 2) uses `wsl --manage <name> --move`, `distro-files` (bit clear:
+WSL 1) uses `wsl-import`. Lxss `Version` is the registration format, not the WSL version.
 
 ### compress.toml: compression targets
 
@@ -124,6 +140,9 @@ note      = "..."
 
 The algorithm is a hint for the folder's content; the compression analyzer still estimates it,
 and its own exclusions (media, disk images, databases, recent files, %WINDIR%) always apply.
+`compress::AnalyzerOptions::targets` takes the registry's targets: a folder inside one gets its
+algorithm as the recommendation (`FolderEstimate::target` names the case), and the names in
+`exclude` are left alone (`Exclusion::pack_excluded`, which `CompressFolder` honours too).
 
 ## Ids and references
 
@@ -142,8 +161,11 @@ References into another pack are rejected. `handler` and `setting` refs are unch
 `packs::load_packs(files, builtin_dir, owner_dir, running)`:
 
 1. **Owner packs first**: `%ProgramData%\MyClean\packs\<pack-id>\`, the owner's overrides. The
-   folder must be writable by administrators only (the platform layer checks its ACL before
-   passing it, task item 1.8); a missing folder is no error.
+   folder must be writable by administrators only: `platform::owner_packs_folder` checks it and
+   everything in it (owner SYSTEM, Administrators or TrustedInstaller; no allow entry giving
+   anyone else write, delete or permission rights; no link) and otherwise refuses it, so the
+   owner's packs are ignored and the refusal is reported. A missing folder is no error.
+   (`%ProgramData%\MyClean` itself gets that ACL when the service starts.)
 2. **Built-in packs**: `<install>\data\packs\<pack-id>\`, each origin in id order.
 
 Rules:
@@ -173,7 +195,28 @@ The report lists every pack folder with its status (`loaded`, `disabled`, `shado
 `packs::make_registry` then gives the content of the loaded packs, per kind and in load order,
 in the types the engines take: `clean` (a `RuleCatalog`-style list for `RuleEngine`),
 `attribution`, `relocate`, `compress`, `kb` and `classes` (a `ClassSet`, first match wins,
-default caps).
+default caps). `packs::load_installed(files, data_dir, owner_dir)` is `load_packs` of an
+installed MyClean (`<data_dir>\packs`, the owner folder as `platform/packs` found it, this
+MyClean's version).
+
+## Where packs are used
+
+| Consumer | Loads | Applicability |
+|---|---|---|
+| Service, `cleaning` | clean cases for scans, relocation recipes for `plans.propose_optimization`; again at every scan | for the owner: `platform::Win32Machine` (Uninstall keys of HKLM, its 32-bit view and the owner's hive, the owner's Appx packages, running images, the Windows build) and the owner's environment |
+| Service, `trust` | knowledge base, once at start | none: every loaded pack (knowing a program that is not installed costs nothing) |
+| `myclean map` | attribution areas | for the user running it |
+| `myclean packs list` / `validate` | everything | `list`: for the user running it |
+| Compression analyzer | `compress::AnalyzerOptions::targets` | the caller's registry |
+| Governor | `Registry::classes` | not loaded yet: no pack ships `classes.toml` |
+
+`myclean packs list [--json] [--data <dir>]` prints every pack folder with its version, origin,
+status, whether it applies here and its case counts, and why a pack was rejected.
+`myclean packs validate [<path>] [--json]` validates one pack folder, or every pack of a folder
+of packs together (default: the installed `data\packs`, so conflicts show), and runs each pack's
+fixtures on an in-memory machine; it exits 1 when a pack is rejected, has no fixture or a fixture
+fails. The service's `status` lists every pack folder (`packs`) as the cleaning component last
+loaded it; a rejected pack also makes the component degraded.
 
 ## Versioning
 
@@ -188,7 +231,9 @@ default caps).
 Each pack ships fixtures in `tests\*.toml`: a fake machine and what each case must and must not
 select on it. ctest runs one test per pack folder, found when ctest starts
 (`Packs/ShippedPack.IsValidAndPassesItsFixtures/<pack>`, label `packs`), so a new pack needs no
-build change; `ShippedPacks.LoadTogetherWithoutConflicts` loads all packs together.
+build change; `ShippedPacks.LoadTogetherWithoutConflicts` loads all packs together. The runner
+is `packs::run_fixtures` (`src/core/packs/fixtures.hpp`), the same one `myclean packs validate`
+uses, so a pack can be checked without a build.
 
 ```toml
 [env]                                   # optional, on top of the reference owner's environment:
@@ -206,7 +251,7 @@ git_ignored = true                      # optional: git ignores it (a '.git' fol
                                         # makes its parent a work tree)
 
 [[expect]]
-kind     = "clean"                      # clean | attribution | relocate | compress
+kind     = "clean"                      # clean | attribution | relocate | compress | kb
 case     = "global-cache"               # the local case id
 match    = ['C:\Users\owner\AppData\Local\zig\o\4c2f9a']   # each must be selected
 no_match = ['C:\Users\owner\AppData\Local\zig\o']          # none may be selected
@@ -220,6 +265,7 @@ What "selected" means per kind:
 | clean, native or handler | an entry its targets measure |
 | attribution, relocate | a path one of its locations names, component by component |
 | compress | a path inside a folder its paths resolve to on the tree, not excluded |
+| kb | an image name the entry is for, any case (`match = ['ArmouryCrate.Service.exe']`) |
 
 A folder without files holds nothing, so the engine never proposes it: give it a file. Every
 case that removes anything needs `no_match` entries for what must survive next to it (installed
@@ -240,7 +286,8 @@ libraries next to build trees, profiles next to caches).
 4. Add an attribution area for the folder, pointing at the case.
 5. Add or extend a fixture in `tests/` with `match` and `no_match` for the case, using the
    reference machine's real folder names.
-6. Bump the pack's `version`, then run `ctest --preset debug -L packs`.
+6. Bump the pack's `version`, then run `ctest --preset debug -L packs` (or
+   `myclean packs validate data\packs\<pack>`).
 
 ## Adding a pack
 
@@ -251,16 +298,43 @@ up automatically.
 
 ## Shipped packs
 
+Every rule id is `<pack>/<case>` (the former `windows.temp.user` is `windows/temp-user`, `pkg.pnpm.store` is
+`node/pnpm-store`, ...): plans and logs stored before keep the old ids as history; new scans use
+the new ones.
+
 | Pack | Cases |
 |---|---|
-| `zig` | clean: global cache entries; attribution |
+| `adobe` | attribution (review): app data and caches, media cache; kb: Creative Cloud and Acrobat processes |
+| `ai-tools` | attribution (review): Codex sessions and images, Claude Code transcripts, assistant homes, Ollama, LM Studio, Hugging Face and local AI models; relocate: OLLAMA_MODELS, HF_HOME; kb: Claude Code, Codex. Never cleaned |
+| `android` | clean: SDK manager leftovers, tool caches; attribution: SDK, user home, system images and emulator devices (review); kb: emulator processes |
+| `asus` | kb: Armoury Crate, Aura, ASUS services, A-Volute (Nahimic, Sonic Studio) |
+| `browsers` | clean: HTTP, code and GPU caches of Chrome, Edge, Brave, Firefox; attribution: profiles and service worker caches (review); kb: Edge, WebView2 |
+| `chrome` | clean: per-profile WebGPU (Dawn) caches; attribution: on-device AI model (review); kb: chrome.exe |
+| `cpp` | clean: build output of inactive vcxproj and CMake projects |
+| `creative-apps` | attribution: Autodesk installer leftovers (review); kb: Autodesk, FlexNet, Maxon, Reallusion processes |
+| `dev-tools` | attribution (review/uninstall): source projects, SDKs and toolchains, ~/.cache; kb: Git |
+| `device-software` | kb: Realtek, Intel, Epson, TC-Helicon, Apple Bonjour |
+| `dotnet` | clean: bin/obj of inactive .sln, .slnx and .csproj code bases, NuGet locals (`dotnet nuget locals`); attribution: NuGet packages (relocate) and caches |
+| `electron-apps` | clean: caches and crash reports of Discord, Slack, Teams classic and new Teams; attribution; kb: Discord, Teams |
+| `flutter` | clean: .dart_tool and build of inactive Flutter projects |
+| `games` | clean: Steam web and download caches, Epic launcher web cache; attribution: Steam, Epic and other launchers' games (uninstall); kb: Steam |
+| `go` | clean: build and module caches (`go clean`); attribution: build and module caches (relocate) |
+| `gpu` | clean: NVIDIA, AMD and DirectX shader caches (ask); attribution: driver installer leftovers (review); kb: AMD and NVIDIA driver processes |
+| `java-gradle` | clean: build output of inactive Gradle and Maven projects, unused Gradle versions; attribution: Gradle home (relocate), Maven repository (review); kb: Temurin java.exe |
+| `jetbrains` | clean: IDE caches, local folders of old IDE versions; attribution: settings (review), IDEs (uninstall) |
+| `node` | clean: node_modules and build output of inactive JavaScript projects, npm/pnpm/Yarn caches (their own prune commands); attribution: npm cache (relocate), global packages, Bun and Electron caches (review); kb: node.exe |
 | `playwright` | clean: test browsers; attribution: browsers, MCP profiles (review) |
-| `vcpkg` | clean: build trees, packages and downloads of the usual roots and of clones in the workspaces, binary cache archives; attribution (installed libraries: uninstall) |
-| `wsl-docker` | relocate: WSL distributions (`wsl --manage --move`); attribution: distribution disks, Docker Desktop disk |
-| `ai-tools` | attribution (review): Codex sessions and images, Claude Code transcripts, Ollama, LM Studio, Hugging Face and local AI models; relocate: OLLAMA_MODELS, HF_HOME. Never cleaned |
-| `chrome` | clean: per-profile WebGPU (Dawn) caches; attribution: on-device AI model (review) |
-| `vscode` | clean: old version data, extension packages, stale workspace storage; attribution: web storage (review) |
-| `android` | clean: SDK manager leftovers, tool caches; attribution: system images and emulator devices (review) |
+| `python` | clean: caches and build output of inactive Python projects, pip and uv caches (their own commands); attribution: pip cache (relocate), uv, Python and Conda installs (uninstall); kb: python.exe |
 | `python-store` | clean: pip cache of Store Pythons; attribution: installs (uninstall), user packages (review) |
-| `rust` | clean: Cargo crate cache, sources and git checkouts; compress: toolchains (LZX); relocate: RUSTUP_HOME |
-| `windows-setup-logs` | clean: the Setup Log Files and Windows Upgrade Log Files handlers; attribution: Panther, setup logs |
+| `rust` | clean: Cargo crate cache, sources and git checkouts, target of inactive Cargo projects; compress: toolchains (LZX); relocate: RUSTUP_HOME; attribution: Cargo home (relocate) |
+| `security-network` | kb: Kaspersky, OpenVPN, WireGuard, AnyDesk, ExitLag |
+| `unity` | clean: Library, Temp, Obj and Logs of inactive Unity projects (ask); attribution: editors (uninstall), package and Asset Store cache (review) |
+| `unreal` | clean: build output, derived data, logs and crashes of inactive Unreal projects (ask); attribution: engines (uninstall), shared DDC (relocate), per-user data and Vault cache (review) |
+| `uzpainter` | attribution (review): app data, cache |
+| `vcpkg` | clean: build trees, packages and downloads of the usual roots and of clones in the workspaces, binary cache archives; attribution (installed libraries: uninstall; roots: review) |
+| `visual-studio` | clean: component (MEF) cache, .vs state of inactive solutions; attribution: installations (uninstall), installer cache and per-user data (review); kb: vctip |
+| `vscode` | clean: old version data, extension packages, stale workspace storage, Chromium caches; attribution: web storage and extensions (review); kb: Code, Copilot runtime |
+| `windows` | clean: temp folders, crash dumps, error reports, icon cache, the Windows cleanup handlers, DISM component cleanup; attribution: system files and folders, programs, the owner's folders; kb: Windows, PowerToys, OneDrive and other Microsoft processes |
+| `windows-setup-logs` | clean: the Setup Log Files and Windows Upgrade Log Files handlers; attribution: Panther (the upgrade-log handler), setup logs |
+| `wsl-docker` | relocate: WSL 2 distributions (`wsl --manage --move`), WSL 1 distributions (`wsl-import`); clean: `docker system prune`; attribution: distribution disks, WSL 1 file systems, Docker Desktop disk; kb: WSL and Docker processes |
+| `zig` | clean: global cache entries; attribution |

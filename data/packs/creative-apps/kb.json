@@ -1,0 +1,67 @@
+{
+  "entries": [
+    {
+      "id": "autodesk.licensing-service",
+      "image": "AdskLicensingService.exe",
+      "signer": "Autodesk, Inc.",
+      "description": "Autodesk Desktop Licensing Service. Checks the licenses of installed Autodesk apps.",
+      "category": "licensing",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "autodesk.access-service-host",
+      "image": "AdskAccessServiceHost.exe",
+      "signer": "Autodesk, Inc.",
+      "description": "Autodesk Access Service Host. Background service of Autodesk Access, which installs and updates Autodesk apps.",
+      "category": "updater",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "autodesk.cer-service",
+      "image": "cer_service.exe",
+      "signer": "Autodesk, Inc.",
+      "description": "Autodesk CER Service. Sends error reports of Autodesk apps to Autodesk.",
+      "category": "utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "flexera.flexnet-licensing",
+      "image": "FNPLicensingService64.exe",
+      "signer": "Flexera Software LLC",
+      "description": "FlexNet Licensing Service. Checks licenses for programs that use FlexNet licensing; installed by such programs.",
+      "category": "licensing",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "maxon.redirect",
+      "image": "mxredirect.exe",
+      "signer": "Maxon Computer GmbH",
+      "description": "Maxon service (mxredirect), installed with Maxon software such as Cinema 4D or Red Giant.",
+      "category": "creative",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "maxon.red-giant-service",
+      "image": "Red Giant Service.exe",
+      "signer": "Maxon Computer GmbH",
+      "description": "Red Giant Service, a background service of Red Giant (Maxon) software.",
+      "category": "creative",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "reallusion.host-service",
+      "image": "RLHostService.exe",
+      "signer": "Reallusion Inc.",
+      "description": "Reallusion host service, installed with Reallusion apps such as iClone or Character Creator.",
+      "category": "creative",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

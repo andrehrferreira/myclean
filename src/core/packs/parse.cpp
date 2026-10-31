@@ -30,8 +30,9 @@ namespace {
 using detail::Fields;
 using detail::SchemaError;
 
-constexpr std::array<std::string_view, 4> setting_kind_names = {"env", "config", "registry",
-                                                                "command"};
+constexpr std::array<std::string_view, 5> setting_kind_names = {"env", "config", "registry",
+                                                                "command", "wsl-import"};
+constexpr std::size_t current_kinds = 4;  // the first ones: wsl-import is a target kind only
 constexpr std::array<std::string_view, 2> content_mode_names = {"move", "regenerate"};
 constexpr std::array<std::string_view, 3> undo_kind_names = {"restore", "command", "none"};
 constexpr std::array<std::string_view, 2> origin_names = {"builtin", "owner"};
@@ -149,16 +150,32 @@ bool valid_pack_id(std::string_view id) {
          });
 }
 
+InstanceFilter parse_filter(const Fields& filter) {
+  filter.only({"value", "mask", "equals"});
+  constexpr std::int64_t max_dword = 0xFFFFFFFF;
+  const std::optional<std::int64_t> mask = filter.integer("mask", 1, max_dword);
+  const std::optional<std::int64_t> equals = filter.integer("equals", 0, max_dword);
+  if (!mask || !equals) {
+    filter.fail(mask ? "equals" : "mask", "is missing");
+  }
+  if ((*equals & ~*mask) != 0) {
+    filter.fail("equals", "has bits that mask leaves out");
+  }
+  return InstanceFilter{.value = filter.required_string("value"),
+                        .mask = static_cast<std::uint32_t>(*mask),
+                        .equals = static_cast<std::uint32_t>(*equals)};
+}
+
 Setting parse_setting(const Fields& recipe) {
   const toml::table* table = recipe.table("current");
   if (table == nullptr) {
     recipe.fail("current", "is missing");
   }
   const Fields fields(*table, recipe.where(), "current.");
-  fields.only({"env", "config", "key", "format", "registry", "name", "command"});
+  fields.only({"env", "config", "key", "format", "registry", "name", "where", "command"});
   Setting setting;
   int kinds = 0;
-  for (std::size_t index = 0; index < setting_kind_names.size(); ++index) {
+  for (std::size_t index = 0; index < current_kinds; ++index) {
     if (std::optional<std::string> text = fields.string(setting_kind_names.at(index))) {
       setting.kind = static_cast<SettingKind>(index);
       setting.text = std::move(*text);
@@ -188,6 +205,12 @@ Setting parse_setting(const Fields& recipe) {
   setting.name = fields.string("name").value_or("");
   if (!registry && !setting.name.empty()) {
     fields.fail("name", "is only allowed with registry");
+  }
+  if (const toml::table* where = fields.table("where")) {
+    if (setting.name.empty()) {
+      fields.fail("where", "needs instances: registry with name");
+    }
+    setting.where = parse_filter(Fields(*where, recipe.where(), "current.where."));
   }
   return setting;
 }
@@ -225,6 +248,10 @@ RelocationRecipe parse_recipe(const toml::table& table, const std::string& posit
   recipe.current = parse_setting(fields);
   recipe.target_kind = fields.required_choice<SettingKind>("target_kind", setting_kind_names);
   recipe.command = fields.string("command").value_or("");
+  const bool wsl_import = recipe.target_kind == SettingKind::wsl_import;
+  if (wsl_import && recipe.current.name.empty()) {
+    fields.fail("target_kind", "'wsl-import' needs instances: current.registry with current.name");
+  }
   if (recipe.target_kind == SettingKind::command) {
     if (recipe.command.empty()) {
       fields.fail("command", "is required for target_kind 'command'");
@@ -234,7 +261,7 @@ RelocationRecipe parse_recipe(const toml::table& table, const std::string& posit
     if (!recipe.command.empty()) {
       fields.fail("command", "is only allowed with target_kind 'command'");
     }
-    if (recipe.target_kind != recipe.current.kind) {
+    if (!wsl_import && recipe.target_kind != recipe.current.kind) {
       fields.fail("target_kind", "must be '" + std::string(to_string(recipe.current.kind)) +
                                      "': it writes the setting `current` names");
     }
@@ -248,11 +275,13 @@ RelocationRecipe parse_recipe(const toml::table& table, const std::string& posit
   }
   recipe.undo = fields.required_choice<UndoKind>("undo", undo_kind_names);
   recipe.note = fields.string("note").value_or("");
-  if (recipe.undo == UndoKind::restore && recipe.target_kind == SettingKind::command) {
-    fields.fail("undo", "must be command or none for target_kind 'command'");
+  const bool moved_by_tool = recipe.target_kind == SettingKind::command || wsl_import;
+  if (recipe.undo == UndoKind::restore && moved_by_tool) {
+    fields.fail("undo", "must be command or none for target_kind '" +
+                            std::string(to_string(recipe.target_kind)) + "'");
   }
-  if (recipe.undo == UndoKind::command && recipe.target_kind != SettingKind::command) {
-    fields.fail("undo", "may be command only for target_kind 'command'");
+  if (recipe.undo == UndoKind::command && !moved_by_tool) {
+    fields.fail("undo", "may be command only for target_kind 'command' or 'wsl-import'");
   }
   if (recipe.undo == UndoKind::none && recipe.note.empty()) {
     fields.fail("note", "is required with undo 'none': it says how to go back");
@@ -339,6 +368,18 @@ std::string_view to_string(ContentMode mode) {
 
 std::string_view to_string(UndoKind kind) {
   return myclean::detail::enum_name(undo_kind_names, kind);
+}
+
+std::optional<SettingKind> parse_setting_kind(std::string_view text) {
+  return myclean::detail::enum_from_name<SettingKind>(setting_kind_names, text);
+}
+
+std::optional<ContentMode> parse_content_mode(std::string_view text) {
+  return myclean::detail::enum_from_name<ContentMode>(content_mode_names, text);
+}
+
+std::optional<UndoKind> parse_undo_kind(std::string_view text) {
+  return myclean::detail::enum_from_name<UndoKind>(undo_kind_names, text);
 }
 
 std::string_view to_string(Origin origin) {

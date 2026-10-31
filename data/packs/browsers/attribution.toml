@@ -1,0 +1,55 @@
+# Sources: pack.toml. Chrome's on-device AI model and WebGPU caches are areas of the chrome pack.
+
+[[area]]
+id       = "profiles"
+paths    = ['%LOCALAPPDATA%\Google\Chrome\User Data', '%LOCALAPPDATA%\Microsoft\Edge\User Data',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data', '%APPDATA%\Mozilla\Firefox\Profiles',
+            '%LOCALAPPDATA%\Mozilla\Firefox\Profiles']
+category = "apps"
+label    = "Browser profiles (history, extensions, site data)"
+reclaim  = { kind = "manual-review", note = "Site data can be cleared per site in the browser's settings; never removed by MyClean." }
+
+[[area]]
+id       = "service-worker-cache"
+paths    = ['%LOCALAPPDATA%\Google\Chrome\User Data\*\Service Worker', '%LOCALAPPDATA%\Microsoft\Edge\User Data\*\Service Worker',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*\Service Worker']
+category = "browser-caches"
+label    = "Browser service worker caches of web sites"
+reclaim  = { kind = "manual-review", note = "Cleared with the site data of each site in the browser's settings. No cleaning rule covers it yet." }
+
+[[area]]
+id       = "chrome-cache"
+paths    = ['%LOCALAPPDATA%\Google\Chrome\User Data\*\Cache', '%LOCALAPPDATA%\Google\Chrome\User Data\*\Code Cache',
+            '%LOCALAPPDATA%\Google\Chrome\User Data\*\GPUCache', '%LOCALAPPDATA%\Google\Chrome\User Data\ShaderCache',
+            '%LOCALAPPDATA%\Google\Chrome\User Data\GrShaderCache', '%LOCALAPPDATA%\Google\Chrome\User Data\GraphiteDawnCache']
+category = "browser-caches"
+label    = "Chrome cache"
+reclaim  = { kind = "clean-rule", ref = "chrome-cache" }
+
+[[area]]
+id       = "edge-cache"
+paths    = ['%LOCALAPPDATA%\Microsoft\Edge\User Data\*\Cache', '%LOCALAPPDATA%\Microsoft\Edge\User Data\*\Code Cache',
+            '%LOCALAPPDATA%\Microsoft\Edge\User Data\*\GPUCache', '%LOCALAPPDATA%\Microsoft\Edge\User Data\ShaderCache',
+            '%LOCALAPPDATA%\Microsoft\Edge\User Data\GrShaderCache', '%LOCALAPPDATA%\Microsoft\Edge\User Data\GraphiteDawnCache']
+category = "browser-caches"
+label    = "Edge cache"
+reclaim  = { kind = "clean-rule", ref = "edge-cache" }
+
+[[area]]
+id       = "brave-cache"
+paths    = ['%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*\Cache',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*\Code Cache',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*\GPUCache',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\ShaderCache',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\GrShaderCache',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\GraphiteDawnCache']
+category = "browser-caches"
+label    = "Brave cache"
+reclaim  = { kind = "clean-rule", ref = "brave-cache" }
+
+[[area]]
+id       = "firefox-cache"
+paths    = ['%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\cache2', '%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\startupCache']
+category = "browser-caches"
+label    = "Firefox cache"
+reclaim  = { kind = "clean-rule", ref = "firefox-cache" }

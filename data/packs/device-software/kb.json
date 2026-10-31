@@ -1,0 +1,49 @@
+{
+  "entries": [
+    {
+      "id": "realtek.audio-universal-service",
+      "image": "RtkAudUService64.exe",
+      "signer": "Realtek Semiconductor Corp.",
+      "description": "Realtek Audio Universal Service. Part of the Realtek audio driver; connects it with Realtek's audio settings app.",
+      "category": "driver",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "intel.proset-wireless",
+      "image": "Intel_PIE_Service.exe",
+      "signer": "Intel Corporation",
+      "description": "Intel PROSet/Wireless Service, part of the Intel Wi-Fi and Bluetooth driver.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "apple.bonjour",
+      "image": "mDNSResponder.exe",
+      "signer": "Apple Inc.",
+      "description": "Apple Bonjour Service. Finds devices and services on the local network, such as printers; installed by Apple and other software.",
+      "category": "network",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "epson.scanner-service",
+      "image": "EscSvc64.exe",
+      "signer": "SEIKO EPSON CORPORATION",
+      "description": "Epson Scanner Service, part of the Epson scanner driver.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "tchelicon.goxlr",
+      "image": "GoXLR App.exe",
+      "signer": "T.C. Electronic A/S (MUSIC Tribe Brands DK A/S)",
+      "description": "GoXLR App. Controls the TC-Helicon GoXLR audio mixer.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

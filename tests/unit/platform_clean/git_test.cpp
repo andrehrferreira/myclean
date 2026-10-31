@@ -12,13 +12,14 @@
 #include "core/clean/workspaces.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
-#include "core/rules/catalog.hpp"
 #include "core/rules/data_files.hpp"
+#include "core/rules/schema.hpp"
 #include "core/safety/deny_list.hpp"
 #include "platform/clean/win32_probes.hpp"
 #include "platform/fs/protected_locations.hpp"
 #include "platform/git/git_cli.hpp"
 #include "sandbox.hpp"
+#include "shipped_rules.hpp"
 
 namespace myclean::platform {
 namespace {
@@ -141,8 +142,8 @@ TEST_F(SandboxRepository, RepositoryWithoutCommitsHasNoLastCommit) {
 // The developer-artifact scan end to end on the real file system and git, with the shipped
 // rules, two months from now: only the ignored, untracked node_modules is proposed.
 TEST_F(SandboxRepository, ScanProposesOnlyIgnoredUntrackedArtifacts) {
-  rules::RuleCatalog catalog = rules::make_rule_catalog(MYCLEAN_DATA_DIR);
-  ASSERT_TRUE(catalog.reload(rules::DiskDataFiles{}).empty());
+  const std::vector<rules::CleaningRule> shipped = testing::shipped_rules();
+  ASSERT_FALSE(shipped.empty());
   const Result<safety::ProtectedLocations> locations = protected_locations(nullptr);
   ASSERT_TRUE(locations.has_value()) << locations.error().message;
   const Win32FileTree tree;
@@ -154,12 +155,12 @@ TEST_F(SandboxRepository, ScanProposesOnlyIgnoredUntrackedArtifacts) {
       .roots = {sandbox().root()}, .skip = {L".git", L"node_modules"}, .max_depth = 4};
 
   const clean::Evaluation evaluation = engine.scan_artifacts(
-      catalog.entries(), workspaces, git, std::chrono::system_clock::now() + std::chrono::days{60});
+      shipped, workspaces, git, std::chrono::system_clock::now() + std::chrono::days{60});
 
   ASSERT_EQ(evaluation.candidates.size(), 1U);
   const clean::Candidate& candidate = evaluation.candidates.front();
   EXPECT_EQ(candidate.path, project() / "node_modules");
-  EXPECT_EQ(candidate.rule_id, "dev.node");
+  EXPECT_EQ(candidate.rule_id, "node/artifacts");
   EXPECT_EQ(candidate.project, project());
   EXPECT_GE(candidate.size, Bytes{4096});
   EXPECT_EQ(git.tracks_files(project(), candidate.path), false);
@@ -174,8 +175,8 @@ TEST_F(SandboxRepository, ScanProposesOnlyIgnoredUntrackedArtifacts) {
 }
 
 TEST_F(SandboxRepository, RecentProjectProposesNothing) {
-  rules::RuleCatalog catalog = rules::make_rule_catalog(MYCLEAN_DATA_DIR);
-  ASSERT_TRUE(catalog.reload(rules::DiskDataFiles{}).empty());
+  const std::vector<rules::CleaningRule> shipped = testing::shipped_rules();
+  ASSERT_FALSE(shipped.empty());
   const Win32FileTree tree;
   const Win32Environment environment;
   const Win32Usage usage;
@@ -184,7 +185,7 @@ TEST_F(SandboxRepository, RecentProjectProposesNothing) {
   const clean::Workspaces workspaces{.roots = {sandbox().root()}, .skip = {}, .max_depth = 4};
 
   const clean::Evaluation evaluation =
-      engine.scan_artifacts(catalog.entries(), workspaces, git, std::chrono::system_clock::now());
+      engine.scan_artifacts(shipped, workspaces, git, std::chrono::system_clock::now());
 
   EXPECT_TRUE(evaluation.candidates.empty());
   EXPECT_TRUE(evaluation.dropped.empty());

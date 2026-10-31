@@ -1,0 +1,22 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "user-data"
+paths    = ['%LOCALAPPDATA%\JetBrains', '%APPDATA%\JetBrains']
+category = "dev-caches"
+label    = "JetBrains IDE settings, indexes and caches"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "caches"
+paths    = ['%LOCALAPPDATA%\JetBrains\*\caches']
+category = "dev-caches"
+label    = "JetBrains IDE caches"
+reclaim  = { kind = "clean-rule", ref = "caches" }
+
+[[area]]
+id       = "toolbox"
+paths    = ['%LOCALAPPDATA%\JetBrains\Toolbox\apps', '%LOCALAPPDATA%\Programs\JetBrains*']
+category = "dev-toolchains"
+label    = "JetBrains IDEs"
+reclaim  = { kind = "uninstall", note = "JetBrains Toolbox removes IDE versions you no longer use." }

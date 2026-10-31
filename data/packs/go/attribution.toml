@@ -1,0 +1,15 @@
+# Sources: pack.toml. The Go installation in Program Files is an area of the dev-tools pack.
+
+[[area]]
+id       = "build"
+paths    = ['%LOCALAPPDATA%\go-build']
+category = "dev-caches"
+label    = "Go build cache"
+reclaim  = { kind = "relocate", ref = "go_build", note = "Rule go/cache cleans it instead." }
+
+[[area]]
+id       = "modules"
+paths    = ['%USERPROFILE%\go\pkg\mod']
+category = "dev-caches"
+label    = "Go module cache"
+reclaim  = { kind = "relocate", ref = "go_modules", note = "Rule go/cache cleans it instead." }

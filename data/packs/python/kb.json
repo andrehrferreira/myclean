@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "id": "python",
+      "image": "python.exe",
+      "signer": "Python Software Foundation",
+      "description": "Python. Runs Python programs; many tools start it.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

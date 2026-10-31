@@ -132,7 +132,7 @@ TEST_F(CleaningServiceTest, PlanGetShowsItemsCommandsAndUndo) {
   EXPECT_EQ(plan.at("items_total"), 2);
   const Json& item = plan.at("items")[0];
   EXPECT_EQ(item.at("path"), "F:\\cache\\s1.bin");
-  EXPECT_EQ(item.at("rule"), "test.ask.f");
+  EXPECT_EQ(item.at("rule"), "test/ask.f");
   EXPECT_NE(item.at("reason").get<std::string>().find("shader-caches"), std::string::npos);
   EXPECT_TRUE(item.at("approved").is_null());
   EXPECT_EQ(plan.at("commands"), Json::array({"move 2 items to the quarantine for 7 days"}));
@@ -252,7 +252,7 @@ TEST_F(CleaningServiceTest, AutoRunAtThreeDeletesAutoItemsAndWritesItsManifest) 
     if (entry.event == "manifest") {
       manifest = true;
       EXPECT_EQ(entry.metrics, "freed=" + std::to_string((3_MiB).count()) + " removed=2 skipped=0");
-      EXPECT_NE(entry.detail.find("test.auto"), std::string::npos);
+      EXPECT_NE(entry.detail.find("test/auto"), std::string::npos);
     }
   }
   EXPECT_TRUE(manifest);
@@ -516,6 +516,61 @@ TEST_F(CleaningServiceTest, CleaningWaitsForTheOwnersSession) {
   EXPECT_TRUE(call("cleaning.status").at("unavailable").is_null());
   scan();
   EXPECT_FALSE(plans().empty());
+}
+
+// The knowledge packs (docs/packs.md): the clean cases scans evaluate, each pack's status, and
+// the relocation recipes plans may name.
+TEST_F(CleaningServiceTest, LoadsThePacksReportsTheirStatusAndOffersTheirRecipes) {
+  const path broken = testing::data_dir / "packs" / "broken";
+  pack_files().put(broken / "pack.toml", std::string(testing::test_manifest));
+  pack_files().put(broken / "clean.toml", "[[rule]]\nid = \"x\"\n");
+  pack_files().put(testing::data_dir / "packs" / "tool" / "pack.toml",
+                   R"(id = "tool"
+version = "1.2.3"
+title = "Tool"
+description = "A tool."
+sources = ["observed on reference machine"]
+min_myclean = "0.1.0"
+)");
+  pack_files().put(testing::data_dir / "packs" / "tool" / "relocate.toml", R"([[relocate]]
+id          = "home"
+label       = "Tool home"
+locations   = ['%USERPROFILE%\.tool']
+current     = { env = "TOOL_HOME" }
+target_kind = "env"
+content     = "move"
+undo        = "restore"
+)");
+  start();
+  work();
+
+  const std::vector<ipc::PackStatus> status = service().pack_status();
+  ASSERT_EQ(status.size(), 3U);
+  EXPECT_EQ(status[0].id, "broken");
+  EXPECT_EQ(status[0].status, "rejected");
+  EXPECT_FALSE(status[0].applies);
+  const std::string message = status[0].message.value_or("");
+  EXPECT_NE(message.find("pack 'broken'"), std::string::npos) << message;
+  EXPECT_EQ(status[1].id, "test");
+  EXPECT_EQ(status[1].version, "1.0.0");
+  EXPECT_EQ(status[1].origin, "builtin");
+  EXPECT_TRUE(status[1].applies);
+  EXPECT_EQ(status[2].version, "1.2.3");
+  const std::vector<std::string> problems = service().problems();
+  EXPECT_TRUE(std::ranges::any_of(problems, [](const std::string& problem) {
+    return problem.starts_with("packs: pack 'broken'");
+  }));
+
+  const Json unknown =
+      error_of("plans.propose_optimization",
+               Json{{"kind", "relocate"}, {"pack", "tool"}, {"recipe", "none"}}, true);
+  ASSERT_TRUE(unknown.is_object());
+  EXPECT_NE(unknown.at("message").get<std::string>().find("no relocation recipe \"tool/none\""),
+            std::string::npos)
+      << unknown;
+  const Json plan = call("plans.propose_optimization",
+                         Json{{"kind", "relocate"}, {"pack", "tool"}, {"recipe", "home"}});
+  EXPECT_EQ(plan.at("state"), "awaiting_approval");
 }
 
 }  // namespace

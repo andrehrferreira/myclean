@@ -88,10 +88,19 @@ struct Manifest {
 //                                                      #   a registry value; '*' in a key matches
 //                                                      #   every subkey, each one an instance,
 //                                                      #   named by its value `name` (optional)
+//                                                      #   of the same key
 //                 { command = "rustup show home" }     #   a command that prints the location
+//                 where = { value = "Flags", mask = 8, equals = 8 }
+//                                                      #   registry with name, optional: only the
+//                                                      #   instances whose DWORD value `value`
+//                                                      #   & mask == equals
 //   target_kind = "env"                                # required: env | config | registry |
-//                                                      # command; env, config and registry write
-//                                                      # the setting `current` names
+//                                                      # command | wsl-import; env, config and
+//                                                      # registry write the setting `current`
+//                                                      # names; wsl-import moves a WSL 1
+//                                                      # distribution (instances of the Lxss key)
+//                                                      # with wsl --export, a verified
+//                                                      # wsl --import and wsl --unregister
 //   command     = "wsl --manage {name} --move {target}"  # target_kind command only: {target} is
 //                                                      # the new folder, {name} the instance name
 //   content     = "move"                               # required: move | regenerate
@@ -99,17 +108,29 @@ struct Manifest {
 //   skip_names  = ["docker-desktop"]                   # optional: instances never offered
 //   undo        = "restore"                            # required: restore (the previous value,
 //                                                      # absence included; env, config and
-//                                                      # registry), command (`command` again with
-//                                                      # {target} = the previous folder) or none
+//                                                      # registry), command (the move again with
+//                                                      # {target} = the previous folder; command
+//                                                      # and wsl-import) or none
 //   note        = "..."                                # optional; required with undo = "none"
 
-enum class SettingKind { env, config, registry, command };
+enum class SettingKind { env, config, registry, command, wsl_import };  // wsl_import: target only
 enum class ContentMode { move, regenerate };  // text forms as placement::ContentMode
 enum class UndoKind { restore, command, none };
 
 [[nodiscard]] std::string_view to_string(SettingKind kind);
 [[nodiscard]] std::string_view to_string(ContentMode mode);
 [[nodiscard]] std::string_view to_string(UndoKind kind);
+[[nodiscard]] std::optional<SettingKind> parse_setting_kind(std::string_view text);
+[[nodiscard]] std::optional<ContentMode> parse_content_mode(std::string_view text);
+[[nodiscard]] std::optional<UndoKind> parse_undo_kind(std::string_view text);
+
+// The instances a registry setting offers: those whose DWORD value `value` (in the key of the
+// setting's value), masked with `mask`, equals `equals`. An instance without it is not offered.
+struct InstanceFilter {
+  std::string value;
+  std::uint32_t mask = 0;
+  std::uint32_t equals = 0;
+};
 
 struct Setting {
   SettingKind kind = SettingKind::env;
@@ -117,6 +138,7 @@ struct Setting {
   std::string key;     // config: the key
   std::string format;  // config: ini (key = value lines, such as .npmrc) or json (a top-level key)
   std::string name;    // registry: the value naming each instance; empty when there is none
+  std::optional<InstanceFilter> where;  // registry with name: the instances offered
 };
 
 struct RelocationRecipe {

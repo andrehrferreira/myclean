@@ -1,0 +1,8 @@
+id          = "device-software"
+version     = "1.0.0"
+title       = "Device software"
+description = "What the background processes of audio, network, printer and accessory software (Realtek, Intel, Epson, TC-Helicon, Apple Bonjour) are."
+sources     = [
+  "observed on reference machine: the Realtek audio, Intel PROSet wireless, Epson scanner, TC-Helicon GoXLR and Apple Bonjour processes, their image paths and signers",
+]
+min_myclean = "0.1.0"

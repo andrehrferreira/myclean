@@ -1,0 +1,18 @@
+# Process images the knowledge base of this pack recognizes (kb.json), and one it does
+# not.
+
+[[expect]]
+kind     = "kb"
+case     = "google.android-emulator"
+match    = ['emulator.exe']
+no_match = ['notepad++.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "google.android-emulator-qemu"
+match    = ['qemu-system-x86_64.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "google.android-emulator-netsim"
+match    = ['netsimd.exe']

@@ -62,7 +62,7 @@ TEST_F(ArtifactScanTest, IgnoredArtifactOfAnInactiveProjectIsProposed) {
   ASSERT_EQ(evaluation.candidates.size(), 1U);
   const Candidate& candidate = evaluation.candidates.front();
   EXPECT_EQ(candidate.path, fs::path{R"(F:\app\node_modules)"});
-  EXPECT_EQ(candidate.rule_id, "dev.node");
+  EXPECT_EQ(candidate.rule_id, "node/artifacts");
   EXPECT_EQ(candidate.size, 1_MiB);
   EXPECT_EQ(candidate.project, fs::path{R"(F:\app)"});
   EXPECT_EQ(candidate.tier, Tier::automatic);
@@ -212,8 +212,9 @@ TEST_F(ArtifactScanTest, ArtifactSelectedByTwoRulesIsProposedOnce) {
   const Evaluation evaluation = scan();
 
   ASSERT_EQ(evaluation.candidates.size(), 1U);
-  EXPECT_EQ(evaluation.candidates.front().rule_id, "dev.node");
-  EXPECT_EQ(dropped_at(evaluation, R"(F:\native\build)")->reason, "covered_by:dev.node");
+  // The first rule in load order (pack cpp before pack node) keeps it.
+  EXPECT_EQ(evaluation.candidates.front().rule_id, "cpp/cmake-artifacts");
+  EXPECT_EQ(dropped_at(evaluation, R"(F:\native\build)")->reason, "covered_by:cpp/cmake-artifacts");
 }
 
 TEST_F(ArtifactScanTest, DefaultInactiveDaysAre30ForAutoAnd14Otherwise) {

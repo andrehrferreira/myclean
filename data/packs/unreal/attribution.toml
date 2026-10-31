@@ -1,0 +1,37 @@
+# Sources: pack.toml. The Epic Games launcher and its games are areas of the games pack.
+
+[[area]]
+id       = "engine"
+paths    = ['%ProgramFiles%\Epic Games\UE_*', '?:\Epic Games\UE_*']
+category = "dev-toolchains"
+label    = "Unreal Engine installations"
+reclaim  = { kind = "uninstall", note = "Epic Games launcher > Unreal Engine > Library removes engine versions or optional parts." }
+
+[[area]]
+id       = "ddc"
+paths    = ['%LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache']
+category = "dev-caches"
+label    = "Unreal Engine shared derived data cache"
+reclaim  = { kind = "relocate", ref = "unreal_ddc" }
+
+[[area]]
+id       = "user"
+paths    = ['%LOCALAPPDATA%\UnrealEngine']
+category = "dev-caches"
+label    = "Unreal Engine per-user data and caches (Zen storage, editor settings)"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "vault"
+paths    = ['%ProgramData%\Epic\EpicGamesLauncher\VaultCache']
+category = "dev-caches"
+label    = "Unreal Marketplace (Fab) download cache"
+reclaim  = { kind = "manual-review", note = "Epic Games launcher > Settings > Edit Vault cache location, or remove downloaded packs you no longer add to projects." }
+
+[[area]]
+id       = "project-output"
+paths    = ['%USERPROFILE%\Documents\Unreal Projects\*\Intermediate', '%USERPROFILE%\Documents\Unreal Projects\*\DerivedDataCache',
+            '%USERPROFILE%\Documents\Unreal Projects\*\Binaries']
+category = "build-artifacts"
+label    = "Unreal project build output and derived data"
+reclaim  = { kind = "clean-rule", ref = "project-artifacts" }

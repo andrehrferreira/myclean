@@ -1,0 +1,51 @@
+# Developer artifacts (cleaning spec, "Developer Artifact Qualification"; analysis F-012;
+# sources: pack.toml). The scanner walks the roots of data/workspaces.toml; a folder holding a
+# rule's marker is a project root, and the rule's targets are patterns relative to it. An
+# artifact is proposed only when the project is in a git work tree, git ignores the artifact and
+# tracks nothing inside it, no process uses it or the project, and the project is inactive for
+# require.inactive_days (newest of the last commit and every source file). One marker per rule:
+# toolchains with several markers have one rule per marker, and an artifact that several rules
+# select is proposed once. C++ projects (*.vcxproj) are in the cpp pack, the .vs folder in the
+# visual-studio pack.
+
+[[rule]]
+id       = "sln-artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "*.sln" }
+targets  = ["bin", "obj", "x64", "Debug", "Release"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+[[rule]]
+id       = "slnx-artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "*.slnx" }
+targets  = ["bin", "obj", "x64", "Debug", "Release"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+[[rule]]
+id       = "csproj-artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "*.csproj" }
+targets  = ["bin", "obj", "x64", "Debug", "Release"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+# NuGet's folders (cleaning spec, "Native Prune Commands Under the User Token"; analysis F-013),
+# cleared with the .NET CLI, run by the tray under the owner's token. The targets are only
+# measured: the rule is offered when they hold anything, sized by what they hold now.
+[[rule]]
+id       = "nuget-locals"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "dotnet nuget locals all --clear"
+targets  = ['%USERPROFILE%\.nuget\packages', '%LOCALAPPDATA%\NuGet\v3-cache']

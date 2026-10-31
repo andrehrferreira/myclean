@@ -1,5 +1,6 @@
 #include "core/map/attribution.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -8,9 +9,11 @@
 #include <gtest/gtest.h>
 
 #include "core/model/result.hpp"
+#include "core/packs/loader.hpp"
+#include "core/packs/registry.hpp"
+#include "core/packs/schema.hpp"
 #include "core/placement/relocation.hpp"
-#include "core/rules/catalog.hpp"
-#include "core/rules/data_files.hpp"
+#include "core/rules/schema.hpp"
 
 namespace myclean::map {
 namespace {
@@ -115,22 +118,26 @@ TEST(ParseAttribution, RejectsTheWholeFileNamingAreaAndField) {
             std::string::npos);
 }
 
+// The areas of the shipped packs: a clean-rule ref names a clean case, a relocate ref a recipe
+// of a pack or a built-in relocation target.
 TEST(ShippedAttribution, LoadsAndEveryReferenceExists) {
-  const rules::DiskDataFiles files;
-  const Result<std::vector<Area>> areas = load_attribution(files, MYCLEAN_DATA_DIR);
-  ASSERT_TRUE(areas.has_value()) << areas.error().message;
-  EXPECT_GE(areas->size(), 60U);
-
-  rules::RuleCatalog catalog = rules::make_rule_catalog(MYCLEAN_DATA_DIR);
-  const std::vector<Error> errors = catalog.reload(files);
-  ASSERT_TRUE(errors.empty()) << errors.front().message;
-  for (const Area& area : *areas) {
+  const packs::LoadReport report =
+      packs::load_packs(packs::DiskPackFiles{}, std::filesystem::path{MYCLEAN_DATA_DIR} / "packs",
+                        std::nullopt, packs::this_version());
+  ASSERT_TRUE(report.errors.empty()) << report.errors.front().message;
+  const packs::Registry registry = packs::make_registry(report.packs);
+  EXPECT_GE(registry.attribution.size(), 60U);
+  for (const Area& area : registry.attribution) {
     const Reclaim& reclaim = area.reclaim;
     if (reclaim.kind == ReclaimKind::clean_rule) {
-      EXPECT_NE(catalog.find(reclaim.ref), nullptr) << area.id << ": no rule " << reclaim.ref;
+      EXPECT_NE(std::ranges::find(registry.clean, reclaim.ref, &rules::CleaningRule::id),
+                registry.clean.end())
+          << area.id << ": no rule " << reclaim.ref;
     }
     if (reclaim.kind == ReclaimKind::relocate) {
-      EXPECT_TRUE(placement::parse_cache_kind(reclaim.ref).has_value() || reclaim.ref == "wsl" ||
+      EXPECT_TRUE(std::ranges::find(registry.relocate, reclaim.ref, &packs::RelocationRecipe::id) !=
+                      registry.relocate.end() ||
+                  placement::parse_cache_kind(reclaim.ref).has_value() || reclaim.ref == "wsl" ||
                   reclaim.ref == "docker")
           << area.id << ": no relocation " << reclaim.ref;
     }

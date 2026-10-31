@@ -20,7 +20,8 @@
 #include "core/ipc/telemetry.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
-#include "core/rules/catalog.hpp"
+#include "core/packs/loader.hpp"
+#include "core/packs/registry.hpp"
 #include "core/rules/data_files.hpp"
 #include "core/trust/trust.hpp"
 #include "svc/component.hpp"
@@ -76,19 +77,23 @@ Json trust_json(const trust::TrustSignal& signal) {
       {"category", signal.entry ? Json(signal.entry->category) : Json(nullptr)}};
 }
 
-TrustComponent::TrustComponent(TrustSources sources, const rules::IDataFiles& files)
-    : sources_(std::move(sources)), files_(&files), kb_(rules::make_knowledge_base({})) {}
+TrustComponent::TrustComponent(TrustSources sources, const packs::IPackFiles& files)
+    : sources_(std::move(sources)), files_(&files) {}
 
 TrustComponent::~TrustComponent() {
   stop();
 }
 
 Result<void> TrustComponent::start(const Context& context) {
-  kb_ = rules::make_knowledge_base(context.data_dir());
-  for (const Error& error : kb_.reload(*files_)) {
+  const packs::LoadReport report = packs::load_installed(
+      *files_, context.data_dir(),
+      sources_.owner_packs ? sources_.owner_packs()
+                           : Result<std::optional<std::filesystem::path>>(std::nullopt));
+  for (const Error& error : report.errors) {
     problems_.push_back("knowledge base: " + error.message);
     spdlog::error("trust: {}", problems_.back());
   }
+  kb_ = packs::make_registry(report.packs).kb;
   std::vector<std::filesystem::path> roots;
   if (sources_.user_writable_roots) {
     roots = *sources_.user_writable_roots;
@@ -98,7 +103,7 @@ Result<void> TrustComponent::start(const Context& context) {
     spdlog::error("trust: {}", problems_.back());
   }
   evaluator_ = std::make_unique<trust::TrustEvaluator>(*sources_.inspector, std::move(roots));
-  spdlog::info("trust: {} knowledge-base entries", kb_.entries().size());
+  spdlog::info("trust: {} knowledge-base entries", kb_.size());
   worker_ = std::jthread([this](const std::stop_token& stop) { run(stop); });
   return {};
 }
@@ -117,7 +122,7 @@ ipc::ComponentHealth TrustComponent::health() const {
 
 Result<trust::TrustSignal> TrustComponent::process(std::uint32_t pid, WallTime created) {
   return sources_.images->image_path(pid, created).and_then([this](const auto& image) {
-    return evaluator_->evaluate(image, kb_.entries());
+    return evaluator_->evaluate(image, kb_);
   });
 }
 
@@ -144,7 +149,7 @@ void TrustComponent::run(const std::stop_token& stop) {
     const std::filesystem::path image = std::move(queue_.front());
     queue_.pop_front();
     lock.unlock();
-    Result<trust::TrustSignal> signal = evaluator_->evaluate(image, kb_.entries());
+    Result<trust::TrustSignal> signal = evaluator_->evaluate(image, kb_);
     lock.lock();
     std::string key = folded(utf8(image));
     queued_.erase(key);

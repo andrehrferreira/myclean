@@ -1,0 +1,20 @@
+id          = "node"
+version     = "1.0.0"
+title       = "Node.js, npm, pnpm and Yarn"
+description = "Build output and node_modules of inactive JavaScript projects (cleaned), the npm, pnpm and Yarn caches (pruned with each tool's own command), globally installed packages and other JavaScript runtime caches (for review), and what node.exe is."
+sources     = [
+  "https://docs.npmjs.com/cli/configuring-npm/folders (the cache in %LocalAppData%\\npm-cache, global packages in %AppData%\\npm)",
+  "https://docs.npmjs.com/cli/commands/npm-cache (`npm cache verify` garbage-collects unneeded data and checks the rest)",
+  "https://pnpm.io/cli/store (`pnpm store prune` removes unreferenced packages from the store)",
+  "https://classic.yarnpkg.com/en/docs/cli/cache (`yarn cache clean`)",
+  "https://bun.sh/docs/install/cache (Bun's global cache in ~/.bun/install/cache; `bun pm cache rm`)",
+  "https://www.electronjs.org/docs/latest/tutorial/installation (Electron's download cache in %LOCALAPPDATA%\\electron\\Cache)",
+  "observed on reference machine: %LOCALAPPDATA%\\pnpm\\store, %LOCALAPPDATA%\\npm-cache, %LOCALAPPDATA%\\Yarn\\Cache; JavaScript projects (package.json) with node_modules, dist, build, .next and .turbo ignored by git (analysis F-012, F-013); node.exe, its image path and signer",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%ProgramFiles%\nodejs' }, { path_exists = '%APPDATA%\nvm' }, { path_exists = '%APPDATA%\npm' },
+       { path_exists = '%LOCALAPPDATA%\npm-cache' }, { path_exists = '%LOCALAPPDATA%\pnpm' },
+       { path_exists = '%LOCALAPPDATA%\Yarn' }, { path_exists = '%USERPROFILE%\.bun' },
+       { path_exists = '%LOCALAPPDATA%\electron\Cache' }, { app_installed = '^Node\.js' }]

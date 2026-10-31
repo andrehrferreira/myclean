@@ -40,3 +40,15 @@ match    = ['C:\Users\owner\AppData\Local\Android\Sdk\system-images']
 kind     = "attribution"
 case     = "avd"
 match    = ['C:\Users\owner\.android\avd']
+
+[[expect]]
+kind     = "attribution"
+case     = "sdk"
+match    = ['C:\Users\owner\AppData\Local\Android']
+no_match = ['C:\Users\owner\AppData\Local\Android\Sdk\system-images']
+
+[[expect]]
+kind     = "attribution"
+case     = "user-home"
+match    = ['C:\Users\owner\.android']
+no_match = ['C:\Users\owner\.android\avd']

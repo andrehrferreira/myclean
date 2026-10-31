@@ -1,0 +1,32 @@
+# VS Code's Chromium caches and crash reports go; its local storage, settings and per-version
+# data stay.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\Cache\Cache_Data\f_000001'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\Code Cache\js\index'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\GPUCache\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\Crashpad\reports\4e5f6a.dmp'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\Local Storage\leveldb\000003.log'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\User\settings.json'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\CachedData\e3a5acfb517a443235981655413d566533107e92\chrome\js\index'
+age_days = 1
+
+[[expect]]
+kind     = "clean"
+case     = "electron-cache"
+match    = ['C:\Users\owner\AppData\Roaming\Code\Cache', 'C:\Users\owner\AppData\Roaming\Code\Code Cache',
+            'C:\Users\owner\AppData\Roaming\Code\GPUCache', 'C:\Users\owner\AppData\Roaming\Code\Crashpad']
+no_match = ['C:\Users\owner\AppData\Roaming\Code\Local Storage', 'C:\Users\owner\AppData\Roaming\Code\User',
+            'C:\Users\owner\AppData\Roaming\Code\CachedData']
+
+[[expect]]
+kind     = "attribution"
+case     = "electron-cache"
+match    = ['C:\Users\owner\AppData\Roaming\Code\Code Cache']
+no_match = ['C:\Users\owner\AppData\Roaming\Code\CachedData']

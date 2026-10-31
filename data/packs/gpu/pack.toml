@@ -1,0 +1,15 @@
+id          = "gpu"
+version     = "1.0.0"
+title       = "Graphics drivers"
+description = "The shader caches of the NVIDIA and AMD drivers and of DirectX (cleaned, asking first), graphics driver installer leftovers (for review), and what the AMD and NVIDIA driver processes are."
+sources     = [
+  "observed on reference machine: NVIDIA shader caches in %LOCALAPPDATA%\\NVIDIA\\DXCache and GLCache and in LocalLow\\NVIDIA\\PerDriverVersion; DirectX's in %LOCALAPPDATA%\\D3DSCache; AMD's in %LOCALAPPDATA%\\AMD\\DxCache, DxcCache and VkCache; driver installers in C:\\NVIDIA, C:\\AMD and the NVIDIA app's download folders (analysis F-016)",
+  "observed on reference machine: the AMD and NVIDIA driver processes, their image paths (DriverStore) and signers",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%LOCALAPPDATA%\NVIDIA' }, { path_exists = '%USERPROFILE%\AppData\LocalLow\NVIDIA' },
+       { path_exists = '%LOCALAPPDATA%\AMD' }, { path_exists = '%LOCALAPPDATA%\D3DSCache' },
+       { path_exists = '%ProgramData%\NVIDIA Corporation' }, { path_exists = '%ProgramFiles%\NVIDIA Corporation' },
+       { path_exists = '%ProgramFiles%\AMD' }, { path_exists = '%SystemDrive%\NVIDIA' }, { path_exists = '%SystemDrive%\AMD' }]

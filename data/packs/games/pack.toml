@@ -1,0 +1,19 @@
+id          = "games"
+version     = "1.0.0"
+title       = "Games and game launchers"
+description = "Steam's and the Epic Games launcher's web and download caches (cleaned), where the games of each launcher are (uninstall), and what Steam's processes are."
+sources     = [
+  "observed on reference machine: Steam in %ProgramFiles(x86)%\\Steam with appcache\\httpcache, depotcache and steamapps; Epic Games launcher web caches in %LOCALAPPDATA%\\EpicGamesLauncher\\Saved\\webcache*; game folders of the other launchers (analysis F-016)",
+  "observed on reference machine: steam.exe, steamwebhelper.exe and steamservice.exe, their image paths and signers",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%ProgramFiles(x86)%\Steam' }, { path_exists = '%SystemDrive%\SteamLibrary' },
+       { path_exists = '%LOCALAPPDATA%\EpicGamesLauncher' }, { path_exists = '%ProgramFiles%\Epic Games' },
+       { path_exists = '%SystemDrive%\Epic Games' }, { path_exists = '%SystemDrive%\XboxGames' },
+       { path_exists = '%SystemDrive%\Riot Games' }, { path_exists = '%ProgramFiles%\EA Games' },
+       { path_exists = '%ProgramFiles(x86)%\Origin Games' }, { path_exists = '%ProgramFiles(x86)%\Ubisoft\Ubisoft Game Launcher' },
+       { path_exists = '%ProgramFiles(x86)%\GOG Galaxy' }, { path_exists = '%SystemDrive%\GOG Games' },
+       { path_exists = '%ProgramFiles(x86)%\Battle.net' }, { app_installed = '^Steam$' },
+       { app_installed = '^Epic Games Launcher$' }]

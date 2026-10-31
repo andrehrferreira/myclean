@@ -5,14 +5,18 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
 
+#include "core/clean/probes.hpp"
 #include "core/compress/compression.hpp"
 #include "core/model/units.hpp"
+#include "core/packs/schema.hpp"
 #include "core/space/scanner.hpp"
 #include "fakes.hpp"
 #include "fakes/fake_clock.hpp"
@@ -308,6 +312,46 @@ TEST(Analyzer, CoversSubfoldersAndOnlyTheChosenFolder) {
 
   EXPECT_EQ(estimate(scan, 0, probe, clock).eligible_files, 5U);
   EXPECT_EQ(estimate(scan, 1, probe, clock).eligible_files, 3U);
+}
+
+class ToolsEnvironment final : public clean::IEnvironment {
+ public:
+  [[nodiscard]] std::optional<std::wstring> variable(std::wstring_view name) const override {
+    return name == L"TOOLS" ? std::optional<std::wstring>(LR"(D:\tools)") : std::nullopt;
+  }
+};
+
+// A folder inside a knowledge pack's compression target gets the target's algorithm, and the
+// names the target excludes are left alone.
+TEST(Analyzer, FollowsTheCompressionTargetOfAPack) {
+  std::vector<space::FileItem> files = many(".dll", 200, mib);
+  files.push_back(item("debug.pdb", mib));
+  const space::ScanResult scan = scan_of(R"(D:\tools\rust\toolchains\stable)", files);
+  const fakes::FakeClock clock{start};
+  const FakeProbe probe;
+  const ToolsEnvironment environment;
+  AnalyzerOptions options;
+  options.targets = {packs::CompressTarget{.id = "rust/toolchains",
+                                           .label = "Rust toolchains",
+                                           .paths = {R"(%TOOLS%\rust\toolchains\*)"},
+                                           .algorithm = "lzx",
+                                           .exclude = {"*.pdb"}}};
+  options.environment = &environment;
+
+  const FolderEstimate result = estimate(scan, 0, probe, clock, options);
+
+  EXPECT_EQ(result.target, "rust/toolchains");
+  ASSERT_NE(excluded(result, Exclusion::pack_excluded), nullptr);
+  EXPECT_EQ(excluded(result, Exclusion::pack_excluded)->files, 1U);
+  ASSERT_TRUE(result.recommended) << result.reason;
+  EXPECT_EQ(*result.recommended, Algorithm::lzx);
+  EXPECT_NE(result.reason.find("LZX: knowledge pack case rust/toolchains"), std::string::npos)
+      << result.reason;
+
+  options.environment = nullptr;  // no environment: targets are not used
+  const FolderEstimate plain = estimate(scan, 0, probe, clock, options);
+  EXPECT_TRUE(plain.target.empty());
+  EXPECT_EQ(excluded(plain, Exclusion::pack_excluded), nullptr);
 }
 
 }  // namespace

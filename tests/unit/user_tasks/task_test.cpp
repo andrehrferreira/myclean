@@ -22,7 +22,9 @@
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/packs/schema.hpp"
 #include "core/placement/drives.hpp"
+#include "core/placement/recipe.hpp"
 #include "core/placement/relocation.hpp"
 #include "core/placement/settings.hpp"
 #include "fakes/fake_file_system.hpp"
@@ -272,6 +274,64 @@ TEST_F(UserTaskTest, ARelocationAppliesAndItsReportedUndoRestoresTheVariable) {
   EXPECT_FALSE(env().value("PIP_CACHE_DIR").has_value()) << "it was not set before";
   EXPECT_EQ(report_record(undone), (Json{{"state", "rolled_back"}, {"error", nullptr}}));
   EXPECT_EQ(ipc::check_task_result(report_record(undone)), "");
+}
+
+Json recipe_task(std::string_view operation) {
+  const packs::RelocationRecipe recipe{
+      .id = "ai-tools/huggingface-home",
+      .label = "Hugging Face cache (HF_HOME)",
+      .locations = {R"(%USERPROFILE%\.cache\huggingface)"},
+      .current = {.kind = packs::SettingKind::env, .text = "HF_HOME"},
+      .target_kind = packs::SettingKind::env,
+      .content = packs::ContentMode::move,
+      .undo = packs::UndoKind::restore};
+  return Json{{"plan", 6},
+              {"title", R"(Relocate Hugging Face cache (HF_HOME) to D:\Relocated)"},
+              {"kind", "relocate"},
+              {"operation", operation},
+              {"tier", "ask"},
+              {"action",
+               {{"recipe", placement::recipe_json(recipe)},
+                {"instance", ""},
+                {"target", R"(D:\Relocated\ai-tools\huggingface-home)"},
+                {"content", "move"}}},
+              {"items", Json::array({item(61, "relocate:ai-tools/huggingface-home", true)})}};
+}
+
+TEST(ParseTaskTest, ReadsARecipeRelocationAndRefusesAMalformedRecipe) {
+  const Result<UserTask> task = parse_task(recipe_task("apply"));
+  ASSERT_TRUE(task.has_value()) << task.error().message;
+  EXPECT_EQ(task->kind, TaskKind::relocate);
+  ASSERT_TRUE(task->recipe.has_value());
+  const placement::RecipeRelocation recipe = task->recipe.value_or(placement::RecipeRelocation{});
+  EXPECT_EQ(recipe.recipe.id, "ai-tools/huggingface-home");
+  EXPECT_EQ(recipe.recipe.current.text, "HF_HOME");
+  EXPECT_EQ(recipe.target, LR"(D:\Relocated\ai-tools\huggingface-home)");
+  EXPECT_EQ(recipe.content, placement::ContentMode::move);
+
+  Json broken = recipe_task("apply");
+  broken["action"]["recipe"]["target_kind"] = "junction";
+  EXPECT_EQ(parse_task(broken).error().code, Errc::invalid_data);
+}
+
+// A pack's recipe runs in the tray like a cache relocation: applied, reported, undone exactly.
+TEST_F(UserTaskTest, ARecipeRelocationMovesTheContentAndItsReportedUndoRestoresTheVariable) {
+  fs().add_file(LR"(C:\Users\owner\.cache\huggingface\hub\model.safetensors)", 3_GiB);
+  const TaskReport applied = run_json(recipe_task("apply"));
+  ASSERT_EQ(applied.state, PlanState::verified) << applied.error;
+  EXPECT_EQ(env().value("HF_HOME").value_or(placement::EnvValue{}).text,
+            R"(D:\Relocated\ai-tools\huggingface-home)");
+  EXPECT_TRUE(fs().exists(LR"(D:\Relocated\ai-tools\huggingface-home\hub\model.safetensors)"));
+  ASSERT_EQ(applied.undo.items.size(), 1U);
+  EXPECT_EQ(applied.undo.items[0].item, PlanItemId{61});
+  const Json record = report_record(applied);
+  EXPECT_EQ(ipc::check_task_result(record), "");
+
+  Json undo = recipe_task("undo");
+  undo["undo"] = {{"not_reversible", ""}, {"items", record.at("undo")}};
+  const TaskReport undone = run_json(undo);
+  EXPECT_EQ(undone.state, PlanState::rolled_back) << undone.error;
+  EXPECT_FALSE(env().value("HF_HOME").has_value()) << "it was not set before";
 }
 
 // Placement spec, "Degraded drive excluded": refused at apply time, nothing changed.

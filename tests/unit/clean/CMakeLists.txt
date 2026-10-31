@@ -8,7 +8,8 @@ myclean_add_test(clean
     patterns_test.cpp
     workspaces_test.cpp
   DEPENDS
-    myclean::clean)
+    myclean::clean
+    myclean::packs)
 
-# The shipped data folder: the scenario tests evaluate the rules of data/rules.
+# The shipped data folder: the scenario tests evaluate the clean cases of data/packs.
 target_compile_definitions(myclean_clean_tests PRIVATE MYCLEAN_DATA_DIR="${PROJECT_SOURCE_DIR}/data")

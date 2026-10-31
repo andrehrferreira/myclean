@@ -1,0 +1,22 @@
+{
+  "entries": [
+    {
+      "id": "microsoft.vscode",
+      "image": "Code.exe",
+      "signer": "Microsoft Corporation",
+      "description": "Visual Studio Code. A code editor; it runs several processes for its window, extensions and terminals.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "github.copilot-runtime",
+      "image": "copilot-runtime.exe",
+      "signer": "GitHub, Inc.",
+      "description": "GitHub Copilot runtime host, started by the Copilot extension of Visual Studio Code.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

@@ -29,8 +29,8 @@
 #include "core/store/store.hpp"
 #include "fakes/fake_clock.hpp"
 #include "fakes/fake_file_system.hpp"
+#include "packs/pack_fakes.hpp"
 #include "placement/placement_fakes.hpp"
-#include "rules/fake_data_files.hpp"
 #include "space/space_fakes.hpp"
 
 namespace myclean::cleaning::testing {
@@ -76,10 +76,18 @@ class FsTree final : public clean::IFileTree {
 
 inline const std::filesystem::path data_dir = L"Z:\\data";
 
-// The rules the tests evaluate, by tier and strategy.
+// The clean cases the tests evaluate, by tier and strategy: pack "test" of data_dir\packs.
+inline constexpr std::string_view test_manifest = R"toml(id = "test"
+version = "1.0.0"
+title = "Test"
+description = "The cleaning tests' cases."
+sources = ["observed on reference machine"]
+min_myclean = "0.1.0"
+)toml";
+
 inline constexpr std::string_view test_rules = R"toml(
 [[rule]]
-id       = "test.auto"
+id       = "auto"
 category = "temp"
 tier     = "auto"
 scope    = "user"
@@ -87,7 +95,7 @@ strategy = "delete"
 targets  = ['F:\temp\*']
 
 [[rule]]
-id       = "test.ask.f"
+id       = "ask.f"
 category = "shader-caches"
 tier     = "ask"
 scope    = "user"
@@ -95,7 +103,7 @@ strategy = "quarantine"
 targets  = ['F:\cache\*']
 
 [[rule]]
-id       = "test.ask.c"
+id       = "ask.c"
 category = "c-caches"
 tier     = "ask"
 scope    = "user"
@@ -103,7 +111,7 @@ strategy = "quarantine"
 targets  = ['C:\cache\*']
 
 [[rule]]
-id       = "test.report"
+id       = "report"
 category = "logs"
 tier     = "report"
 scope    = "user"
@@ -111,7 +119,7 @@ strategy = "delete"
 targets  = ['F:\logs\*']
 
 [[rule]]
-id       = "test.native"
+id       = "native"
 category = "package-managers"
 tier     = "ask"
 scope    = "user"
@@ -120,7 +128,7 @@ command  = "pnpm store prune"
 targets  = ['F:\pnpm\store']
 
 [[rule]]
-id       = "test.handler"
+id       = "handler"
 category = "windows"
 tier     = "ask"
 scope    = "system"
@@ -128,12 +136,17 @@ strategy = "handler"
 handler  = "Update Cleanup"
 )toml";
 
+inline void put_test_pack(packs::testing::FakePackFiles& files) {
+  files.put(data_dir / "packs" / "test" / "pack.toml", std::string(test_manifest));
+  files.put(data_dir / "packs" / "test" / "clean.toml", std::string(test_rules));
+}
+
 // A CleaningService over fakes, with its methods on a dispatcher. Volumes as on the owner's
 // machine: C: has 8 % free (its quarantine overflows to L:), F: 13 %.
 class CleaningFixture : public ::testing::Test {
  protected:
   CleaningFixture() {
-    files_.put(data_dir / "rules" / "test.toml", std::string(test_rules));
+    put_test_pack(files_);
     drives_.list() = placement::testing::owner_volumes();
     for (const placement::TargetVolume& volume : drives_.list()) {
       fs_.add_directory(volume.root / "data");
@@ -247,6 +260,7 @@ class CleaningFixture : public ::testing::Test {
   placement::testing::FakeDriveFacts& drives() { return drives_; }
   space::testing::FakeDirectoryReader& reader() { return reader_; }
   CleaningService& service() { return *service_; }
+  packs::testing::FakePackFiles& pack_files() { return files_; }
 
   // The system volume is critically busy / the owner is logged on.
   void set_busy(bool busy) { busy_ = busy; }
@@ -269,7 +283,7 @@ class CleaningFixture : public ::testing::Test {
   placement::testing::FakeProcessRunner tools_;
   placement::testing::FakeDriveFacts drives_;
   space::testing::FakeDirectoryReader reader_;
-  rules::FakeDataFiles files_;
+  packs::testing::FakePackFiles files_;
   std::unique_ptr<store::Store> store_;
   std::unique_ptr<ipc::Dispatcher> methods_;
   std::unique_ptr<CleaningService> service_;

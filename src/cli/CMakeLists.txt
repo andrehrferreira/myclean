@@ -6,14 +6,18 @@ myclean_add_library(cli
     cli.hpp
     map_command.cpp
     map_command.hpp
+    packs_command.cpp
+    packs_command.hpp
     text.cpp
     text.hpp
   DEPENDS
     myclean::map
     myclean::mcp
     myclean::os
+    myclean::packs
     myclean::platform_clean
     myclean::platform_ipc
+    myclean::platform_packs
     myclean::platform_scan)
 target_compile_definitions(myclean_cli PRIVATE MYCLEAN_VERSION="${PROJECT_VERSION}")
 

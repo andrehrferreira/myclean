@@ -1,0 +1,22 @@
+{
+  "entries": [
+    {
+      "id": "microsoft.teams",
+      "image": "ms-teams.exe",
+      "signer": "Microsoft Corporation",
+      "description": "Microsoft Teams. Chat, calls and meetings.",
+      "category": "chat",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "discord",
+      "image": "Discord.exe",
+      "signer": "Discord Inc.",
+      "description": "Discord. Voice, video and text chat; it runs several processes.",
+      "category": "chat",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+id          = "python"
+version     = "1.0.0"
+title       = "Python, pip, uv and Conda"
+description = "Caches and build output of inactive Python projects (cleaned), pip's and uv's caches (pruned with each tool's own command), Python and Conda installations (uninstall), and what python.exe is. Store Pythons are in the python-store pack."
+sources     = [
+  "https://pip.pypa.io/en/stable/topics/caching/ (pip's cache, %LOCALAPPDATA%\\pip\\cache on Windows: HTTP responses and built wheels, safe to remove)",
+  "https://pip.pypa.io/en/stable/cli/pip_cache/ (`pip cache purge`)",
+  "https://docs.astral.sh/uv/concepts/cache/ (uv's cache, %LOCALAPPDATA%\\uv\\cache on Windows; `uv cache prune`)",
+  "https://docs.conda.io/projects/conda/en/latest/commands/clean.html (`conda clean --all`)",
+  "observed on reference machine: %LOCALAPPDATA%\\pip\\cache, %LOCALAPPDATA%\\uv\\cache, %LOCALAPPDATA%\\Programs\\Python; Python projects (pyproject.toml, setup.py, requirements*.txt) with __pycache__, .pytest_cache, .mypy_cache, .ruff_cache, .tox, *.egg-info, build and dist ignored by git (analysis F-012, F-013); python.exe, its image path and signer",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%LOCALAPPDATA%\Programs\Python' }, { path_exists = '%LOCALAPPDATA%\pip' },
+       { path_exists = '%LOCALAPPDATA%\uv' }, { path_exists = '%USERPROFILE%\miniconda3' },
+       { path_exists = '%USERPROFILE%\anaconda3' }, { path_exists = '%ProgramData%\miniconda3' },
+       { path_exists = '%ProgramData%\anaconda3' },
+       { path_exists = '%LOCALAPPDATA%\Packages\PythonSoftwareFoundation.Python.*' }, { app_installed = '^Python \d' }]

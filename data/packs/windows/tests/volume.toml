@@ -1,0 +1,107 @@
+# The system files and folders of the reference machine's volumes, its programs and the owner's
+# folders, where the handler and DISM cases act.
+
+[[expect]]
+kind     = "attribution"
+case     = "hibernation"
+match    = ['C:\hiberfil.sys']
+
+[[expect]]
+kind     = "attribution"
+case     = "page-file"
+match    = ['C:\pagefile.sys', 'C:\swapfile.sys', 'D:\pagefile.sys']
+
+[[expect]]
+kind     = "attribution"
+case     = "recycle-bin"
+match    = ['C:\$Recycle.Bin', 'D:\$Recycle.Bin']
+no_match = ['C:\$WINDOWS.~BT']
+
+[[expect]]
+kind     = "attribution"
+case     = "system"
+match    = ['C:\Windows']
+no_match = ['C:\Windows.old']
+
+[[expect]]
+kind     = "attribution"
+case     = "component-store"
+match    = ['C:\Windows\WinSxS']
+
+[[expect]]
+kind     = "attribution"
+case     = "driver-store"
+match    = ['C:\Windows\System32\DriverStore']
+no_match = ['C:\Windows\System32\drivers']
+
+[[expect]]
+kind     = "attribution"
+case     = "memory-dump"
+match    = ['C:\Windows\MEMORY.DMP']
+
+[[expect]]
+kind     = "attribution"
+case     = "wer-system"
+match    = ['C:\ProgramData\Microsoft\Windows\WER']
+
+[[expect]]
+kind     = "attribution"
+case     = "old"
+match    = ['C:\Windows.old']
+
+[[expect]]
+kind     = "attribution"
+case     = "setup-files"
+match    = ['C:\$WINDOWS.~BT', 'C:\$WINDOWS.~WS', 'C:\$GetCurrent']
+
+[[expect]]
+kind     = "attribution"
+case     = "esd"
+match    = ['C:\ESD']
+
+[[expect]]
+kind     = "attribution"
+case     = "hyperv-disks"
+match    = ['C:\ProgramData\Microsoft\Windows\Virtual Hard Disks', 'C:\Users\Public\Documents\Hyper-V']
+
+[[expect]]
+kind     = "attribution"
+case     = "program-files"
+match    = ['C:\Program Files', 'C:\Program Files (x86)']
+no_match = ['C:\ProgramData']
+
+[[expect]]
+kind     = "attribution"
+case     = "store-apps"
+match    = ['C:\Program Files\WindowsApps']
+
+[[expect]]
+kind     = "attribution"
+case     = "user-programs"
+match    = ['C:\Users\owner\AppData\Local\Programs', 'C:\Users\owner\AppData\Local\Discord']
+
+[[expect]]
+kind     = "attribution"
+case     = "powertoys-updates"
+match    = ['C:\Users\owner\AppData\Local\Microsoft\PowerToys\Updates']
+no_match = ['C:\Users\owner\AppData\Local\Microsoft\PowerToys']
+
+[[expect]]
+kind     = "attribution"
+case     = "onedrive"
+match    = ['C:\Users\owner\OneDrive', 'C:\Users\owner\OneDrive - Contoso']
+
+[[expect]]
+kind     = "attribution"
+case     = "documents"
+match    = ['C:\Users\owner\Documents', 'C:\Users\owner\Desktop', 'C:\Users\Public\Documents']
+
+[[expect]]
+kind     = "attribution"
+case     = "media"
+match    = ['C:\Users\owner\Pictures', 'C:\Users\owner\Videos', 'C:\Users\owner\Music']
+
+[[expect]]
+kind     = "attribution"
+case     = "downloads"
+match    = ['C:\Users\owner\Downloads']

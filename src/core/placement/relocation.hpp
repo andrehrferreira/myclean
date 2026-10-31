@@ -16,6 +16,7 @@
 #include "core/os/file_system.hpp"
 #include "core/placement/drives.hpp"
 #include "core/placement/settings.hpp"
+#include "core/telemetry/process_table.hpp"
 
 // Relocation of TEMP/TMP and the package caches that keep growing on the system drive, through
 // each tool's supported setting (never a junction), with exact undo
@@ -58,6 +59,8 @@ struct Tools {
   ITreeCopier* copier = nullptr;
   os::IFileSystem* file_system = nullptr;  // sizes, copy verification, target folder creation
   const IDriveFacts* drives = nullptr;
+  IRegistry* registry = nullptr;                  // recipes only (recipe.hpp)
+  telemetry::IProcessTable* processes = nullptr;  // recipes only: their `needs`
 };
 
 // Where one cache is now.
@@ -130,6 +133,23 @@ class RelocateAction final : public Action {
   const Tools* tools_;
   Relocation relocation_;
 };
+
+// Size on disk of what can be read below `root`: a subfolder that cannot be listed (another
+// user's or a locked one, common in TEMP) is left out, since the size is shown as an estimate.
+// Zero when `root` does not exist.
+[[nodiscard]] Result<Bytes> readable_size(const os::IFileSystem& file_system,
+                                          const std::filesystem::path& root);
+
+// Why `target` cannot take `needed` bytes, as a refusal; success when its drive is healthy and
+// has room (unsuitable()).
+[[nodiscard]] Result<void> check_target(const IDriveFacts& drives,
+                                        const std::filesystem::path& target, Bytes needed);
+
+// Copies `source` into the empty or missing folder `target` and checks that the copy holds the
+// same files and bytes; `label` names the content in the messages.
+[[nodiscard]] Result<void> copy_content(const Tools& tools, const std::filesystem::path& source,
+                                        const std::filesystem::path& target,
+                                        std::string_view label);
 
 // The old folder of an applied relocation (from its undo data) as a "QuarantineItems" plan,
 // for the owner to approve like any cleaning item. Fails with not_found when it is gone.

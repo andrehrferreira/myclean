@@ -1,11 +1,12 @@
 id          = "chrome"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "Google Chrome"
-description = "Chrome's on-device AI model and the WebGPU (Dawn) shader caches of each profile; the HTTP, code and GPU caches are covered by the browser cache rule."
+description = "Chrome's on-device AI model and the WebGPU (Dawn) shader caches of each profile; the HTTP, code and GPU caches are cases of the browsers pack. Also what chrome.exe is."
 sources     = [
   "https://chromeenterprise.google/policies/#GenAILocalFoundationalModelSettings (1 = do not download the on-device model)",
   "https://dawn.googlesource.com/dawn (Dawn, Chrome's WebGPU implementation, caches compiled shaders and pipelines)",
   "observed on reference machine: User Data\\OptGuideOnDeviceModel\\<version>; per profile DawnCache, DawnGraphiteCache, DawnWebGPUCache and old_DawnCache_000 beside Cache, Code Cache and GPUCache",
+  "observed on reference machine: chrome.exe, its image path and signer",
 ]
 min_myclean = "0.1.0"
 

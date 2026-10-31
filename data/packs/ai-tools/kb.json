@@ -1,0 +1,22 @@
+{
+  "entries": [
+    {
+      "id": "anthropic.claude-code",
+      "image": "claude.exe",
+      "signer": "Anthropic, PBC",
+      "description": "Claude Code, Anthropic's AI coding assistant for the command line.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    },
+    {
+      "id": "openai.codex",
+      "image": "codex.exe",
+      "signer": "OpenAI OpCo, LLC",
+      "description": "OpenAI Codex, an AI coding assistant for the command line.",
+      "category": "dev-tool",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

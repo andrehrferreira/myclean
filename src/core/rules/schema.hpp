@@ -10,7 +10,8 @@
 #include "core/model/units.hpp"
 
 // The data that drives cleaning, process classification and the process knowledge base, as
-// loaded from data/rules/*.toml, data/classes.toml and data/kb/*.json (architecture F-042).
+// shipped in the knowledge packs (docs/packs.md: clean.toml, classes.toml, kb.json; architecture
+// F-042).
 // The file formats are documented next to each type; parse.hpp loads them.
 namespace myclean::rules {
 
@@ -22,7 +23,7 @@ struct Pattern {
   std::regex regex;
 };
 
-// ---- data/rules/*.toml: cleaning rules ------------------------------------------------------
+// ---- clean.toml (and rules/*.toml): cleaning rules ------------------------------------------
 //
 //   [[rule]]
 //   id       = "dev.node.node_modules"        # required, unique across all rule files
@@ -68,7 +69,7 @@ struct CleaningRule {
   Requirements require;
 };
 
-// ---- data/classes.toml: governor process classes --------------------------------------------
+// ---- classes.toml: governor process classes -------------------------------------------------
 //
 //   [[match]]                                 # ordered: the first matching entry wins
 //   id           = "build.node.vite"          # required, unique
@@ -119,7 +120,7 @@ struct ClassSet {
   JobCaps test{.cpu_percent = 75, .commit = Bytes{64ULL << 30U}};
 };
 
-// ---- data/kb/*.json: process and app knowledge base -----------------------------------------
+// ---- kb.json (and kb/*.json): process and app knowledge base --------------------------------
 //
 //   { "entries": [ {
 //       "id": "microsoft.powertoys.keyboard-manager",   required, unique across all kb files

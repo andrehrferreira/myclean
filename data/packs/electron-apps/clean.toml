@@ -1,0 +1,46 @@
+# Electron and WebView2 apps: Chromium's HTTP, code and GPU caches and crash reports (sources:
+# pack.toml). Local Storage, IndexedDB, cookies and settings are never targets. A running app
+# keeps its cache files open, so not_in_use skips it. VS Code's are in the vscode pack.
+
+[[rule]]
+id       = "discord"
+category = "electron"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%APPDATA%\discord\Cache', '%APPDATA%\discord\Code Cache',
+            '%APPDATA%\discord\GPUCache', '%APPDATA%\discord\Crashpad']
+require  = { not_in_use = true }
+
+[[rule]]
+id       = "slack"
+category = "electron"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%APPDATA%\Slack\Cache', '%APPDATA%\Slack\Code Cache', '%APPDATA%\Slack\GPUCache',
+            '%APPDATA%\Slack\Crashpad']
+require  = { not_in_use = true }
+
+[[rule]]
+id       = "teams-classic"
+category = "electron"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%APPDATA%\Microsoft\Teams\Cache', '%APPDATA%\Microsoft\Teams\Code Cache',
+            '%APPDATA%\Microsoft\Teams\GPUCache', '%APPDATA%\Microsoft\Teams\Crashpad']
+require  = { not_in_use = true }
+
+# New Teams runs in WebView2; '*' is each WebView2 profile.
+[[rule]]
+id       = "teams"
+category = "electron"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\*\Cache',
+            '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\*\Code Cache',
+            '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\*\GPUCache',
+            '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Crashpad']
+require  = { not_in_use = true }

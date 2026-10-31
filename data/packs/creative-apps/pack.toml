@@ -1,0 +1,14 @@
+id          = "creative-apps"
+version     = "1.0.0"
+title       = "3D and video apps (Autodesk, Maxon, Reallusion)"
+description = "Installer files Autodesk setup leaves behind (for review), and what the licensing and helper processes of Autodesk, FlexNet, Maxon and Reallusion apps are."
+sources     = [
+  "observed on reference machine: C:\\Autodesk holds the unpacked installers of Autodesk products after setup",
+  "observed on reference machine: the Autodesk, FlexNet licensing, Maxon (Red Giant) and Reallusion processes, their image paths and signers",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%SystemDrive%\Autodesk' }, { path_exists = '%ProgramFiles%\Autodesk' },
+       { app_installed = '^Autodesk' }, { app_installed = '^Maxon' }, { app_installed = '^Red Giant' },
+       { app_installed = '^Reallusion' }]

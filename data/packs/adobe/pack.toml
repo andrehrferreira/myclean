@@ -1,0 +1,13 @@
+id          = "adobe"
+version     = "1.0.0"
+title       = "Adobe apps"
+description = "Adobe app data, caches and the Premiere Pro and After Effects media cache (for review), and what the Creative Cloud and Acrobat processes are."
+sources     = [
+  "observed on reference machine: %LOCALAPPDATA%\\Adobe and %APPDATA%\\Adobe (including Substance 3D); the media cache in %APPDATA%\\Adobe\\Common\\Media Cache Files and Media Cache",
+  "observed on reference machine: the Creative Cloud and Acrobat processes, their image paths and signers",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%LOCALAPPDATA%\Adobe' }, { path_exists = '%APPDATA%\Adobe' },
+       { path_exists = '%ProgramFiles%\Adobe' }, { path_exists = '%ProgramFiles(x86)%\Adobe' }]

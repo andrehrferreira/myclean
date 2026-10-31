@@ -1,0 +1,15 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "editors"
+paths    = ['%ProgramFiles%\Unity', '%ProgramFiles%\Unity Hub']
+category = "dev-toolchains"
+label    = "Unity Hub and Unity editors"
+reclaim  = { kind = "uninstall", note = "Unity Hub > Installs removes editor versions you no longer use." }
+
+[[area]]
+id       = "cache"
+paths    = ['%LOCALAPPDATA%\Unity\cache', '%APPDATA%\Unity\Asset Store-5.x']
+category = "dev-caches"
+label    = "Unity package and Asset Store cache"
+reclaim  = { kind = "manual-review", note = "Packages download again when a project needs them." }

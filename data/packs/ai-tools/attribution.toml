@@ -49,3 +49,19 @@ paths    = ['%USERPROFILE%\.elyriu-local-ai\models']
 category = "dev-caches"
 label    = "Local AI app models (Hugging Face layout)"
 reclaim  = { kind = "manual-review", note = "Remove models from within the app that downloaded them." }
+
+# The assistants' homes as a whole: settings, history and logs beside the sessions above.
+[[area]]
+id       = "assistant-homes"
+paths    = ['%USERPROFILE%\.codex', '%USERPROFILE%\.claude']
+category = "apps"
+label    = "AI coding assistant sessions, history and generated images (Codex, Claude)"
+reclaim  = { kind = "manual-review", note = "Old sessions and generated images can be deleted from sessions/ and generated_images/ once no longer needed." }
+
+# The model tools' homes as a whole: settings and logs beside the model folders above.
+[[area]]
+id       = "model-tool-homes"
+paths    = ['%USERPROFILE%\.ollama', '%USERPROFILE%\.lmstudio', '%USERPROFILE%\.elyriu-local-ai']
+category = "dev-caches"
+label    = "Downloaded AI models and their tools' data (Ollama, LM Studio, local AI apps)"
+reclaim  = { kind = "manual-review", note = "Delete models you no longer use with the tool itself (`ollama rm`, LM Studio > My Models)." }

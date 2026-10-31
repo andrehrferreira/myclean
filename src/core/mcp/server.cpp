@@ -239,8 +239,10 @@ const Json& tool_list() {
       proposal_tool(
           "propose_optimization",
           "Proposes a change that frees space on the system drive: the hibernation type, moving "
-          "the page file, limiting the shadow (restore point) storage, or relocating TEMP or a "
-          "package cache to another drive. It only creates a plan in state 'awaiting_approval' "
+          "the page file, limiting the shadow (restore point) storage, or relocating TEMP, a "
+          "package cache or what a knowledge pack's relocation recipe names (pack and recipe, "
+          "such as wsl-docker and distro, with instance for a WSL distribution) to another "
+          "drive. It only creates a plan in state 'awaiting_approval' "
           "with the exact commands and their undo; nothing changes until the owner approves it "
           "in the MyClean tray. Values left out take MyClean's recommendation.",
           object_schema(
@@ -266,7 +268,19 @@ const Json& tool_list() {
                  {"enum",
                   {"temp", "gradle", "cargo", "npm", "nuget", "pip", "go_modules", "go_build",
                    "unreal_ddc"}},
-                 {"description", "relocate: what to move"}}},
+                 {"description", "relocate: what to move (or pack and recipe instead)"}}},
+               {"pack",
+                {{"type", "string"},
+                 {"description",
+                  "relocate by a recipe: the knowledge pack, such as 'wsl-docker'"}}},
+               {"recipe",
+                {{"type", "string"},
+                 {"description", "relocate by a recipe: its id in the pack, such as 'distro'"}}},
+               {"instance",
+                {{"type", "string"},
+                 {"description",
+                  "relocate by a recipe that moves one of several: its name, such as the WSL "
+                  "distribution 'Ubuntu-24.04'"}}},
                {"content",
                 {{"type", "string"},
                  {"enum", {"move", "regenerate"}},

@@ -12,7 +12,8 @@
 #include "core/model/units.hpp"
 #include "core/space/scanner.hpp"
 
-// "Where did my disk go": a scan of a volume or folder explained with data/attribution.toml.
+// "Where did my disk go": a scan of a volume or folder explained with the attribution areas of the
+// knowledge packs.
 // Every byte the scan counted belongs to exactly one place: the most precise area location that
 // names its file or one of the file's folders, or none (unexplained). What the scan could not
 // see is reported as such, never estimated.

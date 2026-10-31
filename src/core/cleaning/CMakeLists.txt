@@ -18,6 +18,7 @@ myclean_add_library(cleaning
     myclean::clean
     myclean::cleanup
     myclean::ipc
+    myclean::packs
     myclean::placement
     myclean::rules
     myclean::sched

@@ -1,0 +1,13 @@
+id          = "electron-apps"
+version     = "1.0.0"
+title       = "Electron and WebView2 apps"
+description = "Chromium's HTTP, code and GPU caches and crash reports of Discord, Slack and Teams (cleaned), and what their processes are."
+sources     = [
+  "observed on reference machine: %APPDATA%\\discord, %APPDATA%\\Slack and %APPDATA%\\Microsoft\\Teams hold Cache, Code Cache, GPUCache and Crashpad beside Local Storage and IndexedDB; new Teams keeps its WebView2 profiles in %LOCALAPPDATA%\\Packages\\MSTeams_8wekyb3d8bbwe\\LocalCache\\Microsoft\\MSTeams\\EBWebView",
+  "observed on reference machine: Discord.exe and ms-teams.exe, their image paths and signers",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%APPDATA%\discord' }, { path_exists = '%APPDATA%\Slack' },
+       { path_exists = '%APPDATA%\Microsoft\Teams' }, { path_exists = '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe' }]

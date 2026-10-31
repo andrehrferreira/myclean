@@ -1,7 +1,7 @@
 id          = "vcpkg"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "vcpkg"
-description = "vcpkg's build trees, package staging, downloads and binary cache, which it rebuilds; never its installed libraries or its ports."
+description = "vcpkg's build trees, package staging, downloads and binary cache, which it rebuilds; never its installed libraries or its ports. The vcpkg roots are listed for review."
 sources     = [
   "https://learn.microsoft.com/vcpkg/commands/common-options (buildtrees, downloads and packages default to folders of the vcpkg root; VCPKG_DOWNLOADS)",
   "https://learn.microsoft.com/vcpkg/commands/install#clean-after-build (vcpkg itself removes buildtrees, packages and downloads after each build with this option)",

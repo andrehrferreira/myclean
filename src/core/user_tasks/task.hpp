@@ -18,11 +18,13 @@
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/file_system.hpp"
+#include "core/placement/recipe.hpp"
 #include "core/placement/relocation.hpp"
 
 // The user-scope plans the tray runs under the owner's token (cleaning spec, "Native Prune
 // Commands Under the User Token"; placement spec): native prune commands, the disk-cleanup
-// handlers that read the owner's profile, and cache relocations. The service hands them out with
+// handlers that read the owner's profile, and relocations of caches and of what a knowledge pack's
+// relocation recipe names. The service hands them out with
 // user_tasks.next once the owner approved them, and records the report of user_tasks.report
 // (contracts in core/ipc/plans.hpp).
 namespace myclean::user_tasks {
@@ -33,7 +35,8 @@ enum class Operation { apply, undo };
 // One plan item the task may act on.
 struct TaskItem {
   std::int64_t id = 0;
-  std::filesystem::path path;  // "native:<command>", "handler:<name>", "relocate:<cache>"
+  // "native:<command>", "handler:<name>", "relocate:<cache>", "relocate:<pack>/<case>[:<name>]"
+  std::filesystem::path path;
   Bytes bytes;
 };
 
@@ -44,12 +47,13 @@ struct UserTask {
   TaskKind kind = TaskKind::native;
   Operation operation = Operation::apply;
   Tier tier = Tier::ask;
-  std::vector<TaskItem> items;        // the items not rejected
-  std::string command;                // native: "pnpm store prune"
-  std::filesystem::path volume;       // handler: "C:\"
-  std::vector<std::string> handlers;  // handler: VolumeCaches key names
-  placement::Relocation relocation;   // relocate
-  Undo undo;                          // undo: the stored undo data, pieces joined
+  std::vector<TaskItem> items;                        // the items not rejected
+  std::string command;                                // native: "pnpm store prune"
+  std::filesystem::path volume;                       // handler: "C:\"
+  std::vector<std::string> handlers;                  // handler: VolumeCaches key names
+  placement::Relocation relocation;                   // relocate: a cache
+  std::optional<placement::RecipeRelocation> recipe;  // relocate: by a recipe (then no cache)
+  Undo undo;                                          // undo: the stored undo data, pieces joined
 };
 
 // The plan id of a task, readable even when the rest is not, so that a task the tray cannot read
@@ -57,7 +61,8 @@ struct UserTask {
 [[nodiscard]] Result<std::int64_t> task_plan(const nlohmann::json& task);
 // A task: {"plan", "title", "kind": "native"|"handler"|"relocate", "operation": "apply"|"undo",
 // "tier", "items": [{"id", "path", "bytes", "approved"}], "action": {"command"} |
-// {"volume", "handlers"} | {"cache", "target", "content"},
+// {"volume", "handlers"} | {"cache", "target", "content"} |
+// {"recipe": placement::recipe_json(), "instance", "target", "content"},
 // "undo": {"not_reversible", "items": [{"item", "data"}]} (undo only)}. Items the owner
 // rejected (approved false) are dropped. Any other kind (a Recycle Bin "cleanup") is refused.
 [[nodiscard]] Result<UserTask> parse_task(const nlohmann::json& task);
@@ -89,7 +94,8 @@ struct TaskReport {
 [[nodiscard]] std::string summary(const TaskReport& report, std::string_view title);
 
 // What the actions run with in the owner's context. Every pointer must outlive the runs; the
-// handler host may be null for a task that is not a handler task.
+// handler host may be null for a task that is not a handler task. A recipe relocation also runs
+// its commands with `runner` and reads placement.registry and placement.processes.
 struct Toolbox {
   cleanup::ICommandRunner* runner = nullptr;
   cleanup::IHandlerHost* handlers = nullptr;

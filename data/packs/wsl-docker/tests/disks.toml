@@ -9,6 +9,14 @@ no_match = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu2
             'C:\Users\owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx']
 
 [[expect]]
+kind     = "relocate"
+case     = "distro-files"
+match    = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\rootfs',
+            'C:\Users\owner\AppData\Local\Packages\TheDebianProject.DebianGNULinux_76v4gfsz19hv4\rootfs']
+no_match = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx',
+            'C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState']
+
+[[expect]]
 kind     = "attribution"
 case     = "distro-disks"
 match    = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx']

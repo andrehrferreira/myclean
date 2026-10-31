@@ -1,0 +1,37 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "nvidia-dxcache"
+paths    = ['%LOCALAPPDATA%\NVIDIA\DXCache', '%USERPROFILE%\AppData\LocalLow\NVIDIA\PerDriverVersion\DXCache']
+category = "app-caches"
+label    = "NVIDIA DirectX shader cache"
+reclaim  = { kind = "clean-rule", ref = "nvidia-dxcache", note = "Games rebuild it, with some stutter at first." }
+
+[[area]]
+id       = "nvidia-glcache"
+paths    = ['%LOCALAPPDATA%\NVIDIA\GLCache', '%USERPROFILE%\AppData\LocalLow\NVIDIA\PerDriverVersion\GLCache']
+category = "app-caches"
+label    = "NVIDIA OpenGL and Vulkan shader cache"
+reclaim  = { kind = "clean-rule", ref = "nvidia-glcache", note = "Games rebuild it, with some stutter at first." }
+
+[[area]]
+id       = "d3dscache"
+paths    = ['%LOCALAPPDATA%\D3DSCache']
+category = "app-caches"
+label    = "DirectX shader cache"
+reclaim  = { kind = "clean-rule", ref = "d3dscache" }
+
+[[area]]
+id       = "amd-cache"
+paths    = ['%LOCALAPPDATA%\AMD\DxCache', '%LOCALAPPDATA%\AMD\DxcCache', '%LOCALAPPDATA%\AMD\VkCache']
+category = "app-caches"
+label    = "AMD shader cache"
+reclaim  = { kind = "clean-rule", ref = "amd-cache", note = "Games rebuild it, with some stutter at first." }
+
+[[area]]
+id       = "driver-installers"
+paths    = ['?:\NVIDIA', '?:\AMD', '%ProgramData%\NVIDIA Corporation\Downloader', '%ProgramFiles%\NVIDIA Corporation\Installer2',
+            '%ProgramData%\NVIDIA Corporation\NVIDIA App\UpdateFramework']
+category = "app-caches"
+label    = "Graphics driver installer files"
+reclaim  = { kind = "manual-review", note = "Left behind by driver installs; not needed once the driver is installed." }

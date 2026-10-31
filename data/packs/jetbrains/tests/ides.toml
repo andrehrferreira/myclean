@@ -1,0 +1,45 @@
+# A current IntelliJ IDEA and one not run for over a year, with Toolbox: the caches and the old
+# version's local folder go; settings, Toolbox and the current version's other folders stay.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\JetBrains\IntelliJIdea2025.2\caches\content.dat'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\JetBrains\IntelliJIdea2025.2\log\idea.log'
+age_days = 1
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\JetBrains\IntelliJIdea2023.1\index\stubs\stubs.dat'
+age_days = 500
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\JetBrains\Toolbox\apps\IDEA-U\ch-0\252.23892.409\bin\idea64.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\JetBrains\IntelliJIdea2023.1\options\editor.xml'
+age_days = 500
+
+[[expect]]
+kind     = "clean"
+case     = "caches"
+match    = ['C:\Users\owner\AppData\Local\JetBrains\IntelliJIdea2025.2\caches']
+no_match = ['C:\Users\owner\AppData\Local\JetBrains\IntelliJIdea2025.2\log',
+            'C:\Users\owner\AppData\Roaming\JetBrains\IntelliJIdea2023.1\options']
+
+[[expect]]
+kind     = "clean"
+case     = "old-versions"
+match    = ['C:\Users\owner\AppData\Local\JetBrains\IntelliJIdea2023.1']
+no_match = ['C:\Users\owner\AppData\Local\JetBrains\IntelliJIdea2025.2', 'C:\Users\owner\AppData\Local\JetBrains\Toolbox',
+            'C:\Users\owner\AppData\Roaming\JetBrains\IntelliJIdea2023.1']
+
+[[expect]]
+kind     = "attribution"
+case     = "user-data"
+match    = ['C:\Users\owner\AppData\Local\JetBrains', 'C:\Users\owner\AppData\Roaming\JetBrains']
+
+[[expect]]
+kind     = "attribution"
+case     = "caches"
+match    = ['C:\Users\owner\AppData\Local\JetBrains\IntelliJIdea2025.2\caches']
+
+[[expect]]
+kind     = "attribution"
+case     = "toolbox"
+match    = ['C:\Users\owner\AppData\Local\JetBrains\Toolbox\apps', 'C:\Users\owner\AppData\Local\Programs\JetBrains Rider']

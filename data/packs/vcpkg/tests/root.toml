@@ -52,3 +52,9 @@ no_match = ['C:\vcpkg\installed', 'C:\vcpkg\ports']
 kind     = "attribution"
 case     = "installed"
 match    = ['C:\vcpkg\installed']
+
+[[expect]]
+kind     = "attribution"
+case     = "root"
+match    = ['C:\vcpkg', 'D:\vcpkg', 'C:\Users\owner\vcpkg']
+no_match = ['C:\vcpkg\installed']

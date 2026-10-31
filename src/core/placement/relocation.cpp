@@ -320,9 +320,13 @@ Result<TreeTotals> totals(const os::IFileSystem& file_system, const fs::path& ro
   return result;
 }
 
-// Size on disk of what can be read below `root`: a subfolder that cannot be listed (another
-// user's or a locked one, common in TEMP) is left out, since the size is shown as an estimate.
-// Zero when `root` does not exist.
+std::string describe_totals(const TreeTotals& totals) {
+  return std::to_string(totals.files) + " files, " + std::to_string(totals.bytes.count()) +
+         " bytes";
+}
+
+}  // namespace
+
 Result<Bytes> readable_size(const os::IFileSystem& file_system, const fs::path& root) {
   const Result<os::FileStat> status = file_system.stat(root);
   if (!status) {
@@ -354,13 +358,6 @@ Result<Bytes> readable_size(const os::IFileSystem& file_system, const fs::path& 
   return total;
 }
 
-std::string describe_totals(const TreeTotals& totals) {
-  return std::to_string(totals.files) + " files, " + std::to_string(totals.bytes.count()) +
-         " bytes";
-}
-
-// Why `target` cannot take `needed` bytes, as a refusal; success when its drive is healthy and
-// has room.
 Result<void> check_target(const IDriveFacts& drives, const fs::path& target, Bytes needed) {
   Result<std::vector<TargetVolume>> volumes = drives.volumes();
   if (!volumes) {
@@ -376,8 +373,6 @@ Result<void> check_target(const IDriveFacts& drives, const fs::path& target, Byt
   return {};
 }
 
-// Copies `source` into the empty or missing folder `target` and checks that the copy holds the
-// same files and bytes.
 Result<void> copy_content(const Tools& tools, const fs::path& source, const fs::path& target,
                           std::string_view label) {
   const os::IFileSystem& file_system = *tools.file_system;
@@ -405,6 +400,8 @@ Result<void> copy_content(const Tools& tools, const fs::path& source, const fs::
   }
   return {};
 }
+
+namespace {
 
 // Tells running programs about changed environment variables. Best effort, see the header.
 void announce(const Tools& tools, const std::vector<Change>& changes) {
