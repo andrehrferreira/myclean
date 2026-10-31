@@ -120,6 +120,17 @@ std::vector<Argb> icon_pixels(const TrayStatus& status, int size) {
   return pixels;
 }
 
+std::optional<std::string> worst_drive_health(const std::vector<DriveHealthRow>& drives) {
+  const auto worst = std::ranges::max_element(drives, {}, &DriveHealthRow::status);
+  if (worst == drives.end()) {
+    return std::nullopt;
+  }
+  if (worst->status == DriveStatus::good || worst->status == DriveStatus::unknown) {
+    return std::string(to_string(worst->status));
+  }
+  return "Disk " + worst->disk + " " + std::string(to_string(worst->status));
+}
+
 TooltipData tooltip_data(bool service_reachable, const MetricsSnapshot& metrics,
                          const std::vector<VolumeRow>& volumes) {
   TooltipData data;

@@ -59,8 +59,14 @@ struct TooltipData {
   std::optional<double> commit_limit;            // bytes
   std::string system_volume = "C:";              // the volume Windows runs from
   std::optional<double> system_free;             // bytes free on it
-  std::optional<std::string> worst_disk_health;  // e.g. "Disk 3: warning"
+  std::optional<std::string> worst_disk_health;  // worst_drive_health()
 };
+
+// The tooltip's disk-health text: "good" when every drive is good, "Disk 3 warning" naming the
+// first drive of the worst status otherwise, "unknown" when no drive could be read; nullopt
+// without drives. A drive that cannot be read does not hide the others' status.
+[[nodiscard]] std::optional<std::string> worst_drive_health(
+    const std::vector<DriveHealthRow>& drives);
 
 [[nodiscard]] TooltipData tooltip_data(bool service_reachable, const MetricsSnapshot& metrics,
                                        const std::vector<VolumeRow>& volumes);

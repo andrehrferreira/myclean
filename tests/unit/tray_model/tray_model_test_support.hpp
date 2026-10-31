@@ -20,8 +20,9 @@ using Json = nlohmann::json;
 inline constexpr double gib = 1024.0 * 1024.0 * 1024.0;
 
 // A metrics.latest reply in the service's shape (core/ipc/telemetry.hpp) for Unix second `time`:
-// 4 logical processors, disks "0", "2" and "10", one GPU adapter, C: (system, filling) and D:
-// (not filling).
+// 4 logical processors ("0_0".."0_3" at 10, 20, 30 and 40 %, each at 70 % of the maximum
+// frequency), disks "0", "2" and "10", one GPU adapter, C: (system, filling) and D: (not
+// filling).
 inline Json latest_json(std::int64_t time) {
   const auto disk = [](std::string_view number, double read) {
     return Json{{"disk", number}, {"read_bytes", read},  {"write_bytes", 2.0e6},
@@ -36,7 +37,12 @@ inline Json latest_json(std::int64_t time) {
         {"dpc", 0.5},
         {"interrupt", 0.3},
         {"queue", 2.0},
-        {"logical_processors", 4}}},
+        {"logical_processors", 4},
+        {"processors",
+         Json::array({Json{{"entity", "0_0"}, {"utility", 10.0}, {"frequency", 70.0}},
+                      Json{{"entity", "0_1"}, {"utility", 20.0}, {"frequency", 70.0}},
+                      Json{{"entity", "0_2"}, {"utility", 30.0}, {"frequency", 70.0}},
+                      Json{{"entity", "0_3"}, {"utility", 40.0}, {"frequency", 70.0}}})}}},
       {"memory",
        {{"total", 64 * gib},
         {"available", 40 * gib},
@@ -84,11 +90,12 @@ inline Json latest_json(std::int64_t time) {
       {"unavailable", Json::array()}};
 }
 
-// A metrics.query reply with one point per second in [from, to), each of value `value`.
+// A metrics.query reply with one point every `step` seconds in [from, to), each of value
+// `value`.
 inline Json query_json(std::string_view metric, std::string_view entity, std::int64_t from,
-                       std::int64_t to, double value) {
+                       std::int64_t to, double value, std::int64_t step = 1) {
   Json points = Json::array();
-  for (std::int64_t time = from; time < to; ++time) {
+  for (std::int64_t time = from; time < to; time += step) {
     points.push_back(
         Json{{"time", time}, {"min", value}, {"max", value}, {"mean", value}, {"count", 1}});
   }
@@ -96,7 +103,31 @@ inline Json query_json(std::string_view metric, std::string_view entity, std::in
       {"metric", metric}, {"entity", entity}, {"resolution", "raw"}, {"points", std::move(points)}};
 }
 
-// A processes.top reply: a browser tree of 3 processes and a single process.
+// A trust signal: a signed image the knowledge base lists, or an unsigned unrecognized one in a
+// user-writable folder.
+inline Json trust_json(bool recognized) {
+  if (recognized) {
+    return Json{{"status", "signed"},
+                {"signer", "Browser Vendor Inc."},
+                {"path", R"(C:\Program Files\Browser\browser.exe)"},
+                {"path_class", "protected"},
+                {"unrecognized", false},
+                {"reasons", Json::array()},
+                {"description", "Web browser"},
+                {"category", "browser"}};
+  }
+  return Json{{"status", "unsigned"},
+              {"signer", nullptr},
+              {"path", R"(C:\Users\owner\AppData\Local\tool.exe)"},
+              {"path_class", "user_writable"},
+              {"unrecognized", true},
+              {"reasons", {"not-in-knowledge-base", "unsigned", "user-writable-path"}},
+              {"description", nullptr},
+              {"category", nullptr}};
+}
+
+// A processes.top reply: a browser tree of 3 processes (signed, known) and a single process
+// (unsigned, unrecognized).
 inline Json top_json() {
   const auto member = [](std::uint32_t pid, std::string_view image, double cpu) {
     return Json{{"pid", pid},
@@ -106,7 +137,8 @@ inline Json top_json() {
                 {"private_working_set", 100 << 20},
                 {"private_bytes", 120 << 20}};
   };
-  const auto tree = [](std::uint32_t pid, std::string_view image, double cpu, Json members) {
+  const auto tree = [](std::uint32_t pid, std::string_view image, double cpu, Json members,
+                       Json trust) {
     return Json{{"pid", pid},
                 {"image", image},
                 {"processes", members.size()},
@@ -119,7 +151,7 @@ inline Json top_json() {
                 {"handles", 900},
                 {"threads", 80},
                 {"members", std::move(members)},
-                {"trust", nullptr}};
+                {"trust", std::move(trust)}};
   };
   return Json{
       {"time", 1000},
@@ -127,12 +159,170 @@ inline Json top_json() {
       {"memory_total", 64ULL << 30U},
       {"filter", nullptr},
       {"total_trees", 2},
-      {"trees",
+      {"trees", Json::array({tree(100, "browser.exe", 9.0,
+                                  Json::array({member(100, "browser.exe", 5.0),
+                                               member(101, "browser.exe", 3.0),
+                                               member(102, "gpu-helper.exe", 1.0)}),
+                                  trust_json(true)),
+                             tree(200, "tool.exe", 1.0, Json::array({member(200, "tool.exe", 1.0)}),
+                                  trust_json(false))})}};
+}
+
+// A processes.explain reply for PID 101 of the browser tree.
+inline Json explain_json() {
+  return Json{{"pid", 101},
+              {"parent_pid", 100},
+              {"image", "browser.exe"},
+              {"path", R"(C:\Program Files\Browser\browser.exe)"},
+              {"cpu_percent", 3.0},
+              {"memory_percent", 0.2},
+              {"private_working_set", 100 << 20},
+              {"private_bytes", 120 << 20},
+              {"working_set", 140 << 20},
+              {"tree",
+               {{"pid", 100},
+                {"image", "browser.exe"},
+                {"processes", 3},
+                {"cpu_percent", 9.0},
+                {"memory_percent", 1.5}}},
+              {"members", top_json()["trees"][0]["members"]},
+              {"trust", trust_json(true)},
+              {"kb",
+               {{"description", "Web browser"},
+                {"category", "browser"},
+                {"needed_at_startup", false},
+                {"safe_to_remove", false}}}};
+}
+
+// A disks.health reply: disk "0" an NVMe drive in warning (a media error, above its rated
+// temperature), disk "2" a SATA drive in good health without a rated limit, disk "7" a USB drive
+// whose bridge blocks SMART, with the reliability counters Windows provides.
+inline Json health_json() {
+  const auto endurance = [](std::string_view state, Json years, std::string_view note) {
+    const bool projected = state == "projected";
+    return Json{{"state", state},
+                {"years_left", std::move(years)},
+                {"tbw_rated", projected ? Json(1200.0) : Json(nullptr)},
+                {"tbw_used_percent", projected ? Json(25.0) : Json(nullptr)},
+                {"note", note}};
+  };
+  const auto drive = [&endurance](std::string_view disk, std::string_view model,
+                                  std::string_view bus) {
+    return Json{{"key", std::string(model.substr(0, 3)) + "_1A2B"},
+                {"disk", disk},
+                {"model", model},
+                {"bus", bus},
+                {"source", "nvme_health_log"},
+                {"volumes", Json::array()},
+                {"status", "good"},
+                {"reasons", Json::array()},
+                {"readable", true},
+                {"unreadable_reason", nullptr},
+                {"temperature_c", 41},
+                {"temperature_limit_c", 70},
+                {"percent_used", 3},
+                {"available_spare", 100},
+                {"media_errors", 0},
+                {"reallocated_sectors", nullptr},
+                {"pending_sectors", nullptr},
+                {"power_on_hours", 5000},
+                {"data_written_bytes", 300'000'000'000'000LL},
+                {"endurance", endurance("projected", 18.0, "")}};
+  };
+  Json nvme = drive("0", "Samsung SSD 980 PRO 2TB", "nvme");
+  nvme["volumes"] = {"C:"};
+  nvme["status"] = "warning";
+  nvme["reasons"] = {"1 media error", "74 °C is above the rated 70 °C"};
+  nvme["temperature_c"] = 74;
+  nvme["media_errors"] = 1;
+  Json sata = drive("2", "WDC WD101EFBX", "ata");
+  sata["source"] = "ata_smart";
+  sata["volumes"] = {"D:"};
+  for (const char* member : {"temperature_limit_c", "percent_used", "available_spare",
+                             "media_errors", "data_written_bytes"}) {
+    sata[member] = nullptr;
+  }
+  sata["reallocated_sectors"] = 0;
+  sata["pending_sectors"] = 0;
+  sata["endurance"] = endurance("not_reported", nullptr, "the drive reports no data written");
+  Json usb = drive("7", "ROG ESD-S1C", "usb");
+  usb["source"] = "reliability_counters";
+  usb["status"] = "unknown";
+  usb["readable"] = false;
+  usb["unreadable_reason"] = "not readable over USB: the bridge blocks SMART pass-through";
+  for (const char* member :
+       {"temperature_limit_c", "percent_used", "available_spare", "media_errors"}) {
+    usb[member] = nullptr;
+  }
+  usb["endurance"] = endurance("rating_unknown", nullptr, "no TBW rating is known for the model");
+  return Json{{"time", 1000}, {"drives", Json::array({nvme, sata, usb})}};
+}
+
+// An alerts.badge reply.
+inline Json badge_json(int count, std::string_view worst) {
+  return Json{{"count", count}, {"worst", worst}};
+}
+
+// One alert of an alerts.list reply; `toast_at` is null when no toast was decided.
+inline Json alert_json(std::string_view rule, std::string_view entity, std::string_view severity,
+                       bool active, Json toast_at) {
+  return Json{{"rule", rule},
+              {"entity", entity},
+              {"title", std::string(rule) + " title"},
+              {"severity", severity},
+              {"first_at", 900},
+              {"last_at", 950},
+              {"count", 3},
+              {"active", active},
+              {"snoozed_until", nullptr},
+              {"toast_at", std::move(toast_at)},
+              {"detail", std::string(entity) + " detail"},
+              {"value", 9.0},
+              {"limit", 10.0},
+              {"previous", nullptr},
+              {"unit", "%"}};
+}
+
+inline Json alerts_json(Json alerts) {
+  return Json{{"alerts", std::move(alerts)}};
+}
+
+// An input.summary reply: 2 clipboard-held-open freezes caused by one process and 1 unexplained.
+inline Json summary_json() {
+  const auto incident = [](std::int64_t id, std::int64_t latency, Json cause) {
+    return Json{{"id", id},
+                {"chord", "paste"},
+                {"time", 1000 - id},
+                {"latency_ms", latency},
+                {"capped", false},
+                {"owner_unanswered_ms", nullptr},
+                {"input_lag_ms", 0},
+                {"foreground", {{"pid", 10}, {"image", "editor.exe"}}},
+                {"owner", nullptr},
+                {"holder", nullptr},
+                {"viewer", nullptr},
+                {"formats", Json::array()},
+                {"hung", Json::array()},
+                {"suspects", Json::array()},
+                {"cpu_percent", 12.5},
+                {"memory_load_percent", 40},
+                {"cause", std::move(cause)},
+                {"evidence", {"evidence of incident " + std::to_string(id)}}};
+  };
+  const Json holder = {{"pid", 77}, {"image", "clipmgr.exe"}};
+  return Json{
+      {"groups",
        Json::array(
-           {tree(100, "browser.exe", 9.0,
-                 Json::array({member(100, "browser.exe", 5.0), member(101, "browser.exe", 3.0),
-                              member(102, "gpu-helper.exe", 1.0)})),
-            tree(200, "tool.exe", 1.0, Json::array({member(200, "tool.exe", 1.0)}))})}};
+           {Json{{"mechanism", "clipboard_held_open"},
+                 {"process", "clipmgr.exe"},
+                 {"count", 2},
+                 {"latest", 999},
+                 {"incidents", Json::array({incident(1, 600, holder), incident(2, 400, holder)})}},
+            Json{{"mechanism", "unexplained"},
+                 {"process", nullptr},
+                 {"count", 1},
+                 {"latest", 997},
+                 {"incidents", Json::array({incident(3, 300, nullptr)})}}})}};
 }
 
 // A scripted service: each method answers through its handler; methods without one answer

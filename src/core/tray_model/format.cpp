@@ -90,4 +90,8 @@ std::string format_time_of_day(std::chrono::local_seconds time) {
   return std::format("{:%H:%M:%S}", time);
 }
 
+std::string format_date_time(std::chrono::local_seconds time) {
+  return std::format("{:%Y-%m-%d %H:%M}", time);
+}
+
 }  // namespace myclean::tray_model

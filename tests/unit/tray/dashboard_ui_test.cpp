@@ -3,7 +3,9 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include <gtest/gtest.h>
 #include <imgui.h>
@@ -13,8 +15,10 @@
 #include "core/model/result.hpp"
 #include "core/model/series.hpp"
 #include "core/tray_model/dashboard_model.hpp"
+#include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/replies.hpp"
+#include "core/tray_model/snapshot.hpp"
 
 namespace myclean::tray {
 namespace {
@@ -63,7 +67,8 @@ int render(const tray_model::DashboardModel& model, UiState& state) {
   return vertices;
 }
 
-// Ten minutes of live data, the per-processor history and the top process trees.
+// Ten minutes of live data (per processor too), the top process trees with their trust, an
+// explanation, the health of three drives, alerts, freezes and the last hour of history.
 tray_model::DashboardModel full_model() {
   tray_model::DashboardModel model;
   tray_model::testing::Json reply = tray_model::testing::latest_json(start);
@@ -79,21 +84,38 @@ tray_model::DashboardModel full_model() {
   tray_model::PollResult open;
   open.time = from_unix_seconds(start);
   open.reachable = true;
-  for (unsigned core = 0; core < 4; ++core) {
-    for (const char* metric : {"cpu.utility", "cpu.frequency"}) {
-      const Result<Series> series = tray_model::parse_metrics_query(tray_model::testing::query_json(
-          metric, tray_model::processor_entity(core), start - 120, start + 1, 25.0 * core));
-      open.history.push_back(*series);
-    }
-  }
   open.top_by_cpu = tray_model::parse_processes_top(tray_model::testing::top_json()).value();
   open.top_by_memory = open.top_by_cpu;
+  open.explanation = tray_model::parse_processes_explain(tray_model::testing::explain_json());
+  open.drives = tray_model::parse_disks_health(tray_model::testing::health_json()).value();
+  open.badge = tray_model::AlertSummary{.active = 1, .worst = tray_model::AlertSeverity::warning};
+  tray_model::testing::Json alerts =
+      tray_model::testing::alerts_json(tray_model::testing::Json::array(
+          {tray_model::testing::alert_json("volume.fill-up", "C", "warning", true, start - 5),
+           tray_model::testing::alert_json("disk.temperature", "Sam_1A2B", "critical", false,
+                                           nullptr)}));
+  alerts["alerts"][1]["snoozed_until"] = start + 3600;
+  open.alerts = tray_model::parse_alerts_list(alerts).value();
+  open.alert_action = "Snooze failed: no stored alert has that rule and entity";
+  open.freezes = tray_model::parse_input_summary(tray_model::testing::summary_json()).value();
+  open.incidents =
+      tray_model::IncidentQueue::Counts{.sent = 3, .dropped = 1, .rejected = 1, .queued = 2};
+  tray_model::RangeHistory hour{
+      .range = tray_model::Range::hour, .time = from_unix_seconds(start), .series = {}};
+  for (const char* metric : {"cpu.utility", "memory.available", "disk.idle"}) {
+    const Result<Series> series = tray_model::parse_metrics_query(
+        tray_model::testing::query_json(metric, std::string(metric) == "disk.idle" ? "0" : "system",
+                                        start - 3600, start + 1, 50.0, 6));
+    hour.series.push_back(*series);
+  }
+  open.range = std::move(hour);
   model.apply(std::move(open));
   return model;
 }
 
-constexpr std::array<Section, 4> all_sections = {Section::cpu_memory, Section::disks,
-                                                 Section::volumes, Section::processes};
+constexpr std::array<Section, 6> all_sections = {Section::cpu_memory, Section::disks,
+                                                 Section::volumes,    Section::processes,
+                                                 Section::alerts,     Section::freezes};
 
 TEST(DashboardUiTest, DrawsEverySectionWithLiveData) {
   const HeadlessUi ui;
@@ -128,6 +150,56 @@ TEST(DashboardUiTest, DrawsBeforeAnyDataArrived) {
   const tray_model::DashboardModel model;
   for (const Section section : all_sections) {
     UiState state{.section = section, .sort = tray_model::ProcessSort::cpu};
+    EXPECT_GT(render(model, state), 0);
+  }
+}
+
+TEST(DashboardUiTest, DrawsAPastRangeAndWaitsForOneNotLoadedYet) {
+  const HeadlessUi ui;
+  apply_style(1.0F);
+  const tray_model::DashboardModel model = full_model();
+  for (const tray_model::Range range : {tray_model::Range::hour, tray_model::Range::month}) {
+    for (const Section section : {Section::cpu_memory, Section::disks}) {
+      UiState state{.section = section, .range = range};
+      EXPECT_GT(render(model, state), 0);
+      EXPECT_TRUE(state.requests.empty()) << "nothing was clicked";
+    }
+  }
+}
+
+TEST(DashboardUiTest, DrawsTheExplanationWhileItIsPendingAnsweredOrFailed) {
+  const HeadlessUi ui;
+  apply_style(1.0F);
+  tray_model::DashboardModel model = full_model();
+  for (const std::uint32_t pid : {101U, 555U}) {
+    UiState state{.section = Section::processes, .explained = pid};
+    EXPECT_GT(render(model, state), 0);
+    EXPECT_EQ(state.explained, pid);
+  }
+  tray_model::PollResult failed;
+  failed.time = from_unix_seconds(start + 1);
+  failed.reachable = true;
+  failed.explanation =
+      Result<tray_model::Explanation>(fail(Errc::not_found, "process 555 was not found"));
+  model.apply(std::move(failed));
+  UiState state{.section = Section::processes, .explained = 555U};
+  EXPECT_GT(render(model, state), 0);
+}
+
+TEST(DashboardUiTest, DrawsFreezesWithNoneRecordedAndAWatchdogThatDidNotStart) {
+  const HeadlessUi ui;
+  apply_style(1.0F);
+  tray_model::DashboardModel model;
+  model.set_watchdog_error("RegisterRawInputDevices failed: Win32 error 5");
+  tray_model::PollResult none;
+  none.time = from_unix_seconds(start);
+  none.reachable = true;
+  none.freezes = std::vector<tray_model::FreezeGroupRow>{};
+  none.alerts = std::vector<tray_model::AlertRow>{};
+  none.badge = tray_model::AlertSummary{};
+  model.apply(std::move(none));
+  for (const Section section : {Section::freezes, Section::alerts}) {
+    UiState state{.section = section};
     EXPECT_GT(render(model, state), 0);
   }
 }

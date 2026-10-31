@@ -9,7 +9,10 @@
 #include <nlohmann/json.hpp>
 
 #include "../tray_model/tray_model_test_support.hpp"
+#include "core/input/incident.hpp"
 #include "core/model/result.hpp"
+#include "core/tray_model/incident_queue.hpp"
+#include "core/tray_model/poller.hpp"
 #include "core/tray_model/replies.hpp"
 #include "fakes/fake_clock.hpp"
 
@@ -86,6 +89,42 @@ TEST_F(PollThreadTest, OpeningTheDashboardPollsTheProcessTreesAtOnce) {
   const auto& trees = shared().model.top_by_cpu();
   ASSERT_TRUE(trees.has_value());
   EXPECT_EQ((*trees).size(), 2U);
+}
+
+TEST_F(PollThreadTest, ARequestIsSentAtOnceAndItsAnswerApplied) {
+  link().on("processes.explain",
+            [](const Json&) -> Result<Json> { return tray_model::testing::explain_json(); });
+  PollThread thread(link(), clock(), shared(), [this] { updates().notify(); });
+  ASSERT_TRUE(updates().wait_for(1));
+  thread.request(tray_model::ExplainProcess{.pid = 101});
+  ASSERT_TRUE(updates().wait_for(2));
+  const std::scoped_lock lock(shared().mutex);
+  const auto& explanation = shared().model.explanation();
+  ASSERT_TRUE(explanation.has_value());
+  ASSERT_TRUE((*explanation).has_value());
+  EXPECT_EQ((*explanation).value().pid, 101U);
+  EXPECT_EQ(link().calls_of("processes.explain").size(), 1U);
+}
+
+TEST_F(PollThreadTest, ForwardsTheWatchdogsIncidents) {
+  int recorded = 0;
+  link().on("input.record_incident", [&recorded](const Json&) -> Result<Json> {
+    ++recorded;
+    return Json{{"id", recorded}};
+  });
+  tray_model::IncidentQueue incidents;
+  incidents.record(input::Incident{
+      .chord = input::Chord::copy, .time = tray_model::from_unix_seconds(start), .latency = 400ms});
+  {
+    const PollThread thread(link(), clock(), shared(), [this] { updates().notify(); }, &incidents);
+    ASSERT_TRUE(updates().wait_for(1));
+  }
+  EXPECT_EQ(recorded, 1);
+  EXPECT_EQ(incidents.counts().sent, 1U);
+  const std::scoped_lock lock(shared().mutex);
+  const auto& counts = shared().model.incident_counts();
+  ASSERT_TRUE(counts.has_value());
+  EXPECT_EQ((*counts).sent, 1U);
 }
 
 TEST_F(PollThreadTest, StopsPromptlyWhileTheServiceIsDown) {

@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
+#include <span>
+#include <string>
 #include <string_view>
 
 // clang-format off
@@ -17,6 +19,16 @@ namespace myclean::tray {
 namespace {
 
 constexpr UINT icon_id = 1;
+
+// Copies UTF-8 `text` as UTF-16 into the zero-filled `target`, cut to leave its terminating zero
+// (an invalid sequence becomes U+FFFD).
+void copy_wide(std::string_view text, std::span<wchar_t> target) {
+  std::wstring wide(text.size(), L'\0');
+  const int length = ::MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
+                                           wide.data(), static_cast<int>(wide.size()));
+  wide.resize(std::min(static_cast<std::size_t>(std::max(length, 0)), target.size() - 1));
+  std::ranges::copy(wide, target.begin());
+}
 
 }  // namespace
 
@@ -53,6 +65,32 @@ Result<void> TrayIcon::update(HICON icon, std::string_view tooltip) {
   NOTIFYICONDATAW icon_data = data(icon, tooltip);
   if (::Shell_NotifyIconW(NIM_MODIFY, &icon_data) == FALSE) {
     return fail(Errc::io_error, "Shell_NotifyIcon(NIM_MODIFY) failed");
+  }
+  return {};
+}
+
+Result<void> TrayIcon::notify(std::string_view title, std::string_view text, Level level) {
+  NOTIFYICONDATAW icon_data{};
+  icon_data.cbSize = sizeof(icon_data);
+  icon_data.hWnd = window_;
+  icon_data.uID = icon_id;
+  icon_data.uFlags = NIF_INFO;
+  copy_wide(title, std::span(icon_data.szInfoTitle));
+  copy_wide(text, std::span(icon_data.szInfo));
+  icon_data.dwInfoFlags = NIIF_RESPECT_QUIET_TIME;
+  switch (level) {
+    case Level::info:
+      icon_data.dwInfoFlags |= NIIF_INFO;
+      break;
+    case Level::warning:
+      icon_data.dwInfoFlags |= NIIF_WARNING;
+      break;
+    case Level::error:
+      icon_data.dwInfoFlags |= NIIF_ERROR;
+      break;
+  }
+  if (::Shell_NotifyIconW(NIM_MODIFY, &icon_data) == FALSE) {
+    return fail(Errc::io_error, "Shell_NotifyIcon(NIM_MODIFY, NIF_INFO) failed");
   }
   return {};
 }

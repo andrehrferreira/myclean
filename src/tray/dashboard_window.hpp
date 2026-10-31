@@ -1,7 +1,9 @@
 #pragma once
 
 #include <chrono>
+#include <functional>
 #include <memory>
+#include <utility>
 
 #include <d3d11.h>
 #include <dxgi.h>
@@ -10,6 +12,7 @@
 #include <windows.h>
 
 #include "core/model/result.hpp"
+#include "core/tray_model/poller.hpp"
 #include "tray/dashboard_ui.hpp"
 #include "tray/poll_thread.hpp"
 
@@ -24,9 +27,12 @@ namespace myclean::tray {
 // costs no memory. UI thread only.
 class DashboardWindow {
  public:
-  // Creates and shows the window. `shared` and `zone` must outlive it.
+  using Send = std::function<void(tray_model::Request)>;
+
+  // Creates and shows the window. `shared` and `zone` must outlive it. `send` takes the owner's
+  // requests (snooze, dismiss, explain, chart range) to the poll thread.
   [[nodiscard]] static Result<std::unique_ptr<DashboardWindow>> open(
-      HINSTANCE instance, SharedModel& shared, const std::chrono::time_zone& zone);
+      HINSTANCE instance, SharedModel& shared, const std::chrono::time_zone& zone, Send send);
 
   DashboardWindow(const DashboardWindow&) = delete;
   DashboardWindow& operator=(const DashboardWindow&) = delete;
@@ -45,8 +51,8 @@ class DashboardWindow {
  private:
   static constexpr int settle_frames = 3;
 
-  DashboardWindow(SharedModel& shared, const std::chrono::time_zone& zone)
-      : shared_(&shared), zone_(&zone) {}
+  DashboardWindow(SharedModel& shared, const std::chrono::time_zone& zone, Send send)
+      : shared_(&shared), zone_(&zone), send_(std::move(send)) {}
 
   static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
   LRESULT handle(UINT message, WPARAM wparam, LPARAM lparam);
@@ -56,6 +62,7 @@ class DashboardWindow {
 
   SharedModel* shared_;
   const std::chrono::time_zone* zone_;
+  Send send_;
   UiState ui_;
   wil::unique_hwnd window_;
   wil::com_ptr_nothrow<ID3D11Device> device_;

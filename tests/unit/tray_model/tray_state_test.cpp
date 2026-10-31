@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -141,8 +142,27 @@ TEST(TrayStateTest, TooltipShowsMissingValuesAsNotAvailable) {
 
 TEST(TrayStateTest, TooltipNamesTheWorstDiskHealthWhenKnown) {
   TooltipData data = tooltip_data(true, calm, {});
-  data.worst_disk_health = "Disk 3: warning";
-  EXPECT_NE(tooltip_text(data).find("Disk health: Disk 3: warning"), std::string::npos);
+  data.worst_disk_health = "Disk 3 warning";
+  EXPECT_NE(tooltip_text(data).find("Disk health: Disk 3 warning"), std::string::npos);
+}
+
+TEST(TrayStateTest, WorstDriveHealth) {
+  const auto drive = [](std::string disk, DriveStatus status) {
+    DriveHealthRow row;
+    row.disk = std::move(disk);
+    row.status = status;
+    return row;
+  };
+  EXPECT_FALSE(worst_drive_health({}));
+  EXPECT_EQ(worst_drive_health({drive("0", DriveStatus::good), drive("1", DriveStatus::good)}),
+            "good");
+  // A drive that cannot be read does not hide the others' status.
+  EXPECT_EQ(worst_drive_health({drive("0", DriveStatus::good), drive("7", DriveStatus::unknown)}),
+            "good");
+  EXPECT_EQ(worst_drive_health({drive("7", DriveStatus::unknown)}), "unknown");
+  EXPECT_EQ(worst_drive_health({drive("0", DriveStatus::warning), drive("3", DriveStatus::failing),
+                                drive("5", DriveStatus::failing)}),
+            "Disk 3 failing");
 }
 
 TEST(TrayStateTest, TooltipSaysWhenTheServiceIsDown) {

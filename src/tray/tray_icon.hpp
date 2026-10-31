@@ -29,6 +29,11 @@ class TrayIcon {
   [[nodiscard]] Result<void> add(HICON icon, std::string_view tooltip);
   // Changes the image and the tooltip (ASCII, cut to what the shell keeps).
   [[nodiscard]] Result<void> update(HICON icon, std::string_view tooltip);
+  // Shows a notification from the icon (a toast on Windows 11), quiet during the owner's quiet
+  // hours. `title` and `text` are UTF-8, cut to what the shell keeps. Clicking it sends
+  // NIN_BALLOONUSERCLICK to the window.
+  enum class Level { info, warning, error };
+  [[nodiscard]] Result<void> notify(std::string_view title, std::string_view text, Level level);
   void remove();
 
  private:

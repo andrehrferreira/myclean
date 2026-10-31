@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 
 #include <d3d11.h>
 #include <dwmapi.h>
@@ -74,12 +75,13 @@ void load_font(ImGuiIO& io) {
 
 Result<std::unique_ptr<DashboardWindow>> DashboardWindow::open(HINSTANCE instance,
                                                                SharedModel& shared,
-                                                               const std::chrono::time_zone& zone) {
+                                                               const std::chrono::time_zone& zone,
+                                                               Send send) {
   if (Result<void> registered = register_class(instance, &DashboardWindow::window_proc);
       !registered) {
     return tl::unexpected(registered.error());
   }
-  std::unique_ptr<DashboardWindow> self(new DashboardWindow(shared, zone));
+  std::unique_ptr<DashboardWindow> self(new DashboardWindow(shared, zone, std::move(send)));
   const float system_scale = static_cast<float>(::GetDpiForSystem()) / base_dpi;
   HWND window = ::CreateWindowExW(0, class_name, L"MyClean", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
                                   CW_USEDEFAULT, static_cast<int>(base_width * system_scale),
@@ -194,6 +196,10 @@ void DashboardWindow::render() {
     const std::scoped_lock lock(shared_->mutex);
     draw_dashboard(shared_->model, *zone_, ui_);
   }
+  for (tray_model::Request& request : ui_.requests) {
+    send_(std::move(request));
+  }
+  ui_.requests.clear();
   ImGui::Render();
   const std::array<ID3D11RenderTargetView*, 1> targets = {target_.get()};
   context_->OMSetRenderTargets(1, targets.data(), nullptr);

@@ -12,8 +12,10 @@
 #include "core/model/result.hpp"
 #include "core/model/series.hpp"
 #include "core/tray_model/chart.hpp"
+#include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/replies.hpp"
+#include "core/tray_model/snapshot.hpp"
 #include "core/tray_model/tray_state.hpp"
 #include "tray_model_test_support.hpp"
 
@@ -103,8 +105,9 @@ TEST(DashboardModelTest, ServiceStopKeepsTheLastValuesAndStopsTheCharts) {
   EXPECT_EQ(model.chart(SeriesKey{.metric = "cpu.utility", .entity = "system"})->times().size(),
             1U);
   EXPECT_EQ(model.tray_status().state, TrayState::service_down);
-  EXPECT_EQ(model.unavailable_features(),
-            (std::vector<std::string>{"live telemetry", "history", "disk health", "alerts"}));
+  EXPECT_EQ(
+      model.unavailable_features(),
+      (std::vector<std::string>{"live telemetry", "history", "disk health", "alerts", "freezes"}));
   model.apply(reachable_at(start + 6));
   EXPECT_TRUE(model.service_reachable());
   EXPECT_TRUE(model.service_error().empty());
@@ -159,6 +162,148 @@ TEST(DashboardModelTest, CollectorsUnavailableOnThisMachine) {
   model.apply(reachable_at(start, reply));
   EXPECT_EQ(model.unavailable_collectors(),
             std::vector<std::string>{"gpu: no GPU performance counters"});
+}
+
+TEST(DashboardModelTest, ProcessorsAreChartedUnderTheirTokenEntity) {
+  DashboardModel model;
+  model.apply(reachable_at(start));
+  EXPECT_EQ(model.processors(), (std::vector<std::string>{"0_0", "0_1", "0_2", "0_3"}));
+  const ChartSeries* core = model.chart(SeriesKey{.metric = "cpu.utility", .entity = "0_2"});
+  ASSERT_NE(core, nullptr);
+  EXPECT_EQ(core->newest_value(), 30.0);
+}
+
+TEST(DashboardModelTest, TheBadgeColorsTheIcon) {
+  DashboardModel model;
+  PollResult critical = reachable_at(start);
+  critical.badge = AlertSummary{.active = 2, .worst = AlertSeverity::critical};
+  model.apply(std::move(critical));
+  EXPECT_EQ(
+      model.tray_status(),
+      (TrayStatus{.state = TrayState::alert, .severity = AlertSeverity::critical, .badge = true}));
+  // A service without alerts.badge: no alert state and no badge.
+  model.apply(reachable_at(start + 1));
+  EXPECT_FALSE(model.badge());
+  EXPECT_EQ(model.tray_status().state, TrayState::normal);
+  EXPECT_FALSE(model.tray_status().badge);
+}
+
+// A poll that carries `alerts`, each {rule, entity, toast_at or null}.
+PollResult with_alerts(std::int64_t second, testing::Json alerts) {
+  PollResult result = reachable_at(second);
+  result.alerts = parse_alerts_list(testing::alerts_json(std::move(alerts))).value();
+  return result;
+}
+
+TEST(DashboardModelTest, ToastsOnlyForToastsDecidedAfterTheTrayConnected) {
+  DashboardModel model;
+  // Raised while the tray was not running: badge only.
+  model.apply(with_alerts(start, testing::Json::array({testing::alert_json(
+                                     "volume.fill-up", "C", "warning", true, start - 100)})));
+  EXPECT_TRUE(model.take_toasts().empty());
+  ASSERT_TRUE(model.alerts().has_value());
+  EXPECT_EQ((*model.alerts()).size(), 1U);
+  // Unchanged: nothing new.
+  model.apply(with_alerts(start + 1, testing::Json::array({testing::alert_json(
+                                         "volume.fill-up", "C", "warning", true, start - 100)})));
+  EXPECT_TRUE(model.take_toasts().empty());
+  // Newest first, as alerts.list answers: a new alert on disk 3, a new decision for C:, an
+  // alert without a toast decision (snoozed or within its rate limit).
+  model.apply(with_alerts(
+      start + 2,
+      testing::Json::array(
+          {testing::alert_json("disk.temperature", "disk3", "critical", true, start + 2),
+           testing::alert_json("volume.fill-up", "C", "warning", true, start + 1),
+           testing::alert_json("disk.temperature", "disk5", "warning", true, nullptr)})));
+  const std::vector<AlertRow> toasts = model.take_toasts();
+  ASSERT_EQ(toasts.size(), 2U);
+  EXPECT_EQ(toasts[0].entity, "C") << "oldest first";
+  EXPECT_EQ(toasts[1].entity, "disk3");
+  EXPECT_EQ(toasts[1].severity, AlertSeverity::critical);
+  EXPECT_TRUE(model.take_toasts().empty()) << "each toast is taken once";
+}
+
+TEST(DashboardModelTest, TheWorstDriveIsInTheTooltip) {
+  DashboardModel model;
+  PollResult result = reachable_at(start);
+  result.drives = parse_disks_health(testing::health_json()).value();
+  model.apply(std::move(result));
+  EXPECT_NE(model.tooltip().find("Disk health: Disk 0 warning"), std::string::npos)
+      << model.tooltip();
+  ASSERT_NE(model.drive("7"), nullptr);
+  EXPECT_EQ(model.drive("7")->model, "ROG ESD-S1C");
+  EXPECT_EQ(model.drive("3"), nullptr);
+  // Kept until the next reading (every minute).
+  model.apply(reachable_at(start + 1));
+  EXPECT_NE(model.drive("0"), nullptr);
+}
+
+TEST(DashboardModelTest, APastRangeReplacesThePreviousOne) {
+  DashboardModel model;
+  model.apply(reachable_at(start));
+  EXPECT_FALSE(model.range());
+  const SeriesKey cpu{.metric = "cpu.utility", .entity = "system"};
+  const SeriesKey idle{.metric = "disk.idle", .entity = "0"};
+  PollResult hour = reachable_at(start + 1);
+  hour.range = RangeHistory{
+      .range = Range::hour,
+      .time = from_unix_seconds(start + 1),
+      .series = {Series{.key = cpu,
+                        .samples = {Sample{.time = from_unix_seconds(start - 3000), .value = 7.0},
+                                    Sample{.time = from_unix_seconds(start - 10), .value = 8.0}}},
+                 Series{.key = idle, .samples = {}}}};
+  model.apply(std::move(hour));
+  EXPECT_EQ(model.range(), Range::hour);
+  EXPECT_EQ(model.range_time(), from_unix_seconds(start + 1));
+  ASSERT_NE(model.range_chart(cpu), nullptr);
+  EXPECT_EQ(model.range_chart(cpu)->values().size(), 2U);
+  EXPECT_NE(model.range_chart(idle), nullptr);
+  EXPECT_EQ(model.chart(cpu)->values().size(), 2U) << "the live chart is separate";
+
+  PollResult day = reachable_at(start + 2);
+  day.range = RangeHistory{.range = Range::day,
+                           .time = from_unix_seconds(start + 2),
+                           .series = {Series{.key = idle, .samples = {}}}};
+  model.apply(std::move(day));
+  EXPECT_EQ(model.range(), Range::day);
+  EXPECT_EQ(model.range_chart(cpu), nullptr);
+}
+
+TEST(DashboardModelTest, ExplanationAndAlertActionsAreKeptUntilTheNextAnswer) {
+  DashboardModel model;
+  PollResult explained = reachable_at(start);
+  explained.explanation = parse_processes_explain(testing::explain_json());
+  explained.alert_action = "Snooze failed: no such alert";
+  model.apply(std::move(explained));
+  model.apply(reachable_at(start + 1));
+  const auto& explanation = model.explanation();
+  ASSERT_TRUE(explanation.has_value());
+  ASSERT_TRUE((*explanation).has_value());
+  EXPECT_EQ((*explanation).value().pid, 101U);
+  EXPECT_EQ(model.alert_action_error(), "Snooze failed: no such alert");
+  PollResult worked = reachable_at(start + 2);
+  worked.alert_action = "";
+  model.apply(std::move(worked));
+  EXPECT_TRUE(model.alert_action_error().empty());
+}
+
+TEST(DashboardModelTest, FreezesAndTheIncidentQueue) {
+  DashboardModel model;
+  model.set_watchdog_error("RegisterRawInputDevices failed: Win32 error 5");
+  EXPECT_EQ(model.watchdog_error(), "RegisterRawInputDevices failed: Win32 error 5");
+  PollResult result = reachable_at(start);
+  result.freezes = parse_input_summary(testing::summary_json()).value();
+  model.apply(std::move(result));
+  ASSERT_TRUE(model.freezes().has_value());
+  EXPECT_EQ((*model.freezes()).size(), 2U);
+  // The queue's counts change while the service is down too.
+  PollResult down = unreachable_at(start + 1);
+  down.incidents = IncidentQueue::Counts{.sent = 2, .dropped = 1, .rejected = 0, .queued = 4};
+  model.apply(std::move(down));
+  const auto& counts = model.incident_counts();
+  ASSERT_TRUE(counts.has_value());
+  EXPECT_EQ((*counts).queued, 4U);
+  EXPECT_TRUE(model.freezes().has_value()) << "the last view is kept";
 }
 
 }  // namespace

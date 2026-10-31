@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <spdlog/spdlog.h>
 #include <wil/resource.h>
@@ -14,7 +15,11 @@
 
 #include "core/model/result.hpp"
 #include "core/os/clock.hpp"
+#include "core/tray_model/incident_queue.hpp"
+#include "core/tray_model/poller.hpp"
+#include "core/tray_model/snapshot.hpp"
 #include "core/tray_model/tray_state.hpp"
+#include "platform/input/input_watchdog.hpp"
 #include "tray/dashboard_window.hpp"
 #include "tray/icon.hpp"
 #include "tray/instance.hpp"
@@ -51,6 +56,7 @@ class App {
   static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
   LRESULT handle(UINT message, WPARAM wparam, LPARAM lparam);
   void refresh_icon(bool add);
+  void show_toasts();
   void open_dashboard();
   void show_menu(POINT anchor);
 
@@ -68,6 +74,9 @@ class App {
   UINT taskbar_created_ = 0;
   std::unique_ptr<DashboardWindow> dashboard_;
   bool quit_ = false;
+  // Filled by the watchdog, emptied by the poll thread: declared before both, so it goes last.
+  tray_model::IncidentQueue incidents_;
+  std::unique_ptr<platform::InputWatchdog> watchdog_;
   std::unique_ptr<PollThread> poll_;  // last: joined first, before anything it posts to goes
 };
 
@@ -91,8 +100,21 @@ Result<void> App::start() {
   taskbar_created_ = ::RegisterWindowMessageW(L"TaskbarCreated");
   icon_ = std::make_unique<TrayIcon>(window);
   refresh_icon(true);
-  poll_ = std::make_unique<PollThread>(link_, clock_, shared_,
-                                       [window] { ::PostMessageW(window, update_message, 0, 0); });
+  poll_ = std::make_unique<PollThread>(
+      link_, clock_, shared_, [window] { ::PostMessageW(window, update_message, 0, 0); },
+      &incidents_);
+  // The freeze watchdog: raw input and a clipboard listener on a message-only window, no hook.
+  // Without it the tray still runs; the Freezes view says why it is missing.
+  Result<std::unique_ptr<platform::InputWatchdog>> watchdog =
+      platform::InputWatchdog::start(incidents_, clock_);
+  if (watchdog) {
+    watchdog_ = std::move(*watchdog);
+    spdlog::info("freeze watchdog started");
+  } else {
+    spdlog::error("freeze watchdog: {}", watchdog.error().message);
+    const std::scoped_lock lock(shared_.mutex);
+    shared_.model.set_watchdog_error(watchdog.error().message);
+  }
   return {};
 }
 
@@ -124,6 +146,10 @@ int App::loop(HANDLE quit_event) {
       dashboard_->render();
     }
   }
+  if (watchdog_) {
+    watchdog_->stop();
+    spdlog::info("freeze watchdog stopped");
+  }
   return exit_ok;
 }
 
@@ -138,6 +164,7 @@ LRESULT CALLBACK App::window_proc(HWND window, UINT message, WPARAM wparam, LPAR
 LRESULT App::handle(UINT message, WPARAM wparam, LPARAM lparam) {
   if (message == update_message) {
     refresh_icon(false);
+    show_toasts();
     if (dashboard_) {
       dashboard_->request_frames();
     }
@@ -147,6 +174,7 @@ LRESULT App::handle(UINT message, WPARAM wparam, LPARAM lparam) {
     switch (LOWORD(lparam)) {
       case NIN_SELECT:
       case NIN_KEYSELECT:
+      case NIN_BALLOONUSERCLICK:
         open_dashboard();
         break;
       case WM_CONTEXTMENU:
@@ -201,13 +229,36 @@ void App::refresh_icon(bool add) {
   icon_shown_ = shown.has_value();
 }
 
+void App::show_toasts() {
+  std::vector<tray_model::AlertRow> toasts;
+  {
+    const std::scoped_lock lock(shared_.mutex);
+    toasts = shared_.model.take_toasts();
+  }
+  if (!icon_shown_) {
+    return;  // the alerts stay in the badge and the Alerts section
+  }
+  for (const tray_model::AlertRow& alert : toasts) {
+    TrayIcon::Level level = TrayIcon::Level::info;
+    if (alert.severity == tray_model::AlertSeverity::warning) {
+      level = TrayIcon::Level::warning;
+    } else if (alert.severity == tray_model::AlertSeverity::critical) {
+      level = TrayIcon::Level::error;
+    }
+    if (Result<void> shown = icon_->notify(alert.title, alert.detail, level); !shown) {
+      spdlog::warn("toast: {}", shown.error().message);
+    }
+  }
+}
+
 void App::open_dashboard() {
   if (dashboard_) {
     dashboard_->activate();
     return;
   }
-  Result<std::unique_ptr<DashboardWindow>> dashboard =
-      DashboardWindow::open(module_, shared_, clock_.zone());
+  Result<std::unique_ptr<DashboardWindow>> dashboard = DashboardWindow::open(
+      module_, shared_, clock_.zone(),
+      [this](tray_model::Request request) { poll_->request(std::move(request)); });
   if (!dashboard) {
     spdlog::error("dashboard: {}", dashboard.error().message);
     return;

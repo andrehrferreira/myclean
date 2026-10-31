@@ -53,6 +53,32 @@ bool natural_less(std::string_view left, std::string_view right) {
   return left.size() - i < right.size() - j;
 }
 
+std::string_view to_string(AlertSeverity severity) {
+  switch (severity) {
+    case AlertSeverity::info:
+      return "info";
+    case AlertSeverity::warning:
+      return "warning";
+    case AlertSeverity::critical:
+      break;
+  }
+  return "critical";
+}
+
+std::string_view to_string(DriveStatus status) {
+  switch (status) {
+    case DriveStatus::unknown:
+      return "unknown";
+    case DriveStatus::good:
+      return "good";
+    case DriveStatus::warning:
+      return "warning";
+    case DriveStatus::failing:
+      break;
+  }
+  return "failing";
+}
+
 void MetricsSnapshot::set(SeriesKey key, Sample sample) {
   const auto at = std::ranges::lower_bound(values_, key, std::less<>{}, &Entry::first);
   if (at != values_.end() && at->first == key) {

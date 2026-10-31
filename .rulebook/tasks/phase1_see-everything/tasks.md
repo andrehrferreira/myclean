@@ -17,8 +17,8 @@
 - [x] 1.16 I2: freeze view + mechanism classifier (delayed rendering, clipboard held open, viewer chain, slow keyboard hook, heavy payload)
 - [x] 1.17 K1: trust signal (WinVerifyTrust incl. catalog, signer, user-writable path, KB match) + knowledge base v1 data
 - [x] 1.18 R5: myclean CLI with --json for every read feature, including `status --json` (deploy contract C6) and `health`
-- [ ] 1.19 R6: `myclean mcp` stdio server with read-only tools (health_snapshot, explain_process, storage/volume/disk queries)
-- [ ] 1.20 R4: dashboard: live charts for CPU, memory and each disk, per-drive health cards, volume bars with days-until-full, top process trees
+- [x] 1.19 R6: `myclean mcp` stdio server with read-only tools (health_snapshot, explain_process, storage/volume/disk queries)
+- [x] 1.20 R4: dashboard: live charts for CPU, memory and each disk, per-drive health cards, volume bars with days-until-full, top process trees
 - [ ] 1.21 Acceptance: prompt 1 passes in Claude Code via myclean mcp; all 8 drives show health or an explicit 'not readable over USB'; service + tray within NFR-PERF-1 for 24 h; deployed with tools/deploy/deploy.ps1
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)

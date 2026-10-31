@@ -1,6 +1,8 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -24,15 +26,19 @@ struct LatestReply {
   MetricsSnapshot metrics;
   std::vector<VolumeRow> volumes;
   unsigned logical_processors = 0;
+  // The cpu.utility and cpu.frequency entities of the logical processors, in token form ("0_17"),
+  // ordered by group then number.
+  std::vector<std::string> processors;
   std::vector<std::string> unavailable;  // collectors this machine does not offer, with reasons
 };
 
 [[nodiscard]] Result<LatestReply> parse_metrics_latest(const nlohmann::json& reply);
 
 // metrics.query of `metric` for `entity` (any series entity; sent in token form) over
-// [from, to), in Unix seconds.
+// [from, to), in Unix seconds, merged into at most `max_points` points when set.
 [[nodiscard]] nlohmann::json metrics_query_params(std::string_view metric, std::string_view entity,
-                                                  std::int64_t from, std::int64_t to);
+                                                  std::int64_t from, std::int64_t to,
+                                                  std::optional<int> max_points = std::nullopt);
 // The points' means as samples, under the series key the service answered with.
 [[nodiscard]] Result<Series> parse_metrics_query(const nlohmann::json& reply);
 
@@ -41,9 +47,23 @@ enum class ProcessSort { cpu, memory };
 [[nodiscard]] nlohmann::json processes_top_params(ProcessSort sort, int limit);
 [[nodiscard]] Result<std::vector<ProcessTreeRow>> parse_processes_top(const nlohmann::json& reply);
 
-// The cpu.* entity of logical processor `index` of all groups ("0,17"), assuming groups of 64
-// processors, which Windows forms on machines with up to 64 logical processors per NUMA node.
-[[nodiscard]] std::string processor_entity(unsigned index);
+// processes.explain (core/ipc/telemetry.hpp).
+[[nodiscard]] nlohmann::json processes_explain_params(std::uint32_t pid);
+[[nodiscard]] Result<Explanation> parse_processes_explain(const nlohmann::json& reply);
+
+// disks.health (core/ipc/disk_health.hpp): the drives in disk number order.
+[[nodiscard]] Result<std::vector<DriveHealthRow>> parse_disks_health(const nlohmann::json& reply);
+
+// The alert methods (core/ipc/alerts.hpp).
+[[nodiscard]] Result<AlertSummary> parse_alerts_badge(const nlohmann::json& reply);
+[[nodiscard]] nlohmann::json alerts_list_params(WallTime since);
+[[nodiscard]] Result<std::vector<AlertRow>> parse_alerts_list(const nlohmann::json& reply);
+[[nodiscard]] nlohmann::json alerts_snooze_params(std::string_view rule, std::string_view entity,
+                                                  std::chrono::minutes duration);
+[[nodiscard]] nlohmann::json alerts_dismiss_params(std::string_view rule, std::string_view entity);
+
+// input.summary (core/ipc/input.hpp).
+[[nodiscard]] Result<std::vector<FreezeGroupRow>> parse_input_summary(const nlohmann::json& reply);
 
 // Unix seconds.
 [[nodiscard]] std::int64_t unix_seconds(WallTime time);

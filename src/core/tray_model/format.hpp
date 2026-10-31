@@ -26,5 +26,7 @@ inline constexpr std::string_view not_available = "n/a";
 [[nodiscard]] std::string format_days(double days);
 // A local time of day, "14:23:05".
 [[nodiscard]] std::string format_time_of_day(std::chrono::local_seconds time);
+// A local date and time to the minute, "2026-10-31 14:23".
+[[nodiscard]] std::string format_date_time(std::chrono::local_seconds time);
 
 }  // namespace myclean::tray_model
