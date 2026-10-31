@@ -1,0 +1,36 @@
+# Rulebook - ignore runtime data, keep specs, tasks and project memory
+/.rulebook/*
+!/.rulebook/specs/
+!/.rulebook/tasks/
+!/.rulebook/archive/
+!/.rulebook/decisions/
+!/.rulebook/knowledge/
+!/.rulebook/learnings/
+!/.rulebook/rulebook.json
+/.claude/worktrees/
+
+# Patterns added by @hivellm/rulebook
+# Added at: 2026-10-31T04:36:54.301Z
+
+*.log
+*.swo
+*.swp
+*~
+.DS_Store
+.cache/
+.env
+.env.*.local
+.env.local
+.idea/
+.vscode/
+Thumbs.db
+logs/
+temp/
+tmp/
+
+CLAUDE.local.md
+.rulebook/backup/
+
+# MyClean build outputs
+/build/
+/out/

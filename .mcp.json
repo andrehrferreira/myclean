@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "rulebook": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=@hivehub/rulebook@7.5.0",
+        "rulebook-mcp"
+      ]
+    }
+  }
+}

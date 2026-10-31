@@ -1,0 +1,56 @@
+{
+  "version": "7.5.0",
+  "installedAt": "2026-10-31T04:36:54.194Z",
+  "updatedAt": "2026-10-31T04:36:54.387Z",
+  "projectId": "02393b94-4988-4b51-9dac-ec32559b20f4",
+  "mode": "full",
+  "features": {
+    "logging": true,
+    "gitHooks": false,
+    "templates": false,
+    "context": false,
+    "health": false,
+    "parallel": false,
+    "smartContinue": false
+  },
+  "coverageThreshold": 95,
+  "language": "en",
+  "outputLanguage": "en",
+  "cliTools": [],
+  "maxParallelTasks": 1,
+  "timeouts": {
+    "taskExecution": 300000,
+    "cliResponse": 60000,
+    "testRun": 120000
+  },
+  "agentsMode": "lean",
+  "orchestration": "judgment",
+  "monorepo": {
+    "detected": false,
+    "tool": null,
+    "packages": []
+  },
+  "languages": [
+    "cpp"
+  ],
+  "modules": [],
+  "modular": true,
+  "rulebookDir": ".rulebook",
+  "gitPushMode": "manual",
+  "skills": {
+    "enabled": [
+      "languages/cpp",
+      "core/karpathy-guidelines",
+      "core/rulebook"
+    ]
+  },
+  "permissions": {
+    "autoApprove": true
+  },
+  "integrations": {
+    "typesafe": {
+      "enabled": true,
+      "askedAt": "2026-10-31T04:36:54.387Z"
+    }
+  }
+}

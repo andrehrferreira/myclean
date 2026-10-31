@@ -1,0 +1,32 @@
+{
+  "status": "pending",
+  "createdAt": "2026-10-31T05:23:24.236Z",
+  "updatedAt": "2026-10-31T05:27:01.635Z",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which UI technology should the tray app's dashboard and screens use?",
+      "status": "answered",
+      "askedAt": "2026-10-31T05:26:09.865Z",
+      "context": "D1 in docs/prd.md §10 / F-043. It shapes the whole tray codebase (R3, R4, R7 and every later screen), so it is costly to change after M1. Both options run natively on Windows 11 with a Win32 tray icon.",
+      "options": [
+        {
+          "label": "Dear ImGui + ImPlot (D3D11)",
+          "description": "one small C++ dependency, fast iteration, excellent live charts and big virtualized tables; looks like a dev tool"
+        },
+        {
+          "label": "WebView2 + HTML/JS UI",
+          "description": "polished CCleaner-like look, rich layout; adds a web toolchain and a JS/C++ bridge"
+        },
+        {
+          "label": "WinUI 3 (C++/WinRT)",
+          "description": "native Fluent look; heaviest toolchain and slowest iteration"
+        }
+      ],
+      "recommended": "Dear ImGui + ImPlot (D3D11)",
+      "blocks": "R4: dashboard: live charts for CPU, memory and each disk, per-drive health cards, volume bars with days-until-full, top process trees",
+      "answer": "Dear ImGui + ImPlot (D3D11), with a Win32 Shell_NotifyIcon tray icon.",
+      "answeredAt": "2026-10-31T05:26:48.772Z"
+    }
+  ]
+}
