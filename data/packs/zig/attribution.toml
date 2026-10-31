@@ -1,0 +1,8 @@
+# Source: introspect.zig (pack.toml).
+
+[[area]]
+id       = "global-cache"
+paths    = ['%LOCALAPPDATA%\zig', '%ZIG_GLOBAL_CACHE_DIR%']
+category = "dev-caches"
+label    = "Zig global build cache"
+reclaim  = { kind = "clean-rule", ref = "global-cache", note = "Regenerates: entries unused for 30 days are offered." }

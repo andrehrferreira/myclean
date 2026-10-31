@@ -1,0 +1,29 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "system-images"
+paths    = ['%LOCALAPPDATA%\Android\Sdk\system-images', '%ANDROID_HOME%\system-images']
+category = "dev-toolchains"
+label    = "Android emulator system images"
+reclaim  = { kind = "manual-review", note = "Android Studio > SDK Manager > SDK Platforms (Show Package Details) removes images no emulator device uses." }
+
+[[area]]
+id       = "avd"
+paths    = ['%USERPROFILE%\.android\avd', '%ANDROID_AVD_HOME%']
+category = "vm-disks"
+label    = "Android emulator devices"
+reclaim  = { kind = "manual-review", note = "Android Studio > Device Manager deletes devices you do not use, or wipes their data." }
+
+[[area]]
+id       = "sdk-temp"
+paths    = ['%LOCALAPPDATA%\Android\Sdk\.temp', '%ANDROID_HOME%\.temp']
+category = "dev-caches"
+label    = "Android SDK manager leftover downloads"
+reclaim  = { kind = "clean-rule", ref = "sdk-temp" }
+
+[[area]]
+id       = "user-cache"
+paths    = ['%USERPROFILE%\.android\cache', '%USERPROFILE%\.android\build-cache']
+category = "dev-caches"
+label    = "Android tools caches"
+reclaim  = { kind = "clean-rule", ref = "user-cache" }

@@ -1,0 +1,18 @@
+# Moving a WSL distribution (sources: learn.microsoft.com/windows/wsl, see pack.toml). Each
+# subkey of Lxss is one distribution: BasePath is the folder of its ext4.vhdx, DistributionName
+# its name. `wsl --manage <name> --move <folder>` moves the disk and updates BasePath; moving it
+# back the same way undoes it. The distribution must be stopped (`wsl --terminate <name>`).
+# Docker Desktop's own distributions move in Docker Desktop's settings, never with this.
+
+[[relocate]]
+id          = "distro"
+label       = "WSL distribution disk (ext4.vhdx)"
+locations   = ['%LOCALAPPDATA%\Packages\*\LocalState\ext4.vhdx', '%LOCALAPPDATA%\wsl\*\ext4.vhdx']
+current     = { registry = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss\*\BasePath', name = "DistributionName" }
+target_kind = "command"
+command     = "wsl --manage {name} --move {target}"
+content     = "move"
+needs       = ["wsl.exe", "wslhost.exe"]
+skip_names  = ["docker-desktop", "docker-desktop-data"]
+undo        = "command"
+note        = "Stop the distribution first: wsl --terminate <name>. The disk never shrinks by itself; `wsl --manage <name> --set-sparse true` lets it give freed space back."

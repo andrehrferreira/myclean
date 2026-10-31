@@ -1,0 +1,54 @@
+# C:\vcpkg as on the reference machine: old build files and archives go; installed\, ports\,
+# fresh build files and recent archives stay.
+
+[[entry]]
+path = 'C:\vcpkg\.vcpkg-root'
+[[entry]]
+path = 'C:\vcpkg\buildtrees\zlib\x64-windows-static-md-dbg\zlib.obj'
+size = 65536
+[[entry]]
+path = 'C:\vcpkg\buildtrees\fmt\src\fmt.cc'
+age_days = 2
+[[entry]]
+path = 'C:\vcpkg\packages\zlib_x64-windows-static-md\include\zlib.h'
+[[entry]]
+path = 'C:\vcpkg\downloads\zlib-1.3.1.tar.gz'
+[[entry]]
+path = 'C:\vcpkg\downloads\tools\cmake-3.30.1-windows\bin\cmake.exe'
+[[entry]]
+path = 'C:\vcpkg\installed\x64-windows-static-md\include\zlib.h'
+[[entry]]
+path = 'C:\vcpkg\ports\zlib\portfile.cmake'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\vcpkg\archives\3f\3f9a0c1d.zip'
+age_days = 200
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\vcpkg\archives\a7\a71b22e0.zip'
+age_days = 10
+
+[[expect]]
+kind     = "clean"
+case     = "build-files"
+match    = ['C:\vcpkg\buildtrees\zlib', 'C:\vcpkg\packages\zlib_x64-windows-static-md',
+            'C:\vcpkg\downloads\zlib-1.3.1.tar.gz', 'C:\vcpkg\downloads\tools']
+no_match = ['C:\vcpkg\buildtrees\fmt', 'C:\vcpkg\buildtrees', 'C:\vcpkg\installed',
+            'C:\vcpkg\installed\x64-windows-static-md', 'C:\vcpkg\ports', 'C:\vcpkg\ports\zlib',
+            'C:\vcpkg\.vcpkg-root']
+
+[[expect]]
+kind     = "clean"
+case     = "binary-cache"
+match    = ['C:\Users\owner\AppData\Local\vcpkg\archives\3f\3f9a0c1d.zip']
+no_match = ['C:\Users\owner\AppData\Local\vcpkg\archives\a7\a71b22e0.zip',
+            'C:\Users\owner\AppData\Local\vcpkg\archives\3f']
+
+[[expect]]
+kind     = "attribution"
+case     = "build-files"
+match    = ['C:\vcpkg\buildtrees', 'D:\vcpkg\downloads', 'C:\Users\owner\vcpkg\packages']
+no_match = ['C:\vcpkg\installed', 'C:\vcpkg\ports']
+
+[[expect]]
+kind     = "attribution"
+case     = "installed"
+match    = ['C:\vcpkg\installed']

@@ -1,0 +1,13 @@
+# Where the logs are; the handlers themselves decide what goes, so only locations are tested.
+
+[[expect]]
+kind     = "attribution"
+case     = "panther"
+match    = ['C:\Windows\Panther', 'C:\$WINDOWS.~BT\Sources\Panther', 'D:\$WINDOWS.~BT\Sources\Panther']
+no_match = ['C:\Windows\Logs', 'C:\$WINDOWS.~BT\Sources']
+
+[[expect]]
+kind     = "attribution"
+case     = "setup-logs"
+match    = ['C:\Windows\setupact.log', 'C:\Windows\setuperr.log', 'C:\Windows\setuplog.txt']
+no_match = ['C:\Windows\WindowsUpdate.log', 'C:\Windows\Panther\setupact.log']

@@ -1,0 +1,61 @@
+# Default homes: old crates go, recent ones, the index and installed tools stay; toolchains are
+# compression targets.
+
+[[entry]]
+path = 'C:\Users\owner\.cargo\registry\cache\index.crates.io-1949cf8c6b5b557f\serde-1.0.200.crate'
+age_days = 200
+[[entry]]
+path = 'C:\Users\owner\.cargo\registry\cache\index.crates.io-1949cf8c6b5b557f\serde-1.0.228.crate'
+age_days = 10
+[[entry]]
+path = 'C:\Users\owner\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.200\src\lib.rs'
+age_days = 200
+[[entry]]
+path = 'C:\Users\owner\.cargo\registry\index\index.crates.io-1949cf8c6b5b557f\.cache\se\rd\serde'
+age_days = 200
+[[entry]]
+path = 'C:\Users\owner\.cargo\git\checkouts\bevy-3c1e7a9f2b4d6e80\a1b2c3d\Cargo.toml'
+age_days = 120
+[[entry]]
+path = 'C:\Users\owner\.cargo\git\db\bevy-3c1e7a9f2b4d6e80\HEAD'
+age_days = 120
+[[entry]]
+path = 'C:\Users\owner\.cargo\bin\cargo-watch.exe'
+age_days = 400
+[[entry]]
+path = 'C:\Users\owner\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe'
+[[entry]]
+path = 'C:\Users\owner\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib\libstd.rlib'
+[[entry]]
+path = 'C:\Users\owner\.rustup\downloads\a1b2c3.partial'
+
+[[expect]]
+kind     = "clean"
+case     = "registry-cache"
+match    = ['C:\Users\owner\.cargo\registry\cache\index.crates.io-1949cf8c6b5b557f\serde-1.0.200.crate',
+            'C:\Users\owner\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.200',
+            'C:\Users\owner\.cargo\git\checkouts\bevy-3c1e7a9f2b4d6e80']
+no_match = ['C:\Users\owner\.cargo\registry\cache\index.crates.io-1949cf8c6b5b557f\serde-1.0.228.crate',
+            'C:\Users\owner\.cargo\registry\index\index.crates.io-1949cf8c6b5b557f',
+            'C:\Users\owner\.cargo\git\db\bevy-3c1e7a9f2b4d6e80',
+            'C:\Users\owner\.cargo\bin\cargo-watch.exe',
+            'C:\Users\owner\.cargo\registry\cache\index.crates.io-1949cf8c6b5b557f']
+
+[[expect]]
+kind     = "compress"
+case     = "toolchains"
+match    = ['C:\Users\owner\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe',
+            'C:\Users\owner\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib\libstd.rlib']
+no_match = ['C:\Users\owner\.rustup\downloads\a1b2c3.partial', 'C:\Users\owner\.cargo\bin\cargo-watch.exe']
+
+[[expect]]
+kind     = "relocate"
+case     = "rustup-home"
+match    = ['C:\Users\owner\.rustup']
+no_match = ['C:\Users\owner\.cargo']
+
+[[expect]]
+kind     = "attribution"
+case     = "cargo-registry"
+match    = ['C:\Users\owner\.cargo\registry', 'C:\Users\owner\.cargo\git']
+no_match = ['C:\Users\owner\.cargo\bin']

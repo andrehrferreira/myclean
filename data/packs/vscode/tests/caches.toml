@@ -1,0 +1,51 @@
+# Old version data, old packages and stale workspaces go; current ones, settings and web storage
+# stay.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\CachedData\6f17636121051a53c88d3e605c491d22af2ba755\chrome\js\index'
+age_days = 120
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\CachedData\e3a5acfb517a443235981655413d566533107e92\chrome\js\index'
+age_days = 1
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\CachedExtensionVSIXs\ms-python.python-2025.2.0-win32-x64'
+size = 20971520
+age_days = 60
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\CachedExtensionVSIXs\ms-vscode.cpptools-1.27.0-win32-x64'
+age_days = 4
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\User\workspaceStorage\0b1f6c2d9e\state.vscdb'
+age_days = 200
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\User\workspaceStorage\7a3e91c4b2\state.vscdb'
+age_days = 10
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\User\settings.json'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\WebStorage\1\CacheStorage\index.txt'
+
+[[expect]]
+kind     = "clean"
+case     = "cached-data"
+match    = ['C:\Users\owner\AppData\Roaming\Code\CachedData\6f17636121051a53c88d3e605c491d22af2ba755']
+no_match = ['C:\Users\owner\AppData\Roaming\Code\CachedData\e3a5acfb517a443235981655413d566533107e92']
+
+[[expect]]
+kind     = "clean"
+case     = "vsix-cache"
+match    = ['C:\Users\owner\AppData\Roaming\Code\CachedExtensionVSIXs\ms-python.python-2025.2.0-win32-x64']
+no_match = ['C:\Users\owner\AppData\Roaming\Code\CachedExtensionVSIXs\ms-vscode.cpptools-1.27.0-win32-x64']
+
+[[expect]]
+kind     = "clean"
+case     = "workspace-storage"
+match    = ['C:\Users\owner\AppData\Roaming\Code\User\workspaceStorage\0b1f6c2d9e']
+no_match = ['C:\Users\owner\AppData\Roaming\Code\User\workspaceStorage\7a3e91c4b2',
+            'C:\Users\owner\AppData\Roaming\Code\User\settings.json',
+            'C:\Users\owner\AppData\Roaming\Code\WebStorage\1']
+
+[[expect]]
+kind     = "attribution"
+case     = "web-storage"
+match    = ['C:\Users\owner\AppData\Roaming\Code\WebStorage']

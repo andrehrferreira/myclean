@@ -1,0 +1,24 @@
+# Sources: learn.microsoft.com/vcpkg and the reference machine (pack.toml).
+
+[[area]]
+id       = "build-files"
+paths    = ['?:\vcpkg\buildtrees', '?:\vcpkg\packages', '?:\vcpkg\downloads',
+            '%USERPROFILE%\vcpkg\buildtrees', '%USERPROFILE%\vcpkg\packages', '%USERPROFILE%\vcpkg\downloads',
+            '%VCPKG_ROOT%\buildtrees', '%VCPKG_ROOT%\packages', '%VCPKG_ROOT%\downloads']
+category = "dev-caches"
+label    = "vcpkg build trees, package staging and downloads"
+reclaim  = { kind = "clean-rule", ref = "build-files", note = "vcpkg rebuilds them when it installs a port again." }
+
+[[area]]
+id       = "binary-cache"
+paths    = ['%LOCALAPPDATA%\vcpkg\archives', '%VCPKG_DEFAULT_BINARY_CACHE%']
+category = "dev-caches"
+label    = "vcpkg binary cache"
+reclaim  = { kind = "clean-rule", ref = "binary-cache", note = "A removed archive makes its port build from source again." }
+
+[[area]]
+id       = "installed"
+paths    = ['?:\vcpkg\installed', '%USERPROFILE%\vcpkg\installed', '%VCPKG_ROOT%\installed']
+category = "dev-toolchains"
+label    = "Libraries installed with vcpkg (classic mode)"
+reclaim  = { kind = "uninstall", note = "`vcpkg remove <port>` removes a library no project uses." }

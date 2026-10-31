@@ -1,0 +1,19 @@
+id          = "ai-tools"
+version     = "1.0.0"
+title       = "AI assistants and local models"
+description = "Sessions and generated images of AI coding assistants and downloaded local models: the owner's work, listed for review, archiving or moving; never cleaned."
+sources     = [
+  "https://github.com/ollama/ollama/blob/main/docs/faq.md (models in %USERPROFILE%\\.ollama\\models; OLLAMA_MODELS moves them; `ollama rm`)",
+  "https://huggingface.co/docs/huggingface_hub/guides/manage-cache (~/.cache/huggingface/hub, HF_HOME; `huggingface-cli delete-cache`)",
+  "https://lmstudio.ai/docs/app/basics/download-model (models in ~/.lmstudio/models, changeable in My Models)",
+  "https://docs.anthropic.com/en/docs/claude-code/settings (cleanupPeriodDays: Claude Code removes local chat transcripts older than it, 30 days by default)",
+  "observed on reference machine: %USERPROFILE%\\.codex\\sessions, archived_sessions and generated_images; %USERPROFILE%\\.claude\\projects; %USERPROFILE%\\.elyriu-local-ai\\models (Hugging Face layout)",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%USERPROFILE%\.codex' }, { path_exists = '%USERPROFILE%\.claude' },
+       { path_exists = '%USERPROFILE%\.ollama' }, { path_exists = '%OLLAMA_MODELS%' },
+       { path_exists = '%USERPROFILE%\.lmstudio' }, { path_exists = '%USERPROFILE%\.cache\lm-studio' },
+       { path_exists = '%USERPROFILE%\.cache\huggingface' }, { path_exists = '%HF_HOME%' },
+       { path_exists = '%USERPROFILE%\.elyriu-local-ai' }]

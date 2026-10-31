@@ -1,0 +1,16 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "on-device-model"
+paths    = ['%LOCALAPPDATA%\Google\Chrome\User Data\OptGuideOnDeviceModel']
+category = "browser-caches"
+label    = "Chrome on-device AI model (Gemini Nano)"
+reclaim  = { kind = "manual-review", note = "Chrome downloads it again while on-device AI is on. The policy GenAILocalFoundationalModelSettings = 1 stops the download and removes the model." }
+
+[[area]]
+id       = "dawn-caches"
+paths    = ['%LOCALAPPDATA%\Google\Chrome\User Data\*\DawnCache', '%LOCALAPPDATA%\Google\Chrome\User Data\*\DawnGraphiteCache',
+            '%LOCALAPPDATA%\Google\Chrome\User Data\*\DawnWebGPUCache', '%LOCALAPPDATA%\Google\Chrome\User Data\*\old_DawnCache_*']
+category = "browser-caches"
+label    = "Chrome WebGPU shader caches"
+reclaim  = { kind = "clean-rule", ref = "dawn-caches" }

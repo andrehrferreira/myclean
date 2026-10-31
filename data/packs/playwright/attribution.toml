@@ -1,0 +1,15 @@
+# Sources: playwright.dev and the reference machine (pack.toml).
+
+[[area]]
+id       = "browsers"
+paths    = ['%LOCALAPPDATA%\ms-playwright', '%PLAYWRIGHT_BROWSERS_PATH%']
+category = "dev-caches"
+label    = "Playwright test browsers"
+reclaim  = { kind = "clean-rule", ref = "browsers", note = "Reinstallable with `npx playwright install`." }
+
+[[area]]
+id       = "mcp-profiles"
+paths    = ['%LOCALAPPDATA%\ms-playwright\mcp-*', '%LOCALAPPDATA%\ms-playwright-mcp']
+category = "apps"
+label    = "Browser profiles of the Playwright MCP server (logins and site data)"
+reclaim  = { kind = "manual-review", note = "Delete a profile only when no agent needs its logins." }

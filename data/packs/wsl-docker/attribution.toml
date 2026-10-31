@@ -1,0 +1,16 @@
+# Sources: learn.microsoft.com/windows/wsl, docs.docker.com and the reference machine
+# (pack.toml).
+
+[[area]]
+id       = "distro-disks"
+paths    = ['%LOCALAPPDATA%\Packages\*\LocalState\ext4.vhdx', '%LOCALAPPDATA%\wsl\*\ext4.vhdx']
+category = "vm-disks"
+label    = "WSL Linux distribution disks"
+reclaim  = { kind = "relocate", ref = "distro", note = "`wsl --manage <distro> --move <folder>` moves one to another drive. The disk never shrinks by itself: `wsl --manage <distro> --set-sparse true` lets it give freed space back." }
+
+[[area]]
+id       = "docker-data"
+paths    = ['%LOCALAPPDATA%\Docker\wsl', '%ProgramData%\DockerDesktop\vm-data']
+category = "vm-disks"
+label    = "Docker Desktop disk (images, containers, volumes)"
+reclaim  = { kind = "relocate", ref = "docker", note = "Docker Desktop > Settings > Resources > Advanced > Disk image location moves it; `docker system prune` frees space inside it." }

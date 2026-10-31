@@ -1,0 +1,23 @@
+# Through the cleanup handlers only (handler = the key name under VolumeCaches, sources:
+# pack.toml): %WINDIR% is on SafeRemove's deny-list, and the handler decides which logs are no
+# longer needed. Both handlers run in the service and wait for approval; the handler reports
+# the size it frees.
+
+# setup*.log, setup*.old, setuplog.txt and winnt32.log in %WINDIR% (the handler's FileList).
+[[rule]]
+id       = "setup-logs"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Setup Log Files"
+
+# Windows upgrade logs (setupcln.dll). Which Panther files it removes is the handler's decision;
+# the size shown is what the handler reports.
+[[rule]]
+id       = "upgrade-logs"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Windows Upgrade Log Files"

@@ -1,0 +1,19 @@
+# ZIG_GLOBAL_CACHE_DIR moves the cache; its entries are found there.
+
+[env]
+ZIG_GLOBAL_CACHE_DIR = 'D:\caches\zig'
+
+[[entry]]
+path = 'D:\caches\zig\o\4c2f9a\main.obj'
+[[entry]]
+path = 'D:\caches\zig\h\4c2f9a.txt'
+
+[[expect]]
+kind  = "clean"
+case  = "global-cache"
+match = ['D:\caches\zig\o\4c2f9a', 'D:\caches\zig\h\4c2f9a.txt']
+
+[[expect]]
+kind  = "attribution"
+case  = "global-cache"
+match = ['D:\caches\zig']

@@ -1,0 +1,51 @@
+# The layout of the reference machine: old browser revisions go; a fresh one, .links and the MCP
+# profiles stay.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ms-playwright\chromium-1187\chrome-win\chrome.exe'
+size = 268435456
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ms-playwright\chromium_headless_shell-1187\chrome-win\headless_shell.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ms-playwright\firefox-1490\firefox\firefox.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ms-playwright\webkit-2203\Playwright.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ms-playwright\ffmpeg-1011\ffmpeg-win64.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ms-playwright\winldd-1007\PrintDeps.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ms-playwright\chromium-1234\chrome-win\chrome.exe'
+age_days = 5
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ms-playwright\.links\9a1f2c'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ms-playwright\mcp-chrome-4cfe63c\Default\Cookies'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ms-playwright-mcp\mcp-chrome-0098cfb\Default\Cookies'
+
+[[expect]]
+kind     = "clean"
+case     = "browsers"
+match    = ['C:\Users\owner\AppData\Local\ms-playwright\chromium-1187',
+            'C:\Users\owner\AppData\Local\ms-playwright\chromium_headless_shell-1187',
+            'C:\Users\owner\AppData\Local\ms-playwright\firefox-1490',
+            'C:\Users\owner\AppData\Local\ms-playwright\webkit-2203',
+            'C:\Users\owner\AppData\Local\ms-playwright\ffmpeg-1011',
+            'C:\Users\owner\AppData\Local\ms-playwright\winldd-1007']
+no_match = ['C:\Users\owner\AppData\Local\ms-playwright\chromium-1234',
+            'C:\Users\owner\AppData\Local\ms-playwright\.links',
+            'C:\Users\owner\AppData\Local\ms-playwright\mcp-chrome-4cfe63c',
+            'C:\Users\owner\AppData\Local\ms-playwright-mcp\mcp-chrome-0098cfb',
+            'C:\Users\owner\AppData\Local\ms-playwright']
+
+[[expect]]
+kind     = "attribution"
+case     = "browsers"
+match    = ['C:\Users\owner\AppData\Local\ms-playwright']
+
+[[expect]]
+kind     = "attribution"
+case     = "mcp-profiles"
+match    = ['C:\Users\owner\AppData\Local\ms-playwright\mcp-chrome-4cfe63c', 'C:\Users\owner\AppData\Local\ms-playwright-mcp']
+no_match = ['C:\Users\owner\AppData\Local\ms-playwright\chromium-1187']

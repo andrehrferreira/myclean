@@ -1,0 +1,41 @@
+# Two profiles: their Dawn caches go; site data, the other caches and the AI model stay.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\DawnCache\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\DawnGraphiteCache\data_1'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\old_DawnCache_000\data_0'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Profile 1\DawnWebGPUCache\index'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Cache\Cache_Data\f_000001'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\IndexedDB\https_example.com_0.indexeddb.leveldb\000003.log'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Local Storage\leveldb\000003.log'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Google\Chrome\User Data\OptGuideOnDeviceModel\2025.8.8.1141\weights.bin'
+
+[[expect]]
+kind     = "clean"
+case     = "dawn-caches"
+match    = ['C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\DawnCache',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\DawnGraphiteCache',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\old_DawnCache_000',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Profile 1\DawnWebGPUCache']
+no_match = ['C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Cache',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\IndexedDB',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default\Local Storage',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\OptGuideOnDeviceModel',
+            'C:\Users\owner\AppData\Local\Google\Chrome\User Data\Default']
+
+[[expect]]
+kind     = "attribution"
+case     = "on-device-model"
+match    = ['C:\Users\owner\AppData\Local\Google\Chrome\User Data\OptGuideOnDeviceModel']
+
+[[expect]]
+kind     = "attribution"
+case     = "dawn-caches"
+match    = ['C:\Users\owner\AppData\Local\Google\Chrome\User Data\Profile 1\DawnWebGPUCache']

@@ -1,0 +1,15 @@
+# Cargo's caches (source: The Cargo Book, "Cargo Home", see pack.toml). Each downloaded crate,
+# unpacked source and git checkout unused for 90 days is one item; a build that needs it again
+# downloads, unpacks or checks it out again. The registry index, git\db, bin (installed tools)
+# and the configuration are never targets. Cargo 1.88 and newer also trims these itself.
+
+[[rule]]
+id       = "registry-cache"
+category = "dev-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%USERPROFILE%\.cargo\registry\cache\*\*', '%USERPROFILE%\.cargo\registry\src\*\*',
+            '%USERPROFILE%\.cargo\git\checkouts\*',
+            '%CARGO_HOME%\registry\cache\*\*', '%CARGO_HOME%\registry\src\*\*', '%CARGO_HOME%\git\checkouts\*']
+require  = { min_age_days = 90, not_in_use = true }

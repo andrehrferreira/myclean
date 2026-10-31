@@ -1,0 +1,21 @@
+# Where the disks are on the reference machine (and in a WSL install of a tar-based distro).
+
+[[expect]]
+kind     = "relocate"
+case     = "distro"
+match    = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx',
+            'C:\Users\owner\AppData\Local\wsl\{0f8c33a1-4b5e-4c71-9b0c-3a7d2e1f5a10}\ext4.vhdx']
+no_match = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\rootfs',
+            'C:\Users\owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx']
+
+[[expect]]
+kind     = "attribution"
+case     = "distro-disks"
+match    = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx']
+no_match = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState']
+
+[[expect]]
+kind     = "attribution"
+case     = "docker-data"
+match    = ['C:\Users\owner\AppData\Local\Docker\wsl', 'C:\ProgramData\DockerDesktop\vm-data']
+no_match = ['C:\Users\owner\AppData\Local\Docker\log']

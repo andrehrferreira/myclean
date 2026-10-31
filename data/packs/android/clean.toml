@@ -1,0 +1,24 @@
+# Leftovers and caches (sources: pack.toml). System images, platforms, emulator devices and the
+# debug keystore are never targets.
+
+# The SDK manager unpacks downloads in .temp and removes them when it finishes; what is left was
+# interrupted (observed on reference machine).
+[[rule]]
+id       = "sdk-temp"
+category = "dev-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\Android\Sdk\.temp\*', '%ANDROID_HOME%\.temp\*']
+require  = { min_age_days = 2, not_in_use = true }
+
+# The tools' download caches in the Android user home: repository listings and the Android
+# Gradle plugin's former build cache, downloaded or rebuilt when needed.
+[[rule]]
+id       = "user-cache"
+category = "dev-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%USERPROFILE%\.android\cache\*', '%USERPROFILE%\.android\build-cache\*']
+require  = { min_age_days = 30, not_in_use = true }

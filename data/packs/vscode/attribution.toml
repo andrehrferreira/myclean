@@ -1,0 +1,29 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "cached-data"
+paths    = ['%APPDATA%\Code\CachedData']
+category = "dev-caches"
+label    = "VS Code cached data of older versions"
+reclaim  = { kind = "clean-rule", ref = "cached-data" }
+
+[[area]]
+id       = "vsix-cache"
+paths    = ['%APPDATA%\Code\CachedExtensionVSIXs']
+category = "app-caches"
+label    = "VS Code downloaded extension packages"
+reclaim  = { kind = "clean-rule", ref = "vsix-cache", note = "An extension update downloads its package again." }
+
+[[area]]
+id       = "workspace-storage"
+paths    = ['%APPDATA%\Code\User\workspaceStorage']
+category = "dev-caches"
+label    = "VS Code per-workspace storage"
+reclaim  = { kind = "clean-rule", ref = "workspace-storage", note = "Only workspaces not opened for 90 days are offered." }
+
+[[area]]
+id       = "web-storage"
+paths    = ['%APPDATA%\Code\WebStorage']
+category = "dev-caches"
+label    = "VS Code extension web storage"
+reclaim  = { kind = "manual-review", note = "Data extensions keep for themselves; removing an extension's data resets it." }

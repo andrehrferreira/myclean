@@ -1,0 +1,14 @@
+id          = "playwright"
+version     = "1.0.0"
+title       = "Playwright"
+description = "Browsers Playwright downloads for tests (reinstallable), and the browser profiles of the Playwright MCP server (kept)."
+sources     = [
+  "https://playwright.dev/docs/browsers#managing-browser-binaries (%USERPROFILE%\\AppData\\Local\\ms-playwright, PLAYWRIGHT_BROWSERS_PATH, `npx playwright install`)",
+  "https://playwright.dev/docs/browsers#stale-browser-removal (versions no installed client uses are removed)",
+  "observed on reference machine: ms-playwright holds chromium-*, chromium_headless_shell-*, firefox-*, webkit-*, ffmpeg-*, winldd-*, .links and mcp-chrome-* profiles; ms-playwright-mcp holds mcp-chrome-* profiles",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%LOCALAPPDATA%\ms-playwright' }, { path_exists = '%LOCALAPPDATA%\ms-playwright-mcp' },
+       { path_exists = '%PLAYWRIGHT_BROWSERS_PATH%' }]

@@ -1,0 +1,16 @@
+# The global cache (source: introspect.zig, see pack.toml): o holds compiled outputs, h hash
+# manifests, z cached ZIR and tmp work files, one entry per hash. Zig rebuilds an entry that is
+# gone (observed on reference machine), so each entry unchanged for 30 days is one item; a
+# running build keeps its entries recent or open.
+
+[[rule]]
+id       = "global-cache"
+category = "dev-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\zig\o\*', '%LOCALAPPDATA%\zig\h\*', '%LOCALAPPDATA%\zig\z\*',
+            '%LOCALAPPDATA%\zig\tmp\*',
+            '%ZIG_GLOBAL_CACHE_DIR%\o\*', '%ZIG_GLOBAL_CACHE_DIR%\h\*', '%ZIG_GLOBAL_CACHE_DIR%\z\*',
+            '%ZIG_GLOBAL_CACHE_DIR%\tmp\*']
+require  = { min_age_days = 30, not_in_use = true }

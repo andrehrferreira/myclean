@@ -1,0 +1,22 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "installs"
+paths    = ['%LOCALAPPDATA%\Packages\PythonSoftwareFoundation.Python.*']
+category = "dev-toolchains"
+label    = "Python from the Microsoft Store"
+reclaim  = { kind = "uninstall", note = "Settings > Apps uninstalls a Python version together with the packages installed into it." }
+
+[[area]]
+id       = "user-packages"
+paths    = ['%LOCALAPPDATA%\Packages\PythonSoftwareFoundation.Python.*\LocalCache\local-packages']
+category = "dev-toolchains"
+label    = "Packages installed into a Store Python (pip --user)"
+reclaim  = { kind = "manual-review", note = "`pip list --user` lists them; `pip uninstall <name>` removes one." }
+
+[[area]]
+id       = "pip-cache"
+paths    = ['%LOCALAPPDATA%\Packages\PythonSoftwareFoundation.Python.*\LocalCache\Local\pip']
+category = "dev-caches"
+label    = "pip cache of a Store Python"
+reclaim  = { kind = "clean-rule", ref = "pip-cache" }

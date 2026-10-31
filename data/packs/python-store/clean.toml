@@ -1,0 +1,13 @@
+# pip's cache of a Store Python (sources: pack.toml): the redirected %LOCALAPPDATA%\pip\cache.
+# Each of its folders (http-v2, wheels) unchanged for 30 days is one item; pip downloads or
+# builds again what it misses. local-packages (packages installed with --user) is never a
+# target.
+
+[[rule]]
+id       = "pip-cache"
+category = "dev-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\Packages\PythonSoftwareFoundation.Python.*\LocalCache\Local\pip\cache\*']
+require  = { min_age_days = 30, not_in_use = true }

@@ -1,0 +1,51 @@
+# Sessions, images and models are the owner's work or large downloads the owner chose: every
+# area is manual review or a move, never a cleaning rule. Sources: pack.toml.
+
+[[area]]
+id       = "codex-sessions"
+paths    = ['%USERPROFILE%\.codex\sessions', '%USERPROFILE%\.codex\archived_sessions']
+category = "apps"
+label    = "Codex session transcripts"
+reclaim  = { kind = "manual-review", note = "Archive old sessions to another drive, or delete those no longer needed; Codex keeps no other copy." }
+
+[[area]]
+id       = "codex-images"
+paths    = ['%USERPROFILE%\.codex\generated_images']
+category = "user-media"
+label    = "Images generated in Codex"
+reclaim  = { kind = "manual-review", note = "Move the images worth keeping to Pictures or another drive." }
+
+[[area]]
+id       = "claude-projects"
+paths    = ['%USERPROFILE%\.claude\projects']
+category = "apps"
+label    = "Claude Code session transcripts"
+reclaim  = { kind = "manual-review", note = "Claude Code removes transcripts older than cleanupPeriodDays (30 by default) itself; lower it in settings.json to keep fewer." }
+
+[[area]]
+id       = "ollama-models"
+paths    = ['%USERPROFILE%\.ollama\models', '%OLLAMA_MODELS%']
+category = "dev-caches"
+label    = "Ollama models"
+reclaim  = { kind = "relocate", ref = "ollama-models", note = "`ollama rm <model>` deletes a model you no longer use." }
+
+[[area]]
+id       = "lmstudio-models"
+paths    = ['%USERPROFILE%\.lmstudio\models', '%USERPROFILE%\.cache\lm-studio\models']
+category = "dev-caches"
+label    = "LM Studio models"
+reclaim  = { kind = "manual-review", note = "LM Studio > My Models deletes a model or moves the models folder." }
+
+[[area]]
+id       = "huggingface"
+paths    = ['%USERPROFILE%\.cache\huggingface', '%HF_HOME%']
+category = "dev-caches"
+label    = "Hugging Face models and datasets"
+reclaim  = { kind = "relocate", ref = "huggingface-home", note = "`huggingface-cli delete-cache` picks revisions to delete." }
+
+[[area]]
+id       = "local-ai-models"
+paths    = ['%USERPROFILE%\.elyriu-local-ai\models']
+category = "dev-caches"
+label    = "Local AI app models (Hugging Face layout)"
+reclaim  = { kind = "manual-review", note = "Remove models from within the app that downloaded them." }

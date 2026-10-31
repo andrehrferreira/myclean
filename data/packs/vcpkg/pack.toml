@@ -1,0 +1,16 @@
+id          = "vcpkg"
+version     = "1.0.0"
+title       = "vcpkg"
+description = "vcpkg's build trees, package staging, downloads and binary cache, which it rebuilds; never its installed libraries or its ports."
+sources     = [
+  "https://learn.microsoft.com/vcpkg/commands/common-options (buildtrees, downloads and packages default to folders of the vcpkg root; VCPKG_DOWNLOADS)",
+  "https://learn.microsoft.com/vcpkg/commands/install#clean-after-build (vcpkg itself removes buildtrees, packages and downloads after each build with this option)",
+  "https://learn.microsoft.com/vcpkg/reference/binarycaching (default binary cache %LOCALAPPDATA%\\vcpkg\\archives; VCPKG_DEFAULT_BINARY_CACHE)",
+  "observed on reference machine: vcpkg roots C:\\vcpkg and %USERPROFILE%\\vcpkg, each marked by a .vcpkg-root file",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%SystemDrive%\vcpkg\.vcpkg-root' }, { path_exists = '%USERPROFILE%\vcpkg\.vcpkg-root' },
+       { path_exists = '%VCPKG_ROOT%\.vcpkg-root' }, { path_exists = '%LOCALAPPDATA%\vcpkg\archives' },
+       { path_exists = '%VCPKG_DEFAULT_BINARY_CACHE%' }]

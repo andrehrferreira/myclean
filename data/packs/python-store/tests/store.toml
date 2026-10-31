@@ -1,0 +1,29 @@
+# The Store Python 3.12 of the reference machine: its pip cache goes, its packages stay; the
+# Python install manager's package is not a Python install.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\Local\pip\cache\http-v2\a\b\c\0d1e2f'
+size = 524288
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\Local\pip\cache\wheels\9f\numpy-2.1.0-cp312-win_amd64.whl'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\numpy\__init__.py'
+
+[[expect]]
+kind     = "clean"
+case     = "pip-cache"
+match    = ['C:\Users\owner\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\Local\pip\cache\http-v2',
+            'C:\Users\owner\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\Local\pip\cache\wheels']
+no_match = ['C:\Users\owner\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages',
+            'C:\Users\owner\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312']
+
+[[expect]]
+kind     = "attribution"
+case     = "installs"
+match    = ['C:\Users\owner\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0']
+no_match = ['C:\Users\owner\AppData\Local\Packages\PythonSoftwareFoundation.PythonManager_3847v3x7pw1km']
+
+[[expect]]
+kind     = "attribution"
+case     = "user-packages"
+match    = ['C:\Users\owner\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages']

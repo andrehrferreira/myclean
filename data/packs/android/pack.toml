@@ -1,0 +1,14 @@
+id          = "android"
+version     = "1.0.0"
+title       = "Android SDK and emulator"
+description = "Android SDK system images and emulator devices (for review), and the SDK manager's leftover downloads and the tools' caches (cleaned)."
+sources     = [
+  "https://developer.android.com/tools/variables (ANDROID_HOME: the SDK; ANDROID_USER_HOME, default %USERPROFILE%\\.android; ANDROID_AVD_HOME, default <user home>\\avd)",
+  "https://developer.android.com/studio/intro/update#sdk-manager (SDK Manager installs and removes system images)",
+  "observed on reference machine: %LOCALAPPDATA%\\Android\\Sdk with .temp, system-images and emulator; %USERPROFILE%\\.android with avd (ar_pixel.avd) and cache",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%LOCALAPPDATA%\Android\Sdk' }, { path_exists = '%ANDROID_HOME%' },
+       { path_exists = '%USERPROFILE%\.android' }]

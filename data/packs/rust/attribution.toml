@@ -1,0 +1,15 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "toolchains"
+paths    = ['%USERPROFILE%\.rustup', '%RUSTUP_HOME%']
+category = "dev-toolchains"
+label    = "Rust toolchains (rustup)"
+reclaim  = { kind = "relocate", ref = "rustup-home", note = "Also compresses well with LZX. `rustup toolchain uninstall <name>` removes one you no longer use." }
+
+[[area]]
+id       = "cargo-registry"
+paths    = ['%USERPROFILE%\.cargo\registry', '%CARGO_HOME%\registry', '%USERPROFILE%\.cargo\git', '%CARGO_HOME%\git']
+category = "dev-caches"
+label    = "Cargo downloaded crates and git dependencies"
+reclaim  = { kind = "clean-rule", ref = "registry-cache", note = "Crates unused for 90 days are offered; Cargo downloads them again when a build needs them." }

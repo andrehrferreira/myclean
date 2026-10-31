@@ -1,0 +1,15 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "panther"
+paths    = ['%WINDIR%\Panther', '?:\$WINDOWS.~BT\Sources\Panther']
+category = "windows-servicing"
+label    = "Windows setup and upgrade logs (Panther)"
+reclaim  = { kind = "clean-rule", ref = "upgrade-logs", note = "Needed only to find out why an upgrade failed." }
+
+[[area]]
+id       = "setup-logs"
+paths    = ['%WINDIR%\setup*.log', '%WINDIR%\setup*.old', '%WINDIR%\setuplog.txt', '%WINDIR%\winnt32.log']
+category = "windows-servicing"
+label    = "Windows setup log files"
+reclaim  = { kind = "clean-rule", ref = "setup-logs" }

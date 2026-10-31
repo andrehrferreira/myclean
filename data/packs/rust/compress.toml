@@ -1,0 +1,9 @@
+# Toolchains are written once per update and then only read: LZX suits them (measured on a Rust
+# toolchain, see pack.toml).
+
+[[compress]]
+id        = "toolchains"
+label     = "Rust toolchains"
+paths     = ['%USERPROFILE%\.rustup\toolchains', '%RUSTUP_HOME%\toolchains']
+algorithm = "lzx"
+note      = "rustup writes a toolchain only when it updates it; compress again after an update."

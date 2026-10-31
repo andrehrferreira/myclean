@@ -1,0 +1,12 @@
+id          = "vscode"
+version     = "1.0.0"
+title       = "Visual Studio Code"
+description = "VS Code's leftovers of older versions, downloaded extension packages and the storage of workspaces no longer opened; extension web storage is listed for review."
+sources     = [
+  "https://code.visualstudio.com/api/references/vscode-api#ExtensionContext (storageUri: per-workspace extension storage, in User\\workspaceStorage)",
+  "observed on reference machine: %APPDATA%\\Code holds CachedData (one folder per VS Code version), CachedExtensionVSIXs (the .vsix of installed extensions, downloaded again on update), User\\workspaceStorage (157 workspaces) and WebStorage",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%APPDATA%\Code' }, { app_installed = '^Microsoft Visual Studio Code' }]

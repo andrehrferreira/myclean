@@ -1,0 +1,32 @@
+# VS Code's caches (sources: pack.toml). Settings, keybindings, snippets, extensions and History
+# are never targets.
+
+# One folder per VS Code version; older ones stay behind after updates.
+[[rule]]
+id       = "cached-data"
+category = "ides"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%APPDATA%\Code\CachedData\*']
+require  = { min_age_days = 30, not_in_use = true }
+
+# The downloaded package of each installed extension; an update downloads it again.
+[[rule]]
+id       = "vsix-cache"
+category = "ides"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%APPDATA%\Code\CachedExtensionVSIXs\*']
+require  = { min_age_days = 30, not_in_use = true }
+
+# Per-workspace state (open editors, extension state) of workspaces not opened for 90 days.
+[[rule]]
+id       = "workspace-storage"
+category = "ides"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%APPDATA%\Code\User\workspaceStorage\*']
+require  = { min_age_days = 90, not_in_use = true }

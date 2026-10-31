@@ -1,0 +1,30 @@
+# The default cache folder: old entries of o, h, z and tmp go; recent ones and b stay.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\zig\o\4c2f9a\main.obj'
+size = 1048576
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\zig\o\7d10be\main.obj'
+age_days = 3
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\zig\h\4c2f9a.txt'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\zig\z\90aa31'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\zig\tmp\5e7f0c\build.zig'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\zig\b\1a2b3c\builder.exe'
+
+[[expect]]
+kind     = "clean"
+case     = "global-cache"
+match    = ['C:\Users\owner\AppData\Local\zig\o\4c2f9a', 'C:\Users\owner\AppData\Local\zig\h\4c2f9a.txt',
+            'C:\Users\owner\AppData\Local\zig\z\90aa31', 'C:\Users\owner\AppData\Local\zig\tmp\5e7f0c']
+no_match = ['C:\Users\owner\AppData\Local\zig\o\7d10be', 'C:\Users\owner\AppData\Local\zig\o',
+            'C:\Users\owner\AppData\Local\zig\b\1a2b3c', 'C:\Users\owner\AppData\Local\zig']
+
+[[expect]]
+kind     = "attribution"
+case     = "global-cache"
+match    = ['C:\Users\owner\AppData\Local\zig']
+no_match = ['C:\Users\owner\AppData\Local\zig-cache']

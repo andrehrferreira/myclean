@@ -1,0 +1,24 @@
+# Model folders that move with a variable (sources: the Ollama FAQ and the Hugging Face cache
+# guide, see pack.toml). The models are copied and checked before the variable changes; the
+# tool must not run meanwhile, and reads the variable when it starts.
+
+[[relocate]]
+id          = "ollama-models"
+label       = "Ollama models (OLLAMA_MODELS)"
+locations   = ['%USERPROFILE%\.ollama\models']
+current     = { env = "OLLAMA_MODELS" }
+target_kind = "env"
+content     = "move"
+needs       = ["ollama.exe", "ollama app.exe"]
+undo        = "restore"
+note        = "Quit Ollama from the notification area first."
+
+[[relocate]]
+id          = "huggingface-home"
+label       = "Hugging Face cache (HF_HOME)"
+locations   = ['%USERPROFILE%\.cache\huggingface']
+current     = { env = "HF_HOME" }
+target_kind = "env"
+content     = "move"
+undo        = "restore"
+note        = "Close programs that load Hugging Face models first."

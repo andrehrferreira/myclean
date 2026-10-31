@@ -1,0 +1,10 @@
+id          = "windows-setup-logs"
+version     = "1.0.0"
+title       = "Windows setup and upgrade logs"
+description = "Logs Windows setup and feature upgrades leave behind (Panther and setup*.log), removed through Windows' own cleanup handlers."
+sources     = [
+  "https://learn.microsoft.com/windows-hardware/manufacture/desktop/deployment-troubleshooting-and-log-files (setup logs in $Windows.~BT\\Sources\\Panther during setup and %WINDIR%\\Panther after it)",
+  "https://learn.microsoft.com/windows/win32/lwef/disk-cleanup (cleanup handlers registered under HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VolumeCaches)",
+  "observed on reference machine: the 'Setup Log Files' handler (DATACLEN.DLL) has Folder C:\\WINDOWS and FileList setup*.log|setup*.old|setuplog.txt|winnt32.log, so it does not cover Panther; the 'Windows Upgrade Log Files' handler is setupcln.dll",
+]
+min_myclean = "0.1.0"

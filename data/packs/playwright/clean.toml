@@ -1,0 +1,19 @@
+# Downloaded test browsers (source: playwright.dev, see pack.toml): one folder per browser and
+# revision. A project whose Playwright needs a removed revision gets it back with
+# `npx playwright install`, so this waits for approval. Only browser folders untouched for 30
+# days are items: .links (Playwright's record of its clients) and the mcp-* browser profiles
+# (logins and site data of the Playwright MCP server) are never targets.
+
+[[rule]]
+id       = "browsers"
+category = "dev-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\ms-playwright\chromium-*', '%LOCALAPPDATA%\ms-playwright\chromium_headless_shell-*',
+            '%LOCALAPPDATA%\ms-playwright\firefox-*', '%LOCALAPPDATA%\ms-playwright\webkit-*',
+            '%LOCALAPPDATA%\ms-playwright\ffmpeg-*', '%LOCALAPPDATA%\ms-playwright\winldd-*',
+            '%PLAYWRIGHT_BROWSERS_PATH%\chromium-*', '%PLAYWRIGHT_BROWSERS_PATH%\chromium_headless_shell-*',
+            '%PLAYWRIGHT_BROWSERS_PATH%\firefox-*', '%PLAYWRIGHT_BROWSERS_PATH%\webkit-*',
+            '%PLAYWRIGHT_BROWSERS_PATH%\ffmpeg-*', '%PLAYWRIGHT_BROWSERS_PATH%\winldd-*']
+require  = { min_age_days = 30, not_in_use = true }

@@ -1,0 +1,42 @@
+# What vcpkg rebuilds (sources: learn.microsoft.com/vcpkg, see pack.toml). buildtrees holds
+# sources and build folders, packages the staging of each port, downloads source archives and
+# vcpkg's own tools: `vcpkg install --clean-after-build` removes all three itself. installed\
+# (the libraries projects link) and ports\ (the recipes, tracked by git) are never targets.
+# Each item is one entry of those folders, unchanged for 14 days.
+
+# The usual roots: VCPKG_ROOT, the system drive's \vcpkg and the profile's vcpkg (observed on
+# reference machine).
+[[rule]]
+id       = "build-files"
+category = "dev-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%VCPKG_ROOT%\buildtrees\*', '%VCPKG_ROOT%\packages\*', '%VCPKG_ROOT%\downloads\*',
+            '%SystemDrive%\vcpkg\buildtrees\*', '%SystemDrive%\vcpkg\packages\*', '%SystemDrive%\vcpkg\downloads\*',
+            '%USERPROFILE%\vcpkg\buildtrees\*', '%USERPROFILE%\vcpkg\packages\*', '%USERPROFILE%\vcpkg\downloads\*',
+            '%VCPKG_DOWNLOADS%\*']
+require  = { min_age_days = 14, not_in_use = true }
+
+# A vcpkg clone anywhere in the workspaces: its root holds .vcpkg-root, and git ignores the
+# three folders.
+[[rule]]
+id       = "clone-build-files"
+category = "dev-artifacts"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+project  = { marker = ".vcpkg-root" }
+targets  = ["buildtrees", "packages", "downloads"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 14 }
+
+# Binary cache archives (<2 hex digits>\<hash>.zip) not used for 90 days. A missing archive
+# means that port is built from source again.
+[[rule]]
+id       = "binary-cache"
+category = "dev-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\vcpkg\archives\*\*.zip', '%VCPKG_DEFAULT_BINARY_CACHE%\*\*.zip']
+require  = { min_age_days = 90, not_in_use = true }

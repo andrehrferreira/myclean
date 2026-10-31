@@ -1,0 +1,42 @@
+# The reference machine's layout, with ANDROID_HOME set to the default SDK folder as there.
+
+[env]
+ANDROID_HOME = 'C:\Users\owner\AppData\Local\Android\Sdk'
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Android\Sdk\.temp\PackageOperation01\unzip\emulator.zip'
+age_days = 40
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Android\Sdk\.temp\PackageOperation02\download.part'
+age_days = 0
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Android\Sdk\system-images\android-36\google_apis\x86_64\system.img'
+[[entry]]
+path = 'C:\Users\owner\.android\cache\sdkbin-1_e2b2a8e0-repository2-3'
+[[entry]]
+path = 'C:\Users\owner\.android\avd\ar_pixel.avd\userdata-qemu.img'
+[[entry]]
+path = 'C:\Users\owner\.android\debug.keystore'
+
+[[expect]]
+kind     = "clean"
+case     = "sdk-temp"
+match    = ['C:\Users\owner\AppData\Local\Android\Sdk\.temp\PackageOperation01']
+no_match = ['C:\Users\owner\AppData\Local\Android\Sdk\.temp\PackageOperation02',
+            'C:\Users\owner\AppData\Local\Android\Sdk\system-images\android-36']
+
+[[expect]]
+kind     = "clean"
+case     = "user-cache"
+match    = ['C:\Users\owner\.android\cache\sdkbin-1_e2b2a8e0-repository2-3']
+no_match = ['C:\Users\owner\.android\avd\ar_pixel.avd', 'C:\Users\owner\.android\debug.keystore']
+
+[[expect]]
+kind     = "attribution"
+case     = "system-images"
+match    = ['C:\Users\owner\AppData\Local\Android\Sdk\system-images']
+
+[[expect]]
+kind     = "attribution"
+case     = "avd"
+match    = ['C:\Users\owner\.android\avd']

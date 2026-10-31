@@ -1,0 +1,12 @@
+id          = "zig"
+version     = "1.0.0"
+title       = "Zig"
+description = "Zig's global build cache: compiled outputs, hash manifests and ZIR caches that zig rebuilds when missing."
+sources     = [
+  "https://github.com/ziglang/zig/blob/master/lib/std/zig/introspect.zig (resolveGlobalCacheDir: ZIG_GLOBAL_CACHE_DIR, else %LOCALAPPDATA%\\zig)",
+  "observed on reference machine: %LOCALAPPDATA%\\zig holds b, h, o, tmp and z; zig recompiles entries that are gone",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ path_exists = '%LOCALAPPDATA%\zig' }, { path_exists = '%ZIG_GLOBAL_CACHE_DIR%' }]

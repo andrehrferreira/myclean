@@ -1,0 +1,46 @@
+# A vcpkg clone in a workspace (VCPKG_ROOT points at it): its git-ignored build folders go, its
+# installed libraries and ports stay; a copy outside git is never touched.
+
+[env]
+VCPKG_ROOT = 'F:\tools\vcpkg'
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'F:\tools\vcpkg\.git'
+folder = true
+[[entry]]
+path = 'F:\tools\vcpkg\.vcpkg-root'
+[[entry]]
+path = 'F:\tools\vcpkg\buildtrees'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\tools\vcpkg\buildtrees\zlib\build.log'
+[[entry]]
+path = 'F:\tools\vcpkg\packages'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\tools\vcpkg\packages\zlib_x64-windows\include\zlib.h'
+[[entry]]
+path = 'F:\tools\vcpkg\installed\x64-windows\include\zlib.h'
+[[entry]]
+path = 'F:\tools\vcpkg\ports\zlib\portfile.cmake'
+[[entry]]
+path = 'F:\copies\vcpkg\.vcpkg-root'
+[[entry]]
+path = 'F:\copies\vcpkg\buildtrees\zlib\build.log'
+
+[[expect]]
+kind     = "clean"
+case     = "clone-build-files"
+match    = ['F:\tools\vcpkg\buildtrees', 'F:\tools\vcpkg\packages']
+no_match = ['F:\tools\vcpkg\installed', 'F:\tools\vcpkg\ports', 'F:\copies\vcpkg\buildtrees']
+
+[[expect]]
+kind     = "clean"
+case     = "build-files"
+match    = ['F:\tools\vcpkg\buildtrees\zlib', 'F:\tools\vcpkg\packages\zlib_x64-windows']
+no_match = ['F:\tools\vcpkg\installed\x64-windows', 'F:\tools\vcpkg\ports\zlib']

@@ -1,0 +1,15 @@
+# WebGPU shader and pipeline caches of every profile (sources: pack.toml), rebuilt on demand like
+# GPUCache (cleaning spec, "Browser rule limits": caches only, never profile data). A running
+# Chrome keeps them open, so not_in_use skips it.
+
+[[rule]]
+id       = "dawn-caches"
+category = "browsers"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\Google\Chrome\User Data\*\DawnCache',
+            '%LOCALAPPDATA%\Google\Chrome\User Data\*\DawnGraphiteCache',
+            '%LOCALAPPDATA%\Google\Chrome\User Data\*\DawnWebGPUCache',
+            '%LOCALAPPDATA%\Google\Chrome\User Data\*\old_DawnCache_*']
+require  = { not_in_use = true }

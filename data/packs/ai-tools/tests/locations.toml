@@ -1,0 +1,53 @@
+# Where each tool keeps its data on the reference machine, and where OLLAMA_MODELS moves it.
+
+[env]
+OLLAMA_MODELS = 'D:\models\ollama'
+
+[[expect]]
+kind     = "attribution"
+case     = "codex-sessions"
+match    = ['C:\Users\owner\.codex\sessions', 'C:\Users\owner\.codex\archived_sessions']
+no_match = ['C:\Users\owner\.codex', 'C:\Users\owner\.codex\config.toml']
+
+[[expect]]
+kind     = "attribution"
+case     = "codex-images"
+match    = ['C:\Users\owner\.codex\generated_images']
+
+[[expect]]
+kind     = "attribution"
+case     = "claude-projects"
+match    = ['C:\Users\owner\.claude\projects']
+no_match = ['C:\Users\owner\.claude\settings.json']
+
+[[expect]]
+kind     = "attribution"
+case     = "ollama-models"
+match    = ['C:\Users\owner\.ollama\models', 'D:\models\ollama']
+
+[[expect]]
+kind     = "attribution"
+case     = "lmstudio-models"
+match    = ['C:\Users\owner\.lmstudio\models', 'C:\Users\owner\.cache\lm-studio\models']
+
+[[expect]]
+kind     = "attribution"
+case     = "huggingface"
+match    = ['C:\Users\owner\.cache\huggingface']
+no_match = ['C:\Users\owner\.cache']
+
+[[expect]]
+kind     = "attribution"
+case     = "local-ai-models"
+match    = ['C:\Users\owner\.elyriu-local-ai\models']
+
+[[expect]]
+kind     = "relocate"
+case     = "ollama-models"
+match    = ['C:\Users\owner\.ollama\models']
+no_match = ['C:\Users\owner\.ollama\history']
+
+[[expect]]
+kind     = "relocate"
+case     = "huggingface-home"
+match    = ['C:\Users\owner\.cache\huggingface']
