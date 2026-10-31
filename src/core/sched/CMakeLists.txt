@@ -7,6 +7,9 @@ myclean_add_library(sched
     schedule_repository.hpp
     scheduler.cpp
     scheduler.hpp
+    store_schedule_repository.cpp
+    store_schedule_repository.hpp
   DEPENDS
     myclean::model
-    myclean::os)
+    myclean::os
+    myclean::store)

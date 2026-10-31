@@ -146,6 +146,23 @@ TEST(FakeFileSystem, OutsideChangeGivesTheSamePathANewIdentity) {
   EXPECT_TRUE(fs.operations().empty());
 }
 
+TEST(FakeFileSystem, RemoveWithIdentityRefusesAnotherEntry) {
+  FakeFileSystem fs;
+  const FileIdentity planned = fs.add_file(L"F:\\tmp\\a.tmp", 1_B);
+  bool swapped = false;
+  fs.on_remove([&fs, &swapped](const path& removed) {
+    if (!swapped) {
+      fs.erase(removed);
+      fs.add_file(removed, 2_B);  // swapped right before the delete
+      swapped = true;
+    }
+  });
+  EXPECT_EQ(fs.remove(L"F:\\tmp\\a.tmp", planned).error().code, Errc::refused);
+  const FileIdentity current = fs.stat(L"F:\\tmp\\a.tmp")->identity;
+  EXPECT_TRUE(fs.remove(L"F:\\tmp\\a.tmp", current).has_value());
+  EXPECT_FALSE(fs.exists(L"F:\\tmp\\a.tmp"));
+}
+
 TEST(FakeFileSystem, RecordsEveryMutatingCallAndInjectsFailures) {
   FakeFileSystem fs;
   fs.add_file(L"C:\\Temp\\locked.tmp", 1_B);

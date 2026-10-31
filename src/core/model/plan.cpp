@@ -10,9 +10,9 @@ namespace myclean {
 
 namespace {
 
-constexpr std::array<std::string_view, 9> plan_state_names = {
+constexpr std::array<std::string_view, 10> plan_state_names = {
     "proposed", "auto",     "awaiting_approval", "approved", "applying",
-    "applied",  "verified", "rolled_back",       "failed",
+    "applied",  "verified", "rolled_back",       "failed",   "rejected",
 };
 
 constexpr std::array<std::string_view, 3> item_approval_names = {"pending", "approved",

@@ -2,9 +2,11 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "core/model/file_identity.hpp"
@@ -44,6 +46,11 @@ class FakeFileSystem final : public os::IFileSystem {
   // Removes `path` and everything below it without recording an operation: a change made by
   // someone else. Throws std::logic_error when `path` does not exist.
   void erase(const std::filesystem::path& path);
+  // Runs `hook` at the start of every later remove, before the entry is looked up: a change
+  // someone else makes between a caller's last check and its delete.
+  void on_remove(std::function<void(const std::filesystem::path&)> hook) {
+    on_remove_ = std::move(hook);
+  }
 
   [[nodiscard]] bool exists(const std::filesystem::path& path) const;
   [[nodiscard]] const std::vector<Operation>& operations() const { return operations_; }
@@ -54,6 +61,8 @@ class FakeFileSystem final : public os::IFileSystem {
   [[nodiscard]] Result<std::filesystem::path> expand_short_names(
       const std::filesystem::path& path) const override;
   [[nodiscard]] Result<void> remove(const std::filesystem::path& path) override;
+  [[nodiscard]] Result<void> remove(const std::filesystem::path& path,
+                                    const FileIdentity& expected) override;
   [[nodiscard]] Result<void> rename(const std::filesystem::path& from,
                                     const std::filesystem::path& to) override;
   [[nodiscard]] Result<void> move_file(const std::filesystem::path& from,
@@ -79,10 +88,14 @@ class FakeFileSystem final : public os::IFileSystem {
   FileIdentity insert(const std::filesystem::path& path, os::FileStat stat);
   void ensure_parents(const std::filesystem::path& path);
   FileIdentity next_identity(const std::filesystem::path& path);
+  // remove() with an optional identity check.
+  [[nodiscard]] Result<void> remove_entry(const std::filesystem::path& path,
+                                          const FileIdentity* expected);
 
   Tree tree_;
   std::map<std::wstring, Errc> failures_;
   std::vector<Operation> operations_;
+  std::function<void(const std::filesystem::path&)> on_remove_;
   std::uint64_t next_file_id_ = 1;
 };
 

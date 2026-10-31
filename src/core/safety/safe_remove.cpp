@@ -278,17 +278,16 @@ tl::expected<os::FileStat, SafeRemove::Verdict> SafeRemove::check_entry(
 
 std::optional<SafeRemove::Verdict> SafeRemove::remove_checked(const fs::path& path,
                                                               const FileIdentity& expected) {
-  const tl::expected<os::FileStat, Verdict> status = current_stat(path, expected);
-  if (!status) {
-    if (status.error().reason == "not_found") {
-      return std::nullopt;
-    }
-    return status.error();
+  const Result<void> removed = file_system_->remove(path, expected);
+  if (removed) {
+    return std::nullopt;
   }
-  if (Result<void> removed = file_system_->remove(path); !removed) {
-    return failure(removed.error());
+  if (removed.error().code == Errc::refused) {
+    return Verdict{.disposition = Disposition::refused,
+                   .reason = "changed_since_plan",
+                   .detail = removed.error().message};
   }
-  return std::nullopt;
+  return source_failure(removed.error());
 }
 
 SafeRemove::Tally SafeRemove::remove_contents(const Run& run, const fs::path& folder) {
@@ -338,11 +337,12 @@ SafeRemove::Tally SafeRemove::remove_contents(const Run& run, const fs::path& fo
         continue;
       }
       kept = failure(children.error());
-    } else if (Result<void> removed = file_system_->remove(entry.path); !removed) {
-      kept = failure(removed.error());  // a file, or a reparse point removed as the link
     } else {
-      tally.freed += status->size_on_disk;
-      ++tally.removed;
+      kept = remove_checked(entry.path, status->identity);  // a file, or a link as the link
+      if (!kept) {
+        tally.freed += status->size_on_disk;
+        ++tally.removed;
+      }
     }
     if (tally.keep(std::move(kept))) {
       stack.back().kept = true;
@@ -374,15 +374,19 @@ ItemOutcome SafeRemove::remove_item(const Run& run, PlanItemId id) {
   if (target->stat.kind == os::EntryKind::directory && !target->stat.attributes.reparse_point) {
     Tally tally = remove_contents(run, target->path);
     outcome.freed = tally.freed;
-    kept = tally.first_kept ? std::move(tally.first_kept)
-                            : remove_checked(target->path, target->stat.identity);
+    if (!tally.first_kept) {
+      // A folder that vanished meanwhile counts as removed.
+      tally.keep(remove_checked(target->path, target->stat.identity));
+    }
+    kept = std::move(tally.first_kept);
     if (kept && tally.removed > 0) {
       kept->disposition = Disposition::partial;
     }
-  } else if (Result<void> removed = file_system_->remove(target->path); !removed) {
-    kept = failure(removed.error());  // a file, or a reparse point removed as the link
   } else {
-    outcome.freed = target->stat.size_on_disk;
+    kept = remove_checked(target->path, target->stat.identity);  // a file, or a link as the link
+    if (!kept) {
+      outcome.freed = target->stat.size_on_disk;
+    }
   }
   if (kept) {
     return settle(*std::move(kept));

@@ -87,12 +87,13 @@ TEST(PlanState, TextFormsMatchTheArchitecture) {
       {PlanState::verified, "verified"},
       {PlanState::rolled_back, "rolled_back"},
       {PlanState::failed, "failed"},
+      {PlanState::rejected, "rejected"},
   };
   for (const auto& [state, text] : expected) {
     EXPECT_EQ(to_string(state), text);
     EXPECT_EQ(parse_plan_state(text), state);
   }
-  EXPECT_FALSE(parse_plan_state("rejected").has_value());
+  EXPECT_FALSE(parse_plan_state("cancelled").has_value());
 }
 
 TEST(EnumText, EveryEnumRoundTrips) {

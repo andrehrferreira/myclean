@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <vector>
 
+#include "core/model/file_identity.hpp"
 #include "core/model/result.hpp"
 #include "core/os/file_system.hpp"
 
@@ -23,6 +24,8 @@ class Win32FileSystem final : public os::IFileSystem {
   [[nodiscard]] Result<std::filesystem::path> expand_short_names(
       const std::filesystem::path& path) const override;
   [[nodiscard]] Result<void> remove(const std::filesystem::path& path) override;
+  [[nodiscard]] Result<void> remove(const std::filesystem::path& path,
+                                    const FileIdentity& expected) override;
   [[nodiscard]] Result<void> rename(const std::filesystem::path& from,
                                     const std::filesystem::path& to) override;
   [[nodiscard]] Result<void> move_file(const std::filesystem::path& from,

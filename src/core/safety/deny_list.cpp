@@ -59,6 +59,34 @@ bool is_volume_root(const fs::path& path, const ProtectedLocations& /*locations*
   return !path.has_relative_path();
 }
 
+// The first folder or file below the volume root, case-folded; empty for a volume root.
+std::wstring top_level(const fs::path& path) {
+  const fs::path relative = path.relative_path();
+  return relative.empty() ? std::wstring{} : folded(*relative.begin());
+}
+
+bool is_system_volume_information(const fs::path& path, const ProtectedLocations& /*locations*/) {
+  return top_level(path) == L"system volume information";
+}
+
+bool is_in_recovery(const fs::path& path, const ProtectedLocations& /*locations*/) {
+  return top_level(path) == L"recovery";
+}
+
+bool is_in_boot(const fs::path& path, const ProtectedLocations& /*locations*/) {
+  return top_level(path) == L"boot";
+}
+
+bool is_page_file(const fs::path& path, const ProtectedLocations& /*locations*/) {
+  const std::wstring name = top_level(path);
+  return name == L"pagefile.sys" || name == L"hiberfil.sys" || name == L"swapfile.sys";
+}
+
+// $Recycle.Bin, $WinREAgent, $Extend, $SysReset, $Windows.~BT and the like.
+bool is_in_root_dollar_entry(const fs::path& path, const ProtectedLocations& /*locations*/) {
+  return top_level(path).starts_with(L'$');
+}
+
 bool is_in_windows(const fs::path& path, const ProtectedLocations& locations) {
   if (!overlaps(path, locations.windows)) {
     return false;
@@ -69,8 +97,7 @@ bool is_in_windows(const fs::path& path, const ProtectedLocations& locations) {
 }
 
 bool is_in_program_files(const fs::path& path, const ProtectedLocations& /*locations*/) {
-  const fs::path relative = path.relative_path();
-  return !relative.empty() && folded(*relative.begin()).starts_with(L"program files");
+  return top_level(path).starts_with(L"program files");
 }
 
 bool is_in_git(const fs::path& path, const ProtectedLocations& /*locations*/) {
@@ -93,8 +120,13 @@ bool is_in_myclean(const fs::path& path, const ProtectedLocations& locations) {
   return overlaps_any(path, locations.myclean);
 }
 
-constexpr std::array<DenyRule, 7> rules = {{
+constexpr std::array<DenyRule, 12> rules = {{
     {.name = "volume_root", .matches = is_volume_root},
+    {.name = "system_volume_information", .matches = is_system_volume_information},
+    {.name = "recovery", .matches = is_in_recovery},
+    {.name = "boot", .matches = is_in_boot},
+    {.name = "page_file", .matches = is_page_file},
+    {.name = "root_dollar_entry", .matches = is_in_root_dollar_entry},
     {.name = "windir", .matches = is_in_windows},
     {.name = "program_files", .matches = is_in_program_files},
     {.name = "git", .matches = is_in_git},

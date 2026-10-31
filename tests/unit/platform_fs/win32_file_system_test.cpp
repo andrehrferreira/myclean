@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 #include <windows.h>
 
+#include "core/model/file_identity.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/file_system.hpp"
@@ -106,6 +107,23 @@ TEST_F(Win32FileSystemTest, RemoveRefusesAFolderThatHasEntries) {
   ASSERT_TRUE(fs().remove(root() / L"dir").has_value());
   EXPECT_FALSE(entry_exists(root() / L"dir"));
   EXPECT_EQ(fs().remove(root() / L"dir").error().code, Errc::not_found);
+}
+
+TEST_F(Win32FileSystemTest, RemoveWithIdentityRefusesAnotherEntry) {
+  const path file = root() / L"a.tmp";
+  write_file(file, 10);
+  const FileIdentity planned = fs().stat(file).value().identity;
+  ASSERT_TRUE(std::filesystem::remove(file));
+  ASSERT_TRUE(std::filesystem::create_directory(root() / L"other"));
+  ASSERT_TRUE(make_junction(file, root() / L"other"));  // the same name is now a junction
+  EXPECT_EQ(fs().remove(file, planned).error().code, Errc::refused);
+  EXPECT_TRUE(entry_exists(file));
+
+  const FileIdentity link = fs().stat(file).value().identity;
+  ASSERT_TRUE(fs().remove(file, link).has_value());
+  EXPECT_FALSE(entry_exists(file));
+  EXPECT_TRUE(entry_exists(root() / L"other"));
+  EXPECT_EQ(fs().remove(file, link).error().code, Errc::not_found);
 }
 
 TEST_F(Win32FileSystemTest, ExpandShortNamesReturnsTheStoredSpelling) {

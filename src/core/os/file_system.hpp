@@ -65,6 +65,12 @@ class IFileSystem {
   // Does not recurse: fails with not_empty for a directory that has entries.
   [[nodiscard]] virtual Result<void> remove(const std::filesystem::path& path) = 0;
 
+  // Like remove(), but only while `path` is still the entry `expected`: the identity is checked
+  // on the handle that deletes the entry, so it cannot be swapped between check and delete.
+  // Fails with refused when `path` is another entry now.
+  [[nodiscard]] virtual Result<void> remove(const std::filesystem::path& path,
+                                            const FileIdentity& expected) = 0;
+
   // Renames a file, directory or reparse point atomically on one volume; identity is kept.
   // Fails with already_exists when `to` exists and invalid_argument across volumes.
   [[nodiscard]] virtual Result<void> rename(const std::filesystem::path& from,

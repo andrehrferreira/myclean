@@ -49,6 +49,11 @@ folder of the repository in `data/` (contract C2).
 src/core/<module>/      pure C++20 libraries; no Win32 header (checked on every build)
 src/core/model/         shared vocabulary: ids, units, Result, Finding, Plan, Action, Actor
 src/core/os/            interfaces to the OS (IFileSystem, IClock) + the portable SystemClock
+src/core/store/         SQLite store: migrations, synchronous and batched writes, time series
+src/core/safety/        SafeRemove and its hard deny-list: the only code that deletes or moves
+src/core/actions/       plan state machine, action_log/undo_blob/quarantine, DeleteItems,
+                        QuarantineItems
+src/core/sched/         in-app scheduler (cron, catch-up) and its store-backed repository
 src/platform/<module>/  Win32 implementations of src/core/os interfaces
 tests/fakes/            in-memory fakes of the src/core/os interfaces (myclean::fakes)
 tests/unit/<module>/    GoogleTest suite of one module
@@ -141,6 +146,34 @@ Win32 header) fails the build with the file and line.
 - **OS access** from core only through `src/core/os` interfaces; tests use the fakes. Platform
   interfaces for later phases (process table, jobs, registry, clipboard) are added with the
   phase that needs them.
+
+### Wiring the store, SafeRemove, actions and scheduler
+
+The service builds these once, in this order (the actions tests do the same over fakes):
+
+```cpp
+const std::vector<store::MigrationSet> sets = {actions::action_migrations()};
+auto db = store::Store::open(store::database_path(program_data), clock, sets);  // + module sets
+actions::StorePlanSource plans{**db};                 // SafeRemove reads plans only from the store
+auto remover = safety::SafeRemove::create(file_system, plans, *platform::protected_locations(owner));
+actions::PolicyEngine engine{**db, clock};            // every transition -> action_log
+const actions::Environment env{.store = db->get(), .file_system = &file_system,
+                               .safe_remove = &*remover, .clock = &clock};
+actions::Quarantine quarantine{env, engine};          // restore and 7-day purge
+sched::StoreScheduleRepository schedule{**db};        // synchronous writes to `schedule`
+```
+
+A feature submits a plan with its automation level (`engine.submit`): `suggest` waits in
+`awaiting_approval` until the owner calls `engine.approve` (approving none rejects it),
+`automatic` goes straight to `approved`; an `mcp:*` proposer always waits for the owner and can
+never cause `approved`. `engine.execute(plan, action, actor, auto_undo)` then runs the action
+(`DeleteItems` or `QuarantineItems`, built for that plan): `applying`, apply through SafeRemove,
+`applied` with the undo data committed in the same transaction, verify, and `verified` or
+`rolled_back` (or an alert in the report when the result got worse and is kept). Item outcomes,
+refusals included, are written to `action_log`, whose triggers reject any UPDATE or DELETE.
+Quarantined items live in `<volume>\.myclean-quarantine\<plan id>\<item id>\<name>` (a rename on
+their own volume) for 7 days; `quarantine.restore` and `quarantine.purge` act through their own
+stored plans, so they too go through SafeRemove.
 
 ### Result type: tl::expected on C++20
 

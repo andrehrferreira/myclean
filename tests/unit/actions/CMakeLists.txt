@@ -1,0 +1,9 @@
+myclean_add_test(actions
+  SOURCES
+    actions_test_support.hpp
+    file_actions_test.cpp
+    policy_test.cpp
+    schema_test.cpp
+  DEPENDS
+    myclean::actions
+    myclean::fakes)

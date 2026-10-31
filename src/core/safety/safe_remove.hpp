@@ -136,7 +136,9 @@ class SafeRemove {
   // The current state of an entry inside a folder being emptied, or the verdict that keeps it.
   [[nodiscard]] tl::expected<os::FileStat, Verdict> check_entry(const Run& run,
                                                                 const os::DirEntry& entry) const;
-  // Removes `path` if it is still the entry `expected`; a vanished entry counts as removed.
+  // Removes `path` only while it is still the entry `expected`, checked by the file system on
+  // the handle that deletes. nullopt when removed; otherwise the verdict that keeps it
+  // (changed_since_plan, or a skip with not_found when it vanished).
   [[nodiscard]] std::optional<Verdict> remove_checked(const std::filesystem::path& path,
                                                       const FileIdentity& expected);
   [[nodiscard]] Tally remove_contents(const Run& run, const std::filesystem::path& folder);

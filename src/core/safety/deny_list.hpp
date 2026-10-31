@@ -28,6 +28,11 @@ struct DenyRule {
 
 // Every entry, in evaluation order. It is compiled in: no rule or setting can change it.
 //   volume_root        a volume root (D:\ and the like)
+//   system_volume_information, recovery, boot
+//                      that top-level folder of any volume, with everything inside it
+//   page_file          pagefile.sys, hiberfil.sys or swapfile.sys at any volume root
+//   root_dollar_entry  any top-level entry whose name starts with '$' ($Recycle.Bin,
+//                      $WinREAgent, $Extend, ...), with everything inside it
 //   windir             %WINDIR%, except the contents of allow-listed subfolders (Temp)
 //   program_files      any top-level "Program Files*" folder of any volume
 //   git                a .git folder or file, and anything inside one

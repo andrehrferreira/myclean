@@ -25,6 +25,7 @@ enum class PlanState {
   verified,
   rolled_back,
   failed,
+  rejected,  // the owner approved none of the items
 };
 
 [[nodiscard]] std::string_view to_string(PlanState state);

@@ -247,6 +247,17 @@ Result<fs::path> FakeFileSystem::expand_short_names(const fs::path& path) const 
 }
 
 Result<void> FakeFileSystem::remove(const fs::path& path) {
+  return remove_entry(path, nullptr);
+}
+
+Result<void> FakeFileSystem::remove(const fs::path& path, const FileIdentity& expected) {
+  return remove_entry(path, &expected);
+}
+
+Result<void> FakeFileSystem::remove_entry(const fs::path& path, const FileIdentity* expected) {
+  if (on_remove_) {
+    on_remove_(path);
+  }
   operations_.push_back({.kind = OperationKind::remove, .from = path});
   if (auto code = injected_failure(path)) {
     return fail(*code, "injected failure: " + narrow(path));
@@ -254,6 +265,9 @@ Result<void> FakeFileSystem::remove(const fs::path& path) {
   auto status = stat(path);
   if (!status) {
     return tl::unexpected(status.error());
+  }
+  if (expected != nullptr && status->identity != *expected) {
+    return fail(Errc::refused, "entry changed identity: " + narrow(path));
   }
   const std::wstring key = key_of(path);
   if (status->kind == os::EntryKind::directory && has_children(key)) {

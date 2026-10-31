@@ -8,12 +8,12 @@
 - [x] 1.7 F4: TOML/JSON loaders for data/rules/*.toml, data/classes.toml, data/kb/*.json with schema validation; an invalid file is rejected whole, never half-applied
 - [x] 1.8 F5: SafeRemove: hard deny-list, never follows reparse points, skips cloud placeholders (RECALL_ON_DATA_ACCESS / RECALL_ON_OPEN / OFFLINE), accepts only items of a stored plan, re-validates each item immediately before acting
 - [x] 1.9 F5: SafeRemove tests: one per deny-list entry, junction/symlink, cloud placeholder, TOCTOU swap, item not in plan
-- [ ] 1.10 F6: Action contract (describe/preview/apply/verify/undo), plan state machine (proposed -> auto|awaiting_approval -> approved -> applying -> applied -> verified|rolled_back|failed), actors (scheduler, governor, owner, mcp:*) with mcp:* unable to approve
-- [ ] 1.11 F6: append-only action_log (DB trigger rejects UPDATE/DELETE) with undo blobs; quarantine table
+- [x] 1.10 F6: Action contract (describe/preview/apply/verify/undo), plan state machine (proposed -> auto|awaiting_approval -> approved -> applying -> applied -> verified|rolled_back|failed), actors (scheduler, governor, owner, mcp:*) with mcp:* unable to approve
+- [x] 1.11 F6: append-only action_log (DB trigger rejects UPDATE/DELETE) with undo blobs; quarantine table
 - [x] 1.12 F7: in-app scheduler: cron-expression parser, persisted last/next run, catch-up of missed runs after downtime, no OS scheduler
-- [ ] 1.13 Run tools/deploy/deploy.ps1 end to end: gate passes, and with no executable yet it stops with a clear message
+- [x] 1.13 Run tools/deploy/deploy.ps1 end to end: gate passes, and with no executable yet it stops with a clear message
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 2.1 Update or create documentation covering the implementation
-- [ ] 2.2 Write tests covering the new behavior
-- [ ] 2.3 Run tests and confirm they pass
+- [x] 2.1 Update or create documentation covering the implementation
+- [x] 2.2 Write tests covering the new behavior
+- [x] 2.3 Run tests and confirm they pass

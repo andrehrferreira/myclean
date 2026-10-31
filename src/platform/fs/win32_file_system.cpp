@@ -140,6 +140,26 @@ Result<os::FileStat> stat_handle(HANDLE file, const fs::path& path) {
                  standard.EndOfFile, standard.AllocationSize);
 }
 
+// Marks the entry open in `file` (opened with DELETE) for deletion when the handle closes.
+Result<void> delete_on_close(HANDLE file, const fs::path& path) {
+  // POSIX semantics unlink the name at once even while another process holds the file open,
+  // so that the parent folder can be removed next. Volumes without them get the classic form.
+  FILE_DISPOSITION_INFO_EX posix{.Flags = FILE_DISPOSITION_FLAG_DELETE |
+                                          FILE_DISPOSITION_FLAG_POSIX_SEMANTICS};
+  if (::SetFileInformationByHandle(file, FileDispositionInfoEx, &posix, sizeof(posix)) != FALSE) {
+    return {};
+  }
+  const DWORD error = ::GetLastError();
+  if (error != ERROR_INVALID_PARAMETER && error != ERROR_NOT_SUPPORTED) {
+    return os_error(error, "cannot remove", path);
+  }
+  FILE_DISPOSITION_INFO classic{.DeleteFile = TRUE};
+  if (::SetFileInformationByHandle(file, FileDispositionInfo, &classic, sizeof(classic)) == FALSE) {
+    return last_error("cannot remove", path);
+  }
+  return {};
+}
+
 }  // namespace
 
 Result<os::FileStat> Win32FileSystem::stat(const fs::path& path) const {
@@ -250,24 +270,23 @@ Result<void> Win32FileSystem::remove(const fs::path& path) {
   if (!file) {
     return tl::unexpected(file.error());
   }
-  // POSIX semantics unlink the name at once even while another process holds the file open,
-  // so that the parent folder can be removed next. Volumes without them get the classic form.
-  FILE_DISPOSITION_INFO_EX posix{.Flags = FILE_DISPOSITION_FLAG_DELETE |
-                                          FILE_DISPOSITION_FLAG_POSIX_SEMANTICS};
-  if (::SetFileInformationByHandle(file->get(), FileDispositionInfoEx, &posix, sizeof(posix)) !=
-      FALSE) {
-    return {};
+  return delete_on_close(file->get(), path);
+}
+
+Result<void> Win32FileSystem::remove(const fs::path& path, const FileIdentity& expected) {
+  // The identity is read from the handle that deletes, so no swap can slip in between.
+  const Result<wil::unique_hfile> file = open_entry(path, DELETE | FILE_READ_ATTRIBUTES);
+  if (!file) {
+    return tl::unexpected(file.error());
   }
-  const DWORD error = ::GetLastError();
-  if (error != ERROR_INVALID_PARAMETER && error != ERROR_NOT_SUPPORTED) {
-    return os_error(error, "cannot remove", path);
+  const Result<os::FileStat> status = stat_handle(file->get(), path);
+  if (!status) {
+    return tl::unexpected(status.error());
   }
-  FILE_DISPOSITION_INFO classic{.DeleteFile = TRUE};
-  if (::SetFileInformationByHandle(file->get(), FileDispositionInfo, &classic, sizeof(classic)) ==
-      FALSE) {
-    return last_error("cannot remove", path);
+  if (status->identity != expected) {
+    return fail(Errc::refused, "entry changed identity: " + utf8(path));
   }
-  return {};
+  return delete_on_close(file->get(), path);
 }
 
 Result<void> Win32FileSystem::rename(const fs::path& from, const fs::path& to) {

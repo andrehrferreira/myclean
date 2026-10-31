@@ -113,6 +113,25 @@ class SafeRemoveTest : public ::testing::Test {
     EXPECT_EQ(outcome.freed, Bytes{});
   }
 
+  // Adds a 1 KiB file for every new path with an extension and a folder for every other new
+  // one, plans them all and expects each to be refused with `reason`, untouched.
+  void expect_all_refused(const std::vector<path>& items, std::string_view reason) {
+    std::vector<PlanItemId> ids;
+    for (const path& item : items) {
+      const bool exists = fs_.exists(item);  // created as the parent of an earlier item
+      if (!exists && item.has_extension()) {
+        fs_.add_file(item, 1_KiB);
+      } else if (!exists) {
+        fs_.add_directory(item);
+      }
+      ids.push_back(add_item(item));
+    }
+    for (const ItemOutcome& outcome : remove(ids)) {
+      expect_refused(outcome, reason);
+    }
+    EXPECT_TRUE(fs_.operations().empty());
+  }
+
   fakes::FakeFileSystem& fs() { return fs_; }
   Plan& plan() { return plan_; }
 
@@ -134,6 +153,43 @@ TEST_F(SafeRemoveDenyList, VolumeRootRefused) {
   }
   EXPECT_TRUE(fs().operations().empty());
   EXPECT_TRUE(fs().exists(L"D:\\data.bin"));
+}
+
+TEST_F(SafeRemoveDenyList, SystemVolumeInformationRefusedOnEveryVolume) {
+  expect_all_refused(
+      {L"C:\\System Volume Information", L"D:\\system volume information\\tracking.log",
+       L"E:\\System Volume Information\\{3808876b-c176-4e48-b7ae-04046e6cc752}"},
+      "deny_list:system_volume_information");
+}
+
+TEST_F(SafeRemoveDenyList, RecoveryRefusedAtVolumeRootOnly) {
+  expect_all_refused({L"C:\\Recovery", L"D:\\RECOVERY\\WindowsRE\\Winre.wim"},
+                     "deny_list:recovery");
+  fs().add_file(L"F:\\proj\\Recovery\\notes.txt", 1_KiB);
+  EXPECT_EQ(remove_one(L"F:\\proj\\Recovery\\notes.txt").disposition, Disposition::removed);
+}
+
+TEST_F(SafeRemoveDenyList, BootRefusedAtVolumeRootOnly) {
+  expect_all_refused({L"C:\\Boot", L"C:\\boot\\BCD", L"D:\\Boot\\memtest.exe"}, "deny_list:boot");
+  fs().add_file(L"F:\\spring\\boot\\app.jar", 1_KiB);
+  EXPECT_EQ(remove_one(L"F:\\spring\\boot\\app.jar").disposition, Disposition::removed);
+}
+
+TEST_F(SafeRemoveDenyList, PageFileRefusedAtEveryVolumeRoot) {
+  expect_all_refused(
+      {L"C:\\pagefile.sys", L"C:\\hiberfil.sys", L"C:\\swapfile.sys", L"D:\\PAGEFILE.SYS"},
+      "deny_list:page_file");
+  fs().add_file(L"F:\\backup\\pagefile.sys", 1_KiB);
+  EXPECT_EQ(remove_one(L"F:\\backup\\pagefile.sys").disposition, Disposition::removed);
+}
+
+TEST_F(SafeRemoveDenyList, RootDollarEntryRefused) {
+  expect_all_refused({L"C:\\$Recycle.Bin\\S-1-5-21-1\\$R0A1B2C.tmp", L"C:\\$Recycle.Bin",
+                      L"C:\\$WinREAgent\\Scratch", L"C:\\$WinREAgent", L"D:\\$Extend",
+                      L"C:\\$Windows.~BT\\Sources\\setup.exe"},
+                     "deny_list:root_dollar_entry");
+  fs().add_file(L"F:\\proj\\$tmp\\a.tmp", 1_KiB);
+  EXPECT_EQ(remove_one(L"F:\\proj\\$tmp\\a.tmp").disposition, Disposition::removed);
 }
 
 TEST_F(SafeRemoveDenyList, WindirRefusedExceptAllowListedTemp) {
@@ -476,6 +532,40 @@ TEST_F(SafeRemoveTest, FileRecreatedWithAnotherIdentityRefused) {
   fs().add_file(L"F:\\tmp\\a.tmp", 1_KiB);
   expect_refused(remove({item}).front(), "changed_since_plan");
   EXPECT_TRUE(fs().exists(L"F:\\tmp\\a.tmp"));
+}
+
+TEST_F(SafeRemoveTest, SwapBetweenCheckAndDeleteRefused) {
+  fs().add_file(L"F:\\tmp\\a.tmp", 1_KiB);
+  fs().add_file(L"C:\\Users\\owner\\Documents\\thesis.docx", 1_KiB);
+  const PlanItemId item = add_item(L"F:\\tmp\\a.tmp");
+  // Every check passed; right before the delete the file becomes a junction to Documents.
+  fs().on_remove([this](const path& removed) {
+    if (removed == path{L"F:\\tmp\\a.tmp"} && !fs().stat(removed)->attributes.reparse_point) {
+      fs().erase(removed);
+      fs().add_directory(removed, reparse);
+    }
+  });
+  expect_refused(remove({item}).front(), "changed_since_plan");
+  EXPECT_TRUE(fs().stat(L"F:\\tmp\\a.tmp")->attributes.reparse_point);
+  EXPECT_TRUE(fs().exists(L"C:\\Users\\owner\\Documents\\thesis.docx"));
+}
+
+TEST_F(SafeRemoveTest, SwapInsideFolderBetweenCheckAndDeleteKeepsTheNewEntry) {
+  fs().add_file(L"F:\\cache\\a.bin", 1_KiB);
+  fs().add_file(L"F:\\cache\\b.bin", 2_KiB);
+  const PlanItemId item = add_item(L"F:\\cache");
+  fs().on_remove([this](const path& removed) {
+    if (removed == path{L"F:\\cache\\a.bin"} && fs().stat(removed)->size == 1_KiB) {
+      fs().erase(removed);
+      fs().add_file(removed, 3_KiB);
+    }
+  });
+  const ItemOutcome outcome = remove({item}).front();
+  EXPECT_EQ(outcome.disposition, Disposition::partial);
+  EXPECT_EQ(outcome.reason, "changed_since_plan");
+  EXPECT_EQ(outcome.freed, 2_KiB);
+  EXPECT_EQ(fs().stat(L"F:\\cache\\a.bin")->size, 3_KiB);
+  EXPECT_FALSE(fs().exists(L"F:\\cache\\b.bin"));
 }
 
 TEST_F(SafeRemoveTest, MixedPlanGetsOneOutcomePerItem) {
