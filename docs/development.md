@@ -95,7 +95,10 @@ a `CMakeLists.txt` automatically. **Adding a module never edits a shared file.**
 A platform module is the same recipe under `src/platform/<module>/`, named
 `platform_<module>` (target `myclean::platform_<module>`), with Win32 headers allowed.
 An executable uses `add_executable` plus `myclean_install_executable(<target>)`, which installs
-the binary and its PDB into `bin/`.
+the binary and its PDB into `bin/`. In the `debug` preset (`MYCLEAN_ASAN=ON`) every executable
+must also get the POST_BUILD copy of `${MYCLEAN_ASAN_RUNTIME}` next to it, as
+`myclean_add_test` does. Otherwise starting it outside a developer shell raises a
+"clang_rt.asan_dynamic-x86_64.dll not found" system dialog.
 
 ### Third-party libraries
 
