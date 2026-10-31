@@ -11,69 +11,70 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Must equal "builtin-baseline" in vcpkg.json.
-  VCPKG_COMMIT: a2367ceec5f092d8777606ca110426cadd7ed7db
-
 jobs:
-  build:
-    name: ${{ matrix.preset }}
+  test:
+    name: test (${{ matrix.preset }})
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         preset: [debug, release]
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
 
-      - name: MSVC developer environment
-        uses: ilammy/msvc-dev-cmd@v1
+      - id: setup
+        uses: ./.github/actions/setup-build
         with:
-          arch: x64
-
-      # After the developer environment, so that its own VCPKG_ROOT (if any) is overridden.
-      - name: vcpkg at the pinned baseline
-        shell: pwsh
-        run: |
-          $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
-          git clone --quiet https://github.com/microsoft/vcpkg.git $root
-          git -C $root checkout --quiet $env:VCPKG_COMMIT
-          & "$root\bootstrap-vcpkg.bat" -disableMetrics
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $cache = Join-Path $env:RUNNER_TEMP 'vcpkg-archives'
-          New-Item -ItemType Directory -Force -Path $cache | Out-Null
-          "VCPKG_ROOT=$root" >> $env:GITHUB_ENV
-          "VCPKG_BINARY_SOURCES=clear;files,$cache,readwrite" >> $env:GITHUB_ENV
-
-      - name: Restore vcpkg binary archives
-        id: vcpkg-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/vcpkg-archives
-          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ matrix.preset }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: vcpkg-${{ env.VCPKG_COMMIT }}-${{ matrix.preset }}-
+          preset: ${{ matrix.preset }}
 
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
 
       # Saved right after configure, so a later red step does not lose the built dependencies.
       - name: Save vcpkg binary archives
-        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        if: always() && steps.setup.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/vcpkg-archives
-          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ matrix.preset }}-${{ hashFiles('vcpkg.json') }}
+          key: ${{ steps.setup.outputs.cache-key }}
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
 
-      - name: Format check
-        run: cmake --build --preset ${{ matrix.preset }} --target format-check
-
-      - name: Lint
-        run: cmake --build --preset ${{ matrix.preset }} --target lint
-
       - name: Test
         run: ctest --preset ${{ matrix.preset }}
+
+  lint:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: setup
+        uses: ./.github/actions/setup-build
+        with:
+          preset: release
+
+      - name: Configure
+        run: cmake --preset release
+
+      - name: Save vcpkg binary archives
+        if: always() && steps.setup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/vcpkg-archives
+          key: ${{ steps.setup.outputs.cache-key }}
+
+      - name: Lint (clang-tidy)
+        run: cmake --build --preset release --target lint
+
+  # Needs no compiler or vcpkg: clang-format pinned to the version the project is formatted with.
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: clang-format 19.1.5
+        run: python -m pip install clang-format==19.1.5
+
+      - name: Format check
+        run: cmake -DSOURCE_DIR="$GITHUB_WORKSPACE" -DCLANG_FORMAT="$(command -v clang-format)" -DMODE=check -P cmake/scripts/format.cmake

@@ -1,0 +1,52 @@
+name: Set up MyClean build
+description: MSVC developer environment, Ninja, and vcpkg at the builtin-baseline of vcpkg.json with a binary cache restored for the given preset.
+
+inputs:
+  preset:
+    description: CMake preset the cache belongs to (debug or release).
+    required: true
+
+outputs:
+  cache-key:
+    description: Key to save the vcpkg binary archives under after configure.
+    value: ${{ steps.vcpkg.outputs.key }}
+  cache-hit:
+    description: Whether the binary archives were restored with an exact key match.
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: MSVC developer environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    - name: Ninja
+      uses: seanmiddleditch/gha-setup-ninja@v6
+
+    # After the developer environment, so that its own VCPKG_ROOT (if any) is overridden.
+    - name: vcpkg at the manifest baseline
+      id: vcpkg
+      shell: pwsh
+      run: |
+        $commit = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+        $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
+        git clone --quiet https://github.com/microsoft/vcpkg.git $root
+        git -C $root checkout --quiet $commit
+        & "$root\bootstrap-vcpkg.bat" -disableMetrics
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $cache = Join-Path $env:RUNNER_TEMP 'vcpkg-archives'
+        New-Item -ItemType Directory -Force -Path $cache | Out-Null
+        "VCPKG_ROOT=$root" >> $env:GITHUB_ENV
+        "VCPKG_BINARY_SOURCES=clear;files,$cache,readwrite" >> $env:GITHUB_ENV
+        "key=vcpkg-$commit-${{ inputs.preset }}-${{ hashFiles('vcpkg.json') }}" >> $env:GITHUB_OUTPUT
+        "prefix=vcpkg-$commit-${{ inputs.preset }}-" >> $env:GITHUB_OUTPUT
+
+    - name: Restore vcpkg binary archives
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/vcpkg-archives
+        key: ${{ steps.vcpkg.outputs.key }}
+        restore-keys: ${{ steps.vcpkg.outputs.prefix }}

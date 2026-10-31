@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: setup
+        uses: ./.github/actions/setup-build
+        with:
+          preset: release
+
+      - name: Configure
+        run: cmake --preset release
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Test
+        run: ctest --preset release
+
+      # Same install tree tools/deploy/deploy.ps1 deploys: bin/ and data/ (deploy contract C2).
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = "MyClean-${{ github.ref_name }}-win-x64"
+          $stage = Join-Path $env:RUNNER_TEMP $name
+          cmake --install build/release --prefix $stage
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Compress-Archive -Path "$stage\*" -DestinationPath "$env:RUNNER_TEMP\$name.zip"
+          "ZIP=$env:RUNNER_TEMP\$name.zip" >> $env:GITHUB_ENV
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release create "${{ github.ref_name }}" "$env:ZIP" --title "MyClean ${{ github.ref_name }}" --generate-notes --verify-tag

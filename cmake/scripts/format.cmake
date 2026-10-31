@@ -9,6 +9,16 @@ foreach(variable IN ITEMS SOURCE_DIR CLANG_FORMAT MODE)
   endif()
 endforeach()
 
+# Formatting differs between clang-format major versions, so every run (local targets, the
+# pre-commit hook and CI) must use the same one: the version bundled with Visual Studio 2022.
+set(required_major 19)
+execute_process(COMMAND "${CLANG_FORMAT}" --version OUTPUT_VARIABLE version_text
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(NOT version_text MATCHES "version ${required_major}\\.")
+  message(FATAL_ERROR "clang-format ${required_major}.x is required, found: ${version_text} "
+    "(${CLANG_FORMAT}). Use the one bundled with Visual Studio (VC/Tools/Llvm/x64/bin).")
+endif()
+
 if(MODE STREQUAL "check")
   set(mode_args --dry-run --Werror)
 elseif(MODE STREQUAL "fix")
