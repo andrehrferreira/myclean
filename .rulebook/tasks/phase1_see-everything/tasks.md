@@ -22,6 +22,6 @@
 - [ ] 1.21 Acceptance: prompt 1 passes in Claude Code via myclean mcp; all 8 drives show health or an explicit 'not readable over USB'; service + tray within NFR-PERF-1 for 24 h; deployed with tools/deploy/deploy.ps1
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 2.1 Update or create documentation covering the implementation
-- [ ] 2.2 Write tests covering the new behavior
-- [ ] 2.3 Run tests and confirm they pass
+- [x] 2.1 Update or create documentation covering the implementation
+- [x] 2.2 Write tests covering the new behavior
+- [x] 2.3 Run tests and confirm they pass
