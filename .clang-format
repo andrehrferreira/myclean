@@ -1,0 +1,22 @@
+---
+Language: Cpp
+BasedOnStyle: Google
+Standard: c++20
+ColumnLimit: 100
+DerivePointerAlignment: false
+PointerAlignment: Left
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+IncludeBlocks: Regroup
+IncludeCategories:
+  # 1. C++ standard library
+  - Regex: '^<[a-z_]+>$'
+    Priority: 1
+  # 2. Third-party libraries
+  - Regex: '^<.*>$'
+    Priority: 2
+  # 3. Project headers
+  - Regex: '^".*"$'
+    Priority: 3
+...

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "myclean",
+  "version": "0.1.0",
+  "builtin-baseline": "a2367ceec5f092d8777606ca110426cadd7ed7db",
+  "dependencies": [
+    "gtest",
+    "nlohmann-json",
+    "spdlog",
+    "sqlite3",
+    "tl-expected",
+    "tomlplusplus",
+    "wil"
+  ]
+}

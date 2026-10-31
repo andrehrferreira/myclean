@@ -1,0 +1,20 @@
+# Shared vocabulary of every core module: ids, units, Result, plans, actions.
+myclean_add_library(model
+  SOURCES
+    action.cpp
+    action.hpp
+    actor.cpp
+    actor.hpp
+    enum_names.hpp
+    file_identity.hpp
+    finding.cpp
+    finding.hpp
+    ids.hpp
+    plan.cpp
+    plan.hpp
+    result.cpp
+    result.hpp
+    series.hpp
+    units.hpp
+  DEPENDS
+    tl::expected)

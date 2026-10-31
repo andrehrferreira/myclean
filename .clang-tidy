@@ -1,0 +1,53 @@
+---
+# Checks for every first-party file. A finding fails the `lint` target (WarningsAsErrors).
+# Disabled checks are listed with the reason; do not silence a finding without a NOLINT reason.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  clang-analyzer-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  misc-*,
+  -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  performance-*,
+  -performance-enum-size,
+  portability-*,
+  readability-*,
+  -readability-identifier-length,
+  -readability-magic-numbers
+# Rationale for the disabled checks:
+#   easily-swappable-parameters  flags most functions taking two paths or two ids
+#   avoid-magic-numbers          tests and unit constants are full of literal values
+#   include-cleaner              misreports MSVC STL internal headers
+#   non-private-member-variables plain data structs (Plan, FileStat, ...) are intentional
+#   use-trailing-return-type     style choice: leading return types
+#   identifier-length            short names (id, fs, ec) are idiomatic in small scopes
+#   enum-size                    int-sized enums are fine; byte packing buys nothing here
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*[\\/](src|tests)[\\/].*'
+FormatStyle: none
+CheckOptions:
+  - { key: readability-identifier-naming.NamespaceCase, value: lower_case }
+  - { key: readability-identifier-naming.ClassCase, value: CamelCase }
+  - { key: readability-identifier-naming.StructCase, value: CamelCase }
+  - { key: readability-identifier-naming.EnumCase, value: CamelCase }
+  - { key: readability-identifier-naming.EnumConstantCase, value: lower_case }
+  - { key: readability-identifier-naming.TypeAliasCase, value: CamelCase }
+  - { key: readability-identifier-naming.TemplateParameterCase, value: CamelCase }
+  - { key: readability-identifier-naming.FunctionCase, value: lower_case }
+  - { key: readability-identifier-naming.MethodCase, value: lower_case }
+  - { key: readability-identifier-naming.VariableCase, value: lower_case }
+  - { key: readability-identifier-naming.ParameterCase, value: lower_case }
+  - { key: readability-identifier-naming.MemberCase, value: lower_case }
+  - { key: readability-identifier-naming.PrivateMemberSuffix, value: _ }
+  - { key: readability-identifier-naming.ProtectedMemberSuffix, value: _ }
+  - { key: readability-identifier-naming.ConstexprVariableCase, value: lower_case }
+  - { key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor, value: true }
+  # GoogleTest assertion macros expand to branches; count only the code that is written.
+  - { key: readability-function-cognitive-complexity.IgnoreMacros, value: true }
+...
