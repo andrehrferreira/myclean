@@ -1,0 +1,42 @@
+{
+  "drives": [
+    {
+      "model": "Samsung SSD 970 PRO 1TB",
+      "rated_tbw": 1200,
+      "max_temperature_c": 70,
+      "source": "Samsung 970 PRO NVMe M.2 SSD data sheet (2018): 1,200 TBW for 1 TB; operating temperature 0-70 °C measured by S.M.A.R.T. temperature. https://www.samsung.com/ie/memory-storage/970-pro-nvme-m2-ssd-/MZ-V7P512BW/"
+    },
+    {
+      "model": "Samsung SSD 980 PRO 2TB",
+      "rated_tbw": 1200,
+      "max_temperature_c": 70,
+      "source": "Samsung NVMe SSD 980 PRO data sheet Rev. 2.1: 1,200 TBW for 2 TB; operating temperature 0-70 °C measured by S.M.A.R.T. temperature. https://download.semiconductor.samsung.com/resources/data-sheet/Samsung-NVMe-SSD-980-PRO-Data-Sheet_Rev.2.1_10129504060695.pdf"
+    },
+    {
+      "model": "WD_BLACK SN7100 4TB",
+      "rated_tbw": 2400,
+      "max_temperature_c": 85,
+      "source": "WD_BLACK SN7100 product brief as quoted by distributors (official brief not retrieved): 2,400 TBW for 4 TB; operating temperature 0-85 °C as reported by the drive. https://store.convergenttechnology.com/catalog/product/view/id/39138397/category/3"
+    },
+    {
+      "model": "CT4000P3SSD8",
+      "rated_tbw": 800,
+      "source": "Crucial P3 product flyer: 800 TB total bytes written for 4 TB. No operating temperature found in a Crucial document, so no limit is set. https://crucial.in/content/dam/crucial/ssd-products/p3/flyers/b2c/crucial-p3-productflyer-consumer.pdf"
+    },
+    {
+      "model": "Sabrent Rocket 4.0 2TB",
+      "rated_tbw": 3600,
+      "max_temperature_c": 70,
+      "source": "Sabrent product page SB-ROCKET-NVMe4-2TB: 3,600 TBW for 2 TB (https://www.sabrent.com/product/SB-ROCKET-NVMe4-2TB); operating temperature 0-70 °C from the Newegg listing of the same part (https://www.newegg.com/global/qa-en/sabrent-rocket-nvme-4-0-2tb/p/0D9-001Y-00023)."
+    },
+    {
+      "model": "ROG ESD-S1C",
+      "source": "ASUS ROG Strix Arion ESD-S1C is a USB enclosure for an M.2 NVMe SSD: its endurance and temperature rating are those of the SSD inside, which the enclosure does not report. The listed 0-70 °C is the enclosure's ambient range, not a drive limit, so no limit is set."
+    },
+    {
+      "model": "WDC WD101EFBX-68B0AN0",
+      "max_temperature_c": 65,
+      "source": "WD Red Plus 3.5-inch NAS hard drive product brief: operating temperature 0-65 °C (https://manuals.plus/m/ea8288078ae62115f5bd9fab36b7937772ba992b0c9caf06caed0ba1a7ceece2); the drive itself reports a 65 °C warning temperature. Hard drives have no TBW rating."
+    }
+  ]
+}

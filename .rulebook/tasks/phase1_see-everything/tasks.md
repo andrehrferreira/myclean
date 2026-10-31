@@ -1,5 +1,5 @@
 ## 1. Implementation
-- [ ] 1.1 X1 spike: NVMe health log + temperature via IOCTL_STORAGE_QUERY_PROPERTY on all 5 internal NVMe drives, ATA SMART on the WD Reds, what the ROG USB bridge allows; note in docs/spikes/X1-disk-health.md
+- [x] 1.1 X1 spike: NVMe health log + temperature via IOCTL_STORAGE_QUERY_PROPERTY on all 5 internal NVMe drives, ATA SMART on the WD Reds, what the ROG USB bridge allows; note in docs/spikes/X1-disk-health.md
 - [ ] 1.2 X2 spike: WH_KEYBOARD_LL timeout/removal behavior on 26200 and raw-input timing; note in docs/spikes/X2-input.md
 - [x] 1.3 R1: myclean-svc service host (LocalSystem, restart on failure) honoring deploy contracts C3, C4, C7
 - [x] 1.4 R2: named pipe \\.\pipe\myclean, length-prefixed JSON-RPC 2.0, DACL SYSTEM + owner SID, typed methods only (no raw paths/commands)
@@ -11,8 +11,8 @@
 - [x] 1.10 T6: telemetry pipeline: per-collector lock-free ring, downsampler, history query API
 - [ ] 1.11 R3: myclean-tray shell: tray icon with state color + tooltip, toasts, single instance, quits on Local\MyClean.Tray.Quit (deploy contract C5)
 - [x] 1.12 T7: alert engine: thresholds + change detection, rate limiting, snooze, tray badge
-- [ ] 1.13 H1: disk-health reader (NVMe health log + temperature, ATA SMART, USB fallback to reliability counters) every 10 min + daily snapshot
-- [ ] 1.14 H2: health history, delta alerts (any new media error / reallocated or pending sector), temperature thresholds, TBW endurance projection
+- [x] 1.13 H1: disk-health reader (NVMe health log + temperature, ATA SMART, USB fallback to reliability counters) every 10 min + daily snapshot
+- [x] 1.14 H2: health history, delta alerts (any new media error / reallocated or pending sector), temperature thresholds, TBW endurance projection
 - [x] 1.15 I1: input watchdog in the tray: raw input + clipboard listener + SendMessageTimeout probes; incidents > 250 ms stored with owner, open-clipboard holder, viewer chain, foreground app, hung windows, suspects
 - [x] 1.16 I2: freeze view + mechanism classifier (delayed rendering, clipboard held open, viewer chain, slow keyboard hook, heavy payload)
 - [x] 1.17 K1: trust signal (WinVerifyTrust incl. catalog, signer, user-writable path, KB match) + knowledge base v1 data
