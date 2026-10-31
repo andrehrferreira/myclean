@@ -1,0 +1,11 @@
+myclean_add_test(placement
+  SOURCES
+    drives_test.cpp
+    npmrc_test.cpp
+    placement_fakes.hpp
+    proposal_test.cpp
+    relocation_test.cpp
+    system_space_test.cpp
+  DEPENDS
+    myclean::placement
+    myclean::fakes)
