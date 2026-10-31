@@ -3,12 +3,12 @@
 - [ ] 1.2 X2 spike: WH_KEYBOARD_LL timeout/removal behavior on 26200 and raw-input timing; note in docs/spikes/X2-input.md
 - [x] 1.3 R1: myclean-svc service host (LocalSystem, restart on failure) honoring deploy contracts C3, C4, C7
 - [x] 1.4 R2: named pipe \\.\pipe\myclean, length-prefixed JSON-RPC 2.0, DACL SYSTEM + owner SID, typed methods only (no raw paths/commands)
-- [ ] 1.5 T1: process collector via NtQuerySystemInformation(SystemProcessInformation), 1 s, grouped into trees with PID-reuse-safe parent links
-- [ ] 1.6 T3: CPU (per logical processor, % of max frequency, DPC/interrupt, queue) and memory (available, commit, standby/modified, compressed, hard faults/s) collectors
-- [ ] 1.7 T4: physical-disk (bytes/s, IOPS, latency, queue, % idle) and volume (size, free, trend) collectors with volume-to-disk mapping
-- [ ] 1.8 T5: GPU collector (engine utilization, dedicated/shared memory, per process)
+- [x] 1.5 T1: process collector via NtQuerySystemInformation(SystemProcessInformation), 1 s, grouped into trees with PID-reuse-safe parent links
+- [x] 1.6 T3: CPU (per logical processor, % of max frequency, DPC/interrupt, queue) and memory (available, commit, standby/modified, compressed, hard faults/s) collectors
+- [x] 1.7 T4: physical-disk (bytes/s, IOPS, latency, queue, % idle) and volume (size, free, trend) collectors with volume-to-disk mapping
+- [x] 1.8 T5: GPU collector (engine utilization, dedicated/shared memory, per process)
 - [ ] 1.9 T2: ETW Microsoft-Windows-Kernel-Process and Kernel-Network sessions via krabsetw; persist proc_start
-- [ ] 1.10 T6: telemetry pipeline: per-collector lock-free ring, downsampler, history query API
+- [x] 1.10 T6: telemetry pipeline: per-collector lock-free ring, downsampler, history query API
 - [ ] 1.11 R3: myclean-tray shell: tray icon with state color + tooltip, toasts, single instance, quits on Local\MyClean.Tray.Quit (deploy contract C5)
 - [ ] 1.12 T7: alert engine: thresholds + change detection, rate limiting, snooze, tray badge
 - [ ] 1.13 H1: disk-health reader (NVMe health log + temperature, ATA SMART, USB fallback to reliability counters) every 10 min + daily snapshot
