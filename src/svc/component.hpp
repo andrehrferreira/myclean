@@ -20,8 +20,12 @@ namespace myclean::svc {
 class Context {
  public:
   Context(store::Store& store, ipc::Dispatcher& methods, const os::IClock& clock,
-          std::filesystem::path data_dir)
-      : store_(&store), methods_(&methods), clock_(&clock), data_dir_(std::move(data_dir)) {}
+          std::filesystem::path data_dir, std::string owner_sid = {})
+      : store_(&store),
+        methods_(&methods),
+        clock_(&clock),
+        data_dir_(std::move(data_dir)),
+        owner_sid_(std::move(owner_sid)) {}
 
   // Telemetry goes in with Store::record() and Store::enqueue(); the service flushes them.
   [[nodiscard]] store::Store& store() const { return *store_; }
@@ -30,12 +34,15 @@ class Context {
   [[nodiscard]] const os::IClock& clock() const { return *clock_; }
   // The build's read-only data folder (<version>\data): rules, classes, knowledge base.
   [[nodiscard]] const std::filesystem::path& data_dir() const { return data_dir_; }
+  // The owner's SID (S-1-5-...); empty in tests that do not need it.
+  [[nodiscard]] const std::string& owner_sid() const { return owner_sid_; }
 
  private:
   store::Store* store_;
   ipc::Dispatcher* methods_;
   const os::IClock* clock_;
   std::filesystem::path data_dir_;
+  std::string owner_sid_;
 };
 
 // A long-running part of the service, such as a collector. The service starts its components in

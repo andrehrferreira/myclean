@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <list>
 #include <memory>
@@ -24,6 +25,9 @@ struct PipeServerOptions {
   // Answers one request message with one response message; called concurrently from the
   // connection threads.
   std::function<std::string(std::string_view request)> handler;
+  // Like `handler`, with the process id of the connected client (GetNamedPipeClientProcessId,
+  // read once per connection; 0 when it cannot be read). Used instead of `handler` when set.
+  std::function<std::string(std::string_view request, std::uint32_t client_pid)> client_handler;
   // Reports a failure to create the next pipe instance after start; the server retries every
   // second. May be empty.
   std::function<void(const Error&)> on_error;

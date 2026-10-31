@@ -4,6 +4,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/model/action.hpp"
@@ -149,6 +150,28 @@ Result<Undo> load_undo(store::Database& db, PlanId plan) {
     return fail(Errc::not_found, "no undo data for plan " + std::to_string(plan.value()));
   }
   return *std::move(undo);
+}
+
+Result<void> save_params(store::Database& db, PlanId plan, std::string_view params) {
+  Result<store::Statement> insert =
+      db.prepare("INSERT INTO plan_params(plan_id, params) VALUES(?1, ?2)");
+  if (!insert) {
+    return tl::unexpected(insert.error());
+  }
+  return insert->bind(1, plan.value()).bind(2, params).run();
+}
+
+Result<std::string> load_params(store::Database& db, PlanId plan) {
+  Result<store::Statement> query = db.prepare("SELECT params FROM plan_params WHERE plan_id = ?1");
+  if (!query) {
+    return tl::unexpected(query.error());
+  }
+  query->bind(1, plan.value());
+  const Result<bool> row = query->step();
+  if (!row) {
+    return tl::unexpected(row.error());
+  }
+  return *row ? query->column_text(0) : std::string{};
 }
 
 }  // namespace myclean::actions

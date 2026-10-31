@@ -69,11 +69,17 @@ src/core/input/         copy/paste freeze watchdog logic, mechanism classifier, 
 src/core/ipc/           frames, the JSON-RPC dispatcher with typed parameters, the method
                         contracts (status, telemetry, disk_health, alerts, input)
 src/core/mcp/           the `myclean mcp` stdio server and the health snapshot
-src/core/tray_model/    tray state, the poller and the dashboard model (no UI)
+src/core/cleaning/      cleaning in the service: executor, scheduled auto run and purge, user
+                        tasks of the tray, space analyses, the methods of ipc/plans.hpp
+src/core/tray_model/    tray state, the poller, the dashboard model and the approval inbox
+                        (no UI)
+src/core/user_tasks/    the user-scope plans the tray runs under the owner's token: native
+                        commands, user-profile cleanup handlers, relocations; their reports
 src/platform/<module>/  Win32 implementations of src/core interfaces (proc, perf, disk,
                         disk_health, etw, trust, input, ipc, fs, service)
 src/svc/                myclean-svc: host, Service and its components (see below)
-src/tray/               myclean-tray: tray icon, toasts, dashboard, input watchdog
+src/tray/               myclean-tray: tray icon, toasts, dashboard (approval inbox, Space),
+                        input watchdog, the worker that runs user tasks
 src/cli/                myclean: read-only CLI and `myclean mcp`
 tests/fakes/            in-memory fakes of the src/core/os interfaces (myclean::fakes)
 tests/unit/<module>/    GoogleTest suite of one module
@@ -198,6 +204,13 @@ Quarantined items live in `<volume>\.myclean-quarantine\<plan id>\<item id>\<nam
 their own volume) for 7 days; `quarantine.restore` and `quarantine.purge` act through their own
 stored plans, so they too go through SafeRemove.
 
+`engine.submit` also stores the plan's parameters (`plan_params`; the cleaning executor keeps its
+`cleaning::PlanSpec` there), so the approved action is rebuilt exactly; `engine.execute` hands
+apply the preview reconciled with the stored plan (stored item ids, rejected items dropped).
+Only the owner may undo a `verified` plan (`verified -> rolled_back`). `QuarantineItems` takes a
+`QuarantineRoot`: the cleaning executor sends files of a volume under 10 % free to the overflow
+volume (default `L:`) and skips them when that drive is not healthy.
+
 ### Service components
 
 `myclean-svc` runs these `svc::IComponent`s, built in `src/svc/main.cpp` (`make_components`) and
@@ -211,6 +224,16 @@ started in this order (stopped in reverse), so that each starts after those it u
 | `disk_health` | HealthCollector on its own pipeline thread (a read may wait 60 s on WMI); health facts to `alerts` | `disks.health` |
 | `events` | ETW process and network events, connection snapshots | none yet |
 | `input` | `input_incident` table for the tray's watchdog | `input.*` |
+| `cleaning` | rule scans and plans by tier; runs approved service-scope plans; auto run daily at 03:00 (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge on the in-app scheduler; user tasks for the tray; space analyses | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*` |
+
+The contracts of the cleaning methods are in `src/core/ipc/plans.hpp`. Approving, rejecting and
+undoing plans, the user tasks, recycling and quarantine restore are tray-only
+(`ipc::Access::tray`): the service checks each request's pipe client process
+(`GetNamedPipeClientProcessId`) and accepts it only from the configured `myclean-tray.exe`
+(`ServiceOptions::tray_image`) running as the owner in an interactive session. A console run
+(`myclean-svc --console`) executes no cleaning unless it gets `--sandbox <dir>`: the rules and
+workspaces then come from `<dir>\data`, quarantine goes to `<dir>\quarantine`, and Windows
+handlers, DISM and system settings are never applied; `--tray <exe>` names its tray.
 
 Failures stay inside a component and show in `status` (`component_health`): a data file that
 fails its schema, a failed disk read, ETW unavailable without elevation (listed under

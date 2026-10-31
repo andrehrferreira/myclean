@@ -29,11 +29,16 @@ struct HostOptions {
   Mode mode = Mode::service;
   std::optional<std::filesystem::path> state_dir;  // console mode only
   std::wstring pipe_name{platform::default_pipe_name};
+  // Console mode only: the tray executable allowed to call the tray-only methods (default: the
+  // myclean-tray.exe next to myclean-svc.exe), and the cleaning sandbox (see CleaningMode).
+  std::optional<std::filesystem::path> tray_image;
+  std::optional<std::filesystem::path> sandbox;
 };
 
 // The command line after the program name:
 //   (nothing)                                     run as the MyClean service under the SCM
-//   --console [--state <dir>] [--pipe <name>]     run in this console until Ctrl+C or Ctrl+Break
+//   --console [--state <dir>] [--pipe <name>] [--tray <exe>] [--sandbox <dir>]
+//                                                 run in this console until Ctrl+C or Ctrl+Break
 // <name> is the pipe name after \\.\pipe\ and must be a token (see ipc::is_token).
 [[nodiscard]] Result<HostOptions> parse_command_line(std::span<const std::wstring> args);
 [[nodiscard]] std::string_view usage();

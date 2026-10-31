@@ -84,6 +84,7 @@ bool is_legal(PlanState from, PlanState to) {
     case PlanState::applied:
       return to == PlanState::verified || to == PlanState::rolled_back || to == PlanState::failed;
     case PlanState::verified:
+      return to == PlanState::rolled_back;
     case PlanState::rolled_back:
     case PlanState::failed:
     case PlanState::rejected:
@@ -96,7 +97,7 @@ bool may_request(const Actor& actor, PlanState from, PlanState to) {
   if (actor.kind() == Actor::Kind::mcp) {
     return from == PlanState::proposed && to == PlanState::awaiting_approval;
   }
-  if (from == PlanState::awaiting_approval) {
+  if (from == PlanState::awaiting_approval || from == PlanState::verified) {
     return actor.kind() == Actor::Kind::owner;
   }
   return true;
@@ -163,6 +164,34 @@ Result<void> PolicyEngine::transition(PlanId id, PlanState to, const Actor& acto
   return {};
 }
 
+Result<Preview> PolicyEngine::reconcile(PlanId id, Preview preview) {
+  Result<Plan> plan = fail(Errc::io_error, "plan not read");
+  if (Result<void> read = store_->read([&](store::Database& db) -> Result<void> {
+        plan = store::get_plan(db, id);
+        return {};
+      });
+      !read) {
+    return tl::unexpected(read.error());
+  }
+  if (!plan) {
+    return tl::unexpected(plan.error());
+  }
+  Preview kept;
+  for (PlanItem& item : preview.items) {
+    auto stored = std::ranges::find(plan->items, item.id, &PlanItem::id);
+    if (item.id == PlanItemId{} || stored == plan->items.end()) {
+      stored = std::ranges::find(plan->items, item.path, &PlanItem::path);
+    }
+    if (stored == plan->items.end() || stored->approval == ItemApproval::not_approved) {
+      continue;
+    }
+    item.id = stored->id;
+    item.approval = stored->approval;
+    kept.items.push_back(std::move(item));
+  }
+  return kept;
+}
+
 Result<void> PolicyEngine::append(const LogEntry& entry) {
   return store_->write([&](store::Database& db) -> Result<void> {
     if (Result<std::int64_t> logged = append_log(db, entry); !logged) {
@@ -176,7 +205,7 @@ void PolicyEngine::settle(PlanId id, PlanState to, const Actor& actor, std::stri
   static_cast<void>(transition(id, to, actor, reason));
 }
 
-Result<Plan> PolicyEngine::submit(Plan plan, AutomationLevel level) {
+Result<Plan> PolicyEngine::submit(Plan plan, AutomationLevel level, std::string_view params) {
   if (level == AutomationLevel::observe) {
     return fail(Errc::refused, "a feature at level observe produces findings, never plans");
   }
@@ -197,7 +226,7 @@ Result<Plan> PolicyEngine::submit(Plan plan, AutomationLevel level) {
     if (!logged) {
       return tl::unexpected(logged.error());
     }
-    return {};
+    return params.empty() ? Result<void>{} : save_params(db, stored->id, params);
   });
   if (!written) {
     return tl::unexpected(written.error());
@@ -250,7 +279,8 @@ Result<RunReport> PolicyEngine::execute(PlanId id, Action& action, const Actor& 
   if (Result<void> started = transition(id, PlanState::applying, actor); !started) {
     return tl::unexpected(started.error());
   }
-  const Result<Preview> preview = action.preview();
+  Result<Preview> preview =
+      action.preview().and_then([&](Preview fresh) { return reconcile(id, std::move(fresh)); });
   if (!preview) {
     settle(id, PlanState::failed, actor, preview.error().message);
     return tl::unexpected(preview.error());

@@ -673,6 +673,22 @@ std::shared_ptr<const telemetry::VolumeView> TelemetryComponent::volumes() const
   return collectors_.live.volumes != nullptr ? collectors_.live.volumes->latest() : nullptr;
 }
 
+std::optional<double> TelemetryComponent::latest_value(std::string_view metric,
+                                                       std::string_view entity) const {
+  for (const Tap* tap : collectors_.taps) {
+    const std::shared_ptr<const Reading> reading = tap->latest();
+    if (!reading) {
+      continue;
+    }
+    for (const telemetry::Measurement& measurement : reading->measurements) {
+      if (measurement.key.metric == metric && measurement.key.entity == entity) {
+        return measurement.value;
+      }
+    }
+  }
+  return std::nullopt;
+}
+
 ipc::ComponentHealth TelemetryComponent::health() const {
   ipc::ComponentHealth health{.name = std::string(name())};
   for (const Error& error : collectors_.unavailable) {

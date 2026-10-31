@@ -3,6 +3,8 @@
 myclean_add_test(svc
   SOURCES
     alerts_component_test.cpp
+    cleaning_component_test.cpp
+    cleaning_smoke_test.cpp
     disk_health_component_test.cpp
     events_adapter_test.cpp
     fake_machine.hpp
@@ -18,7 +20,9 @@ myclean_add_test(svc
     myclean::svc
     myclean::fakes)
 target_compile_definitions(myclean_svc_tests PRIVATE MYCLEAN_TEST_VERSION="${PROJECT_VERSION}"
-  MYCLEAN_DATA_DIR="${PROJECT_SOURCE_DIR}/data")
+  MYCLEAN_DATA_DIR="${PROJECT_SOURCE_DIR}/data" MYCLEAN_SVC_EXE="$<TARGET_FILE:myclean-svc>")
+# The console smoke test starts the real executable (with a cleaning sandbox).
+add_dependencies(myclean_svc_tests myclean-svc)
 # The fakes of the telemetry and event sources: "telemetry/fake_sources.hpp",
 # "events/event_fakes.hpp".
 target_include_directories(myclean_svc_tests PRIVATE "${PROJECT_SOURCE_DIR}/tests/unit")

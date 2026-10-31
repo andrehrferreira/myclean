@@ -208,8 +208,8 @@ std::map<fs::path, Folder> expired_folders(const std::vector<QuarantineRecord>& 
       continue;
     }
     for (const QuarantineRecord* record : records) {
-      Folder& folder =
-          folders[record->location.root_path() / quarantine_folder / std::to_string(run)];
+      // <root>\.myclean-quarantine\<run>\<item>\<name>: the run's folder.
+      Folder& folder = folders[record->location.parent_path().parent_path()];
       folder.records.push_back(record->id);
       folder.size += record->size;
     }
@@ -225,13 +225,14 @@ bool is_gone(const safety::ItemOutcome& outcome) {
 
 }  // namespace
 
-fs::path quarantine_location(const fs::path& original, PlanId run, PlanItemId item) {
+fs::path quarantine_location(const fs::path& original, PlanId run, PlanItemId item,
+                             const fs::path& root) {
   fs::path normal = original.lexically_normal();
   if (!normal.has_filename()) {
     normal = normal.parent_path();
   }
-  return normal.root_path() / quarantine_folder / std::to_string(run.value()) /
-         std::to_string(item.value()) / normal.filename();
+  return (root.empty() ? normal.root_path() : root) / quarantine_folder /
+         std::to_string(run.value()) / std::to_string(item.value()) / normal.filename();
 }
 
 std::string_view to_string(QuarantineState state) {
@@ -272,6 +273,19 @@ Result<void> set_quarantine_state(store::Database& db, std::int64_t id, Quaranti
     return tl::unexpected(update.error());
   }
   return update->bind(1, id).bind(2, to_string(state)).run();
+}
+
+Result<void> set_quarantine_identity(store::Database& db, std::int64_t id,
+                                     const FileIdentity& identity) {
+  Result<store::Statement> update =
+      db.prepare("UPDATE quarantine SET volume_serial = ?2, file_id = ?3 WHERE id = ?1");
+  if (!update) {
+    return tl::unexpected(update.error());
+  }
+  return update->bind(1, id)
+      .bind(2, identity.volume_serial)
+      .bind(3, std::span<const std::uint8_t>(identity.file_id))
+      .run();
 }
 
 Result<void> remove_quarantine(store::Database& db, std::int64_t id) {
@@ -440,8 +454,10 @@ Result<std::size_t> Quarantine::purge(const Actor& actor) {
 }
 
 QuarantineItems::QuarantineItems(const Environment& environment, Quarantine& quarantine,
-                                 PlanId plan, Actor actor)
-    : ItemAction(environment, plan, std::move(actor)), quarantine_(&quarantine) {}
+                                 PlanId plan, Actor actor, QuarantineRoot root)
+    : ItemAction(environment, plan, std::move(actor)),
+      quarantine_(&quarantine),
+      root_(std::move(root)) {}
 
 ActionInfo QuarantineItems::describe() const {
   return {.what = "Move the items of plan " + std::to_string(plan_id().value()) +
@@ -460,10 +476,21 @@ Result<Undo> QuarantineItems::apply(const Preview& preview) {
   const WallTime now = environment().clock->now();
   std::vector<safety::MoveRequest> requests;
   std::vector<std::optional<QuarantineRecord>> records;
+  std::vector<PlanItem> moving;
   for (const PlanItem& item : selection->items) {
-    const fs::path location = quarantine_location(item.path, plan_id(), item.id);
+    tl::expected<fs::path, std::string> root =
+        root_ ? root_(item) : tl::expected<fs::path, std::string>{};
+    if (!root) {
+      selection->refused.push_back(safety::ItemOutcome{.item = item.id,
+                                                       .path = item.path,
+                                                       .disposition = safety::Disposition::skipped,
+                                                       .reason = std::move(root).error()});
+      continue;
+    }
+    const fs::path location = quarantine_location(item.path, plan_id(), item.id, *root);
     requests.push_back({.item = item.id, .destination = location});
     records.push_back(record_of(selection->plan, item.id, location, now));
+    moving.push_back(item);
   }
   if (Result<void> written = write_ahead(*environment().store, records); !written) {
     return tl::unexpected(written.error());
@@ -473,22 +500,40 @@ Result<Undo> QuarantineItems::apply(const Preview& preview) {
       environment().safe_remove->move(plan_id(), requests);
   std::vector<LogEntry> entries;
   std::vector<std::int64_t> unmoved;
+  std::vector<std::pair<std::int64_t, FileIdentity>> moved_away;  // to another volume
   Undo undo;
   for (const safety::ItemOutcome& refused : selection->refused) {
     entries.push_back(outcome_entry("apply", refused, {}));
   }
   for (std::size_t index = 0; index < outcomes.size(); ++index) {
     const safety::ItemOutcome& outcome = outcomes[index];
-    entries.push_back(outcome_entry("apply", outcome, selection->items[index].path));
+    entries.push_back(outcome_entry("apply", outcome, moving[index].path));
     if (outcome.disposition == safety::Disposition::moved) {
       undo.items.push_back(
           {.item = outcome.item, .data = safety::to_utf8(requests[index].destination)});
+      const Result<os::FileStat> arrived =
+          environment().file_system->stat(requests[index].destination);
+      if (const std::optional<QuarantineRecord>& record = records[index];
+          record.has_value() && arrived && arrived->identity != record->identity) {
+        moved_away.emplace_back(record->id, arrived->identity);
+      }
     } else if (records[index]) {
       unmoved.push_back(records[index]->id);
     }
   }
   if (Result<void> logged = forget(*environment().store, entries, unmoved); !logged) {
     return tl::unexpected(logged.error());
+  }
+  const Result<void> updated = environment().store->write([&](store::Database& db) -> Result<void> {
+    for (const auto& [record, identity] : moved_away) {
+      if (Result<void> set = set_quarantine_identity(db, record, identity); !set) {
+        return set;
+      }
+    }
+    return {};
+  });
+  if (!updated) {
+    return tl::unexpected(updated.error());
   }
   return undo;
 }

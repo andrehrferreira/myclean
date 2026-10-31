@@ -25,6 +25,9 @@ struct ServiceOptions {
   std::string owner_sid;               // the account that may use the pipe besides SYSTEM
   std::string mode;                    // "service" or "console", reported by status
   std::optional<std::string> version;  // the deploy manifest's version
+  // The tray executable whose processes, run by the owner in an interactive session, may call
+  // the tray-only methods (ipc::Access::tray); empty: no caller may.
+  std::filesystem::path tray_image;
 };
 
 // The running service body, independent of how it was started (SCM, console, test).

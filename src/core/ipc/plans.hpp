@@ -1,0 +1,209 @@
+#pragma once
+
+#include <cstddef>
+#include <string>
+#include <string_view>
+
+#include <nlohmann/json.hpp>
+
+// The cleaning, plan, user-task, quarantine and space methods of the service (cleaning,
+// approvals and space specs). Every answer is a JSON object; times are Unix seconds (UTC),
+// sizes bytes, paths UTF-8 text. Methods marked TRAY ONLY answer every other caller (the CLI,
+// `myclean mcp`, any other pipe client) with error -32000, errc "refused", and run nothing:
+// the service accepts them only from the configured myclean-tray.exe running as the owner in an
+// interactive session (checked per request from the pipe client's process id).
+namespace myclean::ipc {
+
+// ---- Shapes shared by several answers ---------------------------------------------------------
+//
+// PlanSummary:
+//   {"id": int, "title": string,
+//    "kind": "cleanup"|"handler"|"native"|"relocate"|"system_setting"|"quarantine_restore",
+//    "tier": "auto"|"ask"|"report", "scope": "user"|"service",
+//    "state": "proposed"|"auto"|"awaiting_approval"|"approved"|"applying"|"applied"|"verified"|
+//             "rolled_back"|"failed"|"rejected",
+//    "proposer": "scheduler"|"governor"|"owner"|"mcp:<client>", "created_at": int,
+//    "items": int (count), "bytes": int (total size of the items), "needs_restart": bool}
+//   kind: cleanup = files deleted, quarantined or recycled; handler = Windows disk-cleanup
+//   handlers or DISM; native = a package manager's prune command; relocate = a cache or TEMP
+//   moved through its setting; system_setting = hibernation, page file or shadow storage;
+//   quarantine_restore = quarantined items moved back.
+//   scope: "service" plans run in the service; "user" plans run in the tray with the owner's
+//   token (user_tasks.*).
+//
+// PlanItem:
+//   {"id": int, "path": string, "bytes": int, "rule": string|null, "reason": string,
+//    "approved": true|false|null (null: not decided yet)}
+//   path is a file system path, or "handler:<name>" / "dism:component-store" /
+//   "relocate:<cache>" for items that are not files.
+
+// ---- cleaning.* -------------------------------------------------------------------------------
+
+// No parameters. Starts a cleaning scan in the background (rules, developer artifacts, Windows
+// handler sizes) unless one runs or cleaning is unavailable. The scan stores its candidates,
+// creates an `awaiting_approval` plan per ask-tier group and records report-tier candidates as
+// findings; auto-tier items are deleted only by the scheduled run (daily at 03:00 with
+// catch-up, skipped while the system volume is critically busy).
+//   {"started": bool}
+inline constexpr std::string_view cleaning_scan_method = "cleaning.scan";
+
+// No parameters.
+//   {"state": "idle"|"scanning", "progress": number 0..1, "last_completed": int|null,
+//    "candidates": int, "bytes": int (of those candidates), "next_auto_run": int|null,
+//    "unavailable": string|null (why scans or executions cannot run now)}
+inline constexpr std::string_view cleaning_status_method = "cleaning.status";
+
+// ---- plans.* ----------------------------------------------------------------------------------
+
+// Parameters: state (token, optional): one state's text form. The newest max_listed_plans
+// plans, newest first: {"plans": [PlanSummary]}
+inline constexpr std::string_view plans_list_method = "plans.list";
+inline constexpr std::size_t max_listed_plans = 500;
+
+// Parameters: id (integer, required). The PlanSummary members, with "items" being the item list:
+//   {...PlanSummary, "items": [PlanItem] (the first max_plan_items), "items_total": int,
+//    "commands": [string] (exactly what runs), "undo": string (how it is undone, or why it
+//    cannot be), "warnings": [string], "params": object (the action parameters),
+//    "freed": int|null (bytes freed, once applied), "detail": string|null (why it failed,
+//    was rejected or rolled back)}
+// Fails with not_found for an unknown id.
+inline constexpr std::string_view plans_get_method = "plans.get";
+inline constexpr std::size_t max_plan_items = 2000;
+
+// TRAY ONLY. Parameters: id (integer, required), selection (record, required):
+//   {"all": bool, "items": [int], "except": [int]}  (each list optional, at most 64 ids)
+// all=true approves every item but those in "except"; all=false approves only "items".
+// Approving none rejects the plan. A service-scope plan then runs in the background; a
+// user-scope plan waits for user_tasks.next. Answers {"state": "approved"|"rejected"}; fails
+// with invalid_state when the plan does not await approval, invalid_argument for an unknown
+// item id.
+inline constexpr std::string_view plans_approve_method = "plans.approve";
+
+// TRAY ONLY. Parameters: id (integer, required). Rejects every item: {"state": "rejected"}.
+inline constexpr std::string_view plans_reject_method = "plans.reject";
+
+// TRAY ONLY. Parameters: id (integer, required). Undoes an applied or verified plan: a
+// service-scope plan now ({"state": "rolled_back"}), a user-scope one through the tray
+// (user_tasks.next hands out the undo; {"state": <unchanged>, "queued": true}). Fails with
+// not_reversible when the change cannot be undone (deleted files, handler and DISM cleanups).
+inline constexpr std::string_view plans_undo_method = "plans.undo";
+
+// Parameters: candidates (record, required): {"ids": [int]} (1..64 candidate ids from
+// space.* or a cleaning scan; never paths), client (token, optional; default "unknown").
+// Creates one quarantine plan over those items, in state awaiting_approval, proposed by
+// "mcp:<client>" (by "owner" when the caller is the tray). Nothing is touched until the owner
+// approves it in the tray. {"plan": int, "state": "awaiting_approval"}. Fails with not_found
+// for an unknown or stale candidate id and invalid_argument for one that is not a file item.
+inline constexpr std::string_view plans_propose_cleanup_method = "plans.propose_cleanup";
+
+// Parameters: kind (token, required): "hibernation" | "page_file" | "shadow_storage" |
+// "relocate"; client (token, optional) as above; and per kind (each optional, the recommended
+// value when absent):
+//   hibernation      mode (token): "off" | "reduced" | "full"
+//   page_file        target (token): drive letter ("D") for the system-managed page file
+//   shadow_storage   volume (token): drive letter (default the system drive);
+//                    maximum_gb (number > 0)
+//   relocate         cache (token, required): "temp"|"gradle"|"cargo"|"npm"|"nuget"|"pip"|
+//                    "go_modules"|"go_build"|"unreal_ddc"; target (token): drive letter;
+//                    content (token): "move" | "regenerate"
+// Creates an awaiting_approval plan (system settings never run without approval):
+// {"plan": int, "state": "awaiting_approval"}. Fails with invalid_state when nothing would
+// change (already at the requested value, or no healthy target with room).
+inline constexpr std::string_view plans_propose_optimization_method = "plans.propose_optimization";
+
+// TRAY ONLY. Parameters: candidates (record, required): {"ids": [int]}. The owner deletes
+// report-view items (a duplicate, an old download) to the Recycle Bin: an approved user-scope
+// cleanup plan, run by the tray through IFileOperation with FOFX_RECYCLEONDELETE.
+// {"plan": int, "state": "approved"}
+inline constexpr std::string_view plans_recycle_method = "plans.recycle";
+
+// ---- user_tasks.* (the tray runs user-scope plans with the owner's token) ---------------------
+
+// TRAY ONLY. No parameters. The oldest user-scope plan to run now, or null:
+//   {"task": null | {"plan": int, "title": string,
+//    "kind": "native"|"handler"|"relocate"|"cleanup", "operation": "apply"|"undo",
+//    "tier": "auto"|"ask"|"report",
+//    "items": [{"id": int, "path": string, "bytes": int, "approved": bool|null,
+//               "volume_serial": int, "file_id": hex string (both 0/"" for non-files)}],
+//    "action": {"command"}                                   (native)
+//            | {"volume", "handlers": [name]}                (handler; user-profile handlers)
+//            | {"cache", "target", "content": "move"|"regenerate"}   (relocate)
+//            | {"recycle": true}                              (cleanup: to the Recycle Bin),
+//    "undo": {"not_reversible": string, "items": [{"item", "data"}]} (undo only: as reported)}}
+// An apply task lists the items not rejected; the tray acts on no other. A task handed out is
+// not handed out again for task_claim_minutes unless reported.
+inline constexpr std::string_view user_tasks_next_method = "user_tasks.next";
+inline constexpr int task_claim_minutes = 60;
+
+// TRAY ONLY. Parameters: id (integer, required: the plan), result (record, required):
+//   {"state": "applied"|"verified"|"rolled_back"|"failed",
+//    "error": string|null (why it failed, was rolled back, or could not be verified),
+//    "not_reversible": string (optional: why the change cannot be undone; empty if it can),
+//    "undo": [{"item": int, "data": string}] (optional: undo data per plan item id;
+//             consecutive entries of one item are concatenated, so data longer than a record
+//             string is sent in pieces),
+//    "verification": {"metric": string, "before": number, "after": number,
+//                     "effect": "better"|"unchanged"|"worse"}|null (optional),
+//    "skipped": [{"target": string, "code": string, "message": string}] (optional)}
+// The service records it by the plan's state: an approved plan reports its apply (applying,
+// applied with the undo data, the verification, then verified, or rolled_back when the tray
+// undid a worse result, or failed); an applied or verified plan reports its undo
+// (rolled_back, or the failure logged). Actor: owner. {"state": <new state>}. Fails with
+// invalid_state when the plan has no task to report.
+inline constexpr std::string_view user_tasks_report_method = "user_tasks.report";
+
+// The schema checks of the record parameters above: the reason a record does not fit, or "".
+[[nodiscard]] std::string check_selection(const nlohmann::json& record);
+[[nodiscard]] std::string check_candidates(const nlohmann::json& record);
+[[nodiscard]] std::string check_task_result(const nlohmann::json& record);
+
+// ---- quarantine.* -----------------------------------------------------------------------------
+
+// No parameters. Every run with items still held:
+//   {"runs": [{"plan": int, "moved_at": int, "purge_after": int, "bytes": int,
+//              "items": [{"item": int, "original": string, "location": string, "bytes": int}]}]}
+// Held items are purged (permanently deleted) after purge_after; restore moves them back.
+inline constexpr std::string_view quarantine_list_method = "quarantine.list";
+
+// TRAY ONLY. Parameters: plan (integer, required: the run), item (integer, optional: one plan
+// item; every held item of the run when absent). {"restored": int}. Fails with io_error when
+// an item could not be moved back (it stays in quarantine).
+inline constexpr std::string_view quarantine_restore_method = "quarantine.restore";
+
+// ---- space.* (read-only analyses, run by the service in the background) -----------------------
+//
+// Each answer carries the newest result and the state of its analysis:
+//   {"state": "ready"|"scanning"|"failed", "scanned_at": int|null, "error": string|null, ...}
+// A call starts a new analysis when there is no result, the result is older than
+// space_result_minutes or refresh is true; while it runs, "state" is "scanning" and the
+// previous result (if any) is returned. Call again until "ready". Every file entry carries an
+// "id": a candidate id for plans.propose_cleanup and plans.recycle.
+
+// Parameters: path (token, required): a drive letter ("C") or "downloads" or "profile" (the
+// owner's); n (integer 1..100, optional, default 20); refresh (boolean, optional).
+//   {..., "path": string, "files": [{"id", "path", "size_on_disk", "size", "modified"}],
+//    "folders": [{"path", "size_on_disk", "size", "files"}]}
+inline constexpr std::string_view space_top_method = "space.top";
+
+// Parameters: refresh (boolean, optional). Files of the owner's Downloads folder created and
+// modified more than 90 days ago:
+//   {..., "folder": string|null, "files": [{"id", "path", "size", "size_on_disk", "created",
+//    "modified", "age_days", "origin": {"zone_id", "host_url", "referrer_url"}|null}]}
+inline constexpr std::string_view space_old_downloads_method = "space.old_downloads";
+
+// Parameters: refresh (boolean, optional). Exact duplicates in the owner's Desktop, Documents,
+// Downloads, Pictures, Videos and Music:
+//   {..., "roots": [string], "groups": [{"size", "hash", "reclaimable", "files": [{"id",
+//    "path", "size_on_disk", "modified"}]}], "reclaimable": int, "errors": [{"path", "error"}]}
+inline constexpr std::string_view space_duplicates_method = "space.duplicates";
+
+// Parameters: refresh (boolean, optional). Installers in the owner's Downloads that are
+// installed already:
+//   {..., "folder": string|null, "used": [{"id", "path", "kind": "msi"|"exe", "size",
+//    "size_on_disk", "installed_as", "product_code"|"publisher"}], "errors": [...]}
+inline constexpr std::string_view space_used_installers_method = "space.used_installers";
+
+inline constexpr int space_result_minutes = 60;
+inline constexpr int max_space_top = 100;
+
+}  // namespace myclean::ipc

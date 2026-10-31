@@ -1,13 +1,18 @@
 // myclean-svc.exe: the MyClean service host. See svc/host.hpp for the command line.
 
+#include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -16,23 +21,37 @@
 
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/placement/drives.hpp"
 #include "core/rules/data_files.hpp"
+#include "platform/clean/win32_probes.hpp"
+#include "platform/cleanup/win32_command_runner.hpp"
+#include "platform/cleanup/win32_handler_host.hpp"
 #include "platform/disk/win32_volume_info.hpp"
 #include "platform/disk_health/win32_disk_health.hpp"
 #include "platform/etw/etw_event_source.hpp"
 #include "platform/etw/ip_helper_connections.hpp"
+#include "platform/fs/win32_file_system.hpp"
+#include "platform/git/git_cli.hpp"
 #include "platform/ipc/pipe_io.hpp"
 #include "platform/perf/pdh_counters.hpp"
 #include "platform/perf/win32_memory_status.hpp"
 #include "platform/proc/nt_process_table.hpp"
+#include "platform/scan/directory_reader.hpp"
+#include "platform/scan/file_content.hpp"
+#include "platform/scan/installer_inspector.hpp"
 #include "platform/service/scm.hpp"
+#include "platform/settings/process_runner.hpp"
+#include "platform/settings/seek_penalty.hpp"
+#include "platform/settings/system_space.hpp"
 #include "platform/trust/win_image_inspector.hpp"
 #include "svc/alerts_component.hpp"
+#include "svc/cleaning_component.hpp"
 #include "svc/component.hpp"
 #include "svc/disk_health_component.hpp"
 #include "svc/events_adapter.hpp"
 #include "svc/host.hpp"
 #include "svc/input_component.hpp"
+#include "svc/owner_session.hpp"
 #include "svc/telemetry_component.hpp"
 #include "svc/trust_component.hpp"
 
@@ -64,9 +83,84 @@ std::string system_drive() {
   return {static_cast<char>(windows[0]), ':'};
 }
 
+constexpr std::chrono::minutes handler_scan_timeout{2};
+constexpr std::chrono::minutes handler_purge_timeout{30};
+// Below this share of idle time the system volume's disk is critically busy: no auto run.
+constexpr double busy_idle_percent = 10.0;
+
+// The volumes as relocation and quarantine targets, with their latest disk health.
+class DriveFacts final : public myclean::placement::IDriveFacts {
+ public:
+  explicit DriveFacts(myclean::placement::LiveDriveFacts::HealthLatest health)
+      : facts_(volumes_, seek_penalty_, std::move(health)) {}
+
+  [[nodiscard]] Result<std::vector<myclean::placement::TargetVolume>> volumes() const override {
+    return facts_.volumes();
+  }
+
+ private:
+  myclean::platform::Win32VolumeInfo volumes_;
+  myclean::platform::Win32SeekPenalty seek_penalty_;
+  myclean::placement::LiveDriveFacts facts_;
+};
+
+// True while a disk of the system volume is idle less than busy_idle_percent of the time.
+bool system_volume_busy(const svc::TelemetryComponent& telemetry, const std::string& drive) {
+  const std::shared_ptr<const myclean::telemetry::VolumeView> view = telemetry.volumes();
+  if (!view || drive.empty()) {
+    return false;
+  }
+  for (const myclean::telemetry::VolumeStatus& volume : view->volumes) {
+    if (std::ranges::find(volume.mount_points, drive + "\\") == volume.mount_points.end()) {
+      continue;
+    }
+    for (const std::uint32_t disk : volume.disks) {
+      const std::optional<double> idle = telemetry.latest_value("disk.idle", std::to_string(disk));
+      if (idle && *idle < busy_idle_percent) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& options,
+                                                      const myclean::rules::IDataFiles& files,
+                                                      const svc::TelemetryComponent& telemetry,
+                                                      const svc::DiskHealthComponent& disks) {
+  namespace platform = myclean::platform;
+  const std::string drive = system_drive();
+  const std::optional<std::filesystem::path> git = platform::find_git();
+  svc::CleaningSources sources{
+      .file_system = std::make_unique<platform::Win32FileSystem>(),
+      .tree = std::make_unique<platform::Win32FileTree>(),
+      .usage = std::make_unique<platform::Win32Usage>(),
+      .git = git ? std::make_unique<platform::GitCli>(*git) : nullptr,
+      .handlers =
+          std::make_unique<platform::Win32HandlerHost>(handler_scan_timeout, handler_purge_timeout),
+      .commands = std::make_unique<platform::Win32CommandRunner>(),
+      .dism = platform::dism_path(),
+      .system = std::make_unique<platform::Win32SystemSpace>(),
+      .tools = std::make_unique<platform::Win32ProcessRunner>(),
+      .drives = std::make_unique<DriveFacts>([&disks] { return disks.latest(); }),
+      .reader = std::make_unique<platform::Win32DirectoryReader>(),
+      .zones = std::make_unique<platform::Win32ZoneIdentifierReader>(),
+      .hasher = std::make_unique<platform::Win32ContentHasher>(),
+      .installers = std::make_unique<platform::Win32InstallerInspector>(),
+      .owner = [](std::string_view owner) { return svc::owner_context(owner); },
+      // NOLINTNEXTLINE(bugprone-exception-escape): only std::bad_alloc, as anywhere in the service
+      .busy = [&telemetry, drive] { return system_volume_busy(telemetry, drive); }};
+  const std::filesystem::path root = std::filesystem::path(drive.empty() ? "C:" : drive) / "";
+  return std::make_unique<svc::CleaningComponent>(
+      std::move(sources), files,
+      svc::CleaningMode{.console = options.mode == svc::Mode::console,
+                        .sandbox = options.sandbox,
+                        .system_root = root});
+}
+
 // Every component the service runs, in start order: a component starts after those it uses and
 // stops before them. Collectors are registered here.
-std::vector<std::unique_ptr<svc::IComponent>> make_components() {
+std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOptions& options) {
   namespace platform = myclean::platform;
   static const myclean::rules::DiskDataFiles files;
   auto alerts = std::make_unique<svc::AlertsComponent>(files);
@@ -94,6 +188,8 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components() {
                         .processes = std::make_unique<platform::NtProcessTable>()},
       trust.get());
 
+  auto cleaning = make_cleaning(options, files, *telemetry, *disk_health);
+
   std::vector<std::unique_ptr<svc::IComponent>> components;
   components.push_back(std::move(alerts));
   components.push_back(std::move(trust));
@@ -101,6 +197,7 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components() {
   components.push_back(std::move(disk_health));
   components.push_back(std::move(events));
   components.push_back(std::make_unique<svc::InputComponent>());
+  components.push_back(std::move(cleaning));
   return components;
 }
 
@@ -112,7 +209,7 @@ int run_console(const svc::HostOptions& options) {
   }
   console_stop_event() = stop->get();
   ::SetConsoleCtrlHandler(&on_console_control, TRUE);
-  return svc::run(options, make_components(), stop->get(),
+  return svc::run(options, make_components(options), stop->get(),
                   [] { std::cerr << "myclean-svc: running; press Ctrl+C to stop\n"; });
 }
 
@@ -133,7 +230,7 @@ int wmain(int argc, wchar_t** argv) {
   const Result<int> code = myclean::platform::run_service(
       std::wstring(svc::service_name),
       [&options](HANDLE stop_event, const std::function<void()>& report_running) {
-        return svc::run(*options, make_components(), stop_event, report_running);
+        return svc::run(*options, make_components(*options), stop_event, report_running);
       });
   if (!code) {
     std::cerr << "myclean-svc: " << code.error().message << '\n' << svc::usage();

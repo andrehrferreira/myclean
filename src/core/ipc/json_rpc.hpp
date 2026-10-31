@@ -71,6 +71,23 @@ struct Param {
 // declared types. Called concurrently from several client connections.
 using Handler = std::function<Result<nlohmann::json>(const nlohmann::json& params)>;
 
+// Who may call a method.
+enum class Access {
+  any,   // every client the pipe admits
+  tray,  // only the owner's MyClean tray (Caller::tray); approvals and user tasks
+};
+
+// Who sent a request, as the transport established it. The default is an unverified caller.
+struct Caller {
+  // The client process is the configured myclean-tray.exe running as the owner in an
+  // interactive session (checked by the service from the pipe client's process id).
+  bool tray = false;
+};
+
+// A method implementation that also gets its caller.
+using CallerHandler =
+    std::function<Result<nlohmann::json>(const nlohmann::json& params, const Caller& caller)>;
+
 // The server side of the protocol: typed methods, registered by name.
 //
 // A request must be a JSON object {"jsonrpc": "2.0", "id": <string or integer>, "method": ...,
@@ -83,24 +100,30 @@ using Handler = std::function<Result<nlohmann::json>(const nlohmann::json& param
 //           including any string that is not a token and any record that exceeds the bounds or
 //           does not fit its method's schema (nothing runs)
 //   -32603  the handler threw
-//   -32000  the handler returned an error; error.data.errc names its Errc
+//   -32000  the handler returned an error; error.data.errc names its Errc; also a method of
+//           Access::tray called by any other caller (errc "refused", nothing runs)
 //
 // Register every method before the first request; add() is not synchronized with handle().
 class Dispatcher {
  public:
   // Fails with already_exists for a registered method, invalid_argument when the method or a
   // parameter name is not a token, a parameter is declared twice, or a record has no schema.
-  [[nodiscard]] Result<void> add(std::string method, std::vector<Param> params, Handler handler);
+  [[nodiscard]] Result<void> add(std::string method, std::vector<Param> params, Handler handler,
+                                 Access access = Access::any);
+  // The same for a handler that needs to know its caller (a proposal of the tray is the owner's).
+  [[nodiscard]] Result<void> add_for_caller(std::string method, std::vector<Param> params,
+                                            CallerHandler handler, Access access = Access::any);
 
-  // The JSON-RPC 2.0 response to one request text.
-  [[nodiscard]] std::string handle(std::string_view request_text) const;
+  // The JSON-RPC 2.0 response to one request text from `caller`.
+  [[nodiscard]] std::string handle(std::string_view request_text, const Caller& caller = {}) const;
   // The same for a frame (see frame.hpp): decodes, handles and encodes the response frame.
-  [[nodiscard]] std::string handle_frame(std::string_view frame) const;
+  [[nodiscard]] std::string handle_frame(std::string_view frame, const Caller& caller = {}) const;
 
  private:
   struct Method {
     std::vector<Param> params;
-    Handler handler;
+    CallerHandler handler;
+    Access access = Access::any;
   };
 
   std::map<std::string, Method, std::less<>> methods_;

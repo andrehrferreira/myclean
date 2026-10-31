@@ -131,6 +131,10 @@ void PipeServer::accept_loop(wil::unique_hfile listening) {
 }
 
 void PipeServer::serve(wil::unique_hfile pipe) {
+  ULONG client_pid = 0;
+  if (::GetNamedPipeClientProcessId(pipe.get(), &client_pid) == FALSE) {
+    client_pid = 0;
+  }
   for (;;) {
     // Ends on disconnect, stop, or a message larger than any valid frame.
     const Result<std::string> request =
@@ -138,7 +142,9 @@ void PipeServer::serve(wil::unique_hfile pipe) {
     if (!request) {
       break;
     }
-    const std::string response = options_.handler(*request);
+    const std::string response = options_.client_handler
+                                     ? options_.client_handler(*request, client_pid)
+                                     : options_.handler(*request);
     if (!pipe_io::write_message(pipe.get(), response, stop_.get(), INFINITE)) {
       break;
     }

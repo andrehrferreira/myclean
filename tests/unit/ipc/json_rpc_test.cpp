@@ -318,3 +318,46 @@ TEST(Dispatcher, ARecordParameterNeedsASchema) {
 
 }  // namespace
 }  // namespace myclean::ipc
+
+namespace myclean::ipc {
+namespace {
+
+TEST(DispatcherAccess, TrayMethodsRunOnlyForTheTrayAndSeeTheirCaller) {
+  Dispatcher methods;
+  int ran = 0;
+  ASSERT_TRUE(methods
+                  .add(
+                      "plans.approve", {Param{.name = "id", .type = ParamType::integer}},
+                      [&](const nlohmann::json&) -> Result<nlohmann::json> {
+                        ++ran;
+                        return nlohmann::json("ok");
+                      },
+                      Access::tray)
+                  .has_value());
+  ASSERT_TRUE(methods
+                  .add_for_caller("who", {},
+                                  [](const nlohmann::json&, const Caller& caller)
+                                      -> Result<nlohmann::json> { return caller.tray; })
+                  .has_value());
+
+  // Refused before the parameters are even checked: nothing runs.
+  for (const char* request :
+       {R"({"jsonrpc":"2.0","id":1,"method":"plans.approve","params":{"id":1}})",
+        R"({"jsonrpc":"2.0","id":1,"method":"plans.approve","params":{"x":1}})"}) {
+    const nlohmann::json refused = nlohmann::json::parse(methods.handle(request));
+    EXPECT_EQ(refused.at("error").at("code"), rpc_error::server_error);
+    EXPECT_EQ(refused.at("error").at("data").at("errc"), "refused");
+  }
+  EXPECT_EQ(ran, 0);
+  const std::string approve =
+      R"({"jsonrpc":"2.0","id":1,"method":"plans.approve","params":{"id":1}})";
+  EXPECT_EQ(parse_response(methods.handle(approve, Caller{.tray = true}), 1).value(), "ok");
+  EXPECT_EQ(ran, 1);
+
+  const std::string who = R"({"jsonrpc":"2.0","id":2,"method":"who"})";
+  EXPECT_EQ(parse_response(methods.handle(who), 2).value(), false);
+  EXPECT_EQ(parse_response(methods.handle(who, Caller{.tray = true}), 2).value(), true);
+}
+
+}  // namespace
+}  // namespace myclean::ipc

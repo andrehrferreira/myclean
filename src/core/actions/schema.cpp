@@ -53,6 +53,11 @@ CREATE TABLE quarantine(
 CREATE INDEX quarantine_run ON quarantine(run_id);
 CREATE INDEX quarantine_state ON quarantine(state, purge_after);
 )sql"},
+                                           {.version = 2, .name = "plan_params", .sql = R"sql(
+CREATE TABLE plan_params(
+  plan_id INTEGER PRIMARY KEY,
+  params TEXT NOT NULL);
+)sql"},
                                        }};
   return set;
 }

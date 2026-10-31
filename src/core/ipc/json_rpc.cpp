@@ -191,7 +191,18 @@ bool is_token(std::string_view text) {
       text, [](char c) { return is_ascii_alnum(c) || c == '_' || c == '.' || c == '-'; });
 }
 
-Result<void> Dispatcher::add(std::string method, std::vector<Param> params, Handler handler) {
+Result<void> Dispatcher::add(std::string method, std::vector<Param> params, Handler handler,
+                             Access access) {
+  return add_for_caller(
+      std::move(method), std::move(params),
+      [handler = std::move(handler)](const Json& request, const Caller& /*caller*/) {
+        return handler(request);
+      },
+      access);
+}
+
+Result<void> Dispatcher::add_for_caller(std::string method, std::vector<Param> params,
+                                        CallerHandler handler, Access access) {
   if (!is_token(method)) {
     return fail(Errc::invalid_argument, "method name is not a token: " + method);
   }
@@ -212,12 +223,13 @@ Result<void> Dispatcher::add(std::string method, std::vector<Param> params, Hand
   if (methods_.contains(method)) {
     return fail(Errc::already_exists, "method already registered: " + method);
   }
-  methods_.emplace(std::move(method),
-                   Method{.params = std::move(params), .handler = std::move(handler)});
+  methods_.emplace(
+      std::move(method),
+      Method{.params = std::move(params), .handler = std::move(handler), .access = access});
   return {};
 }
 
-std::string Dispatcher::handle(std::string_view request_text) const {
+std::string Dispatcher::handle(std::string_view request_text, const Caller& caller) const {
   const Json request = Json::parse(request_text, nullptr, false);
   if (request.is_discarded()) {
     return error_response(nullptr, rpc_error::parse_error, "parse error: the request is not JSON");
@@ -254,6 +266,13 @@ std::string Dispatcher::handle(std::string_view request_text) const {
                           "method not found: " + name->get_ref<const std::string&>());
   }
 
+  if (method->second.access == Access::tray && !caller.tray) {
+    return error_response(
+        *id, rpc_error::server_error,
+        method->first + " is accepted only from the MyClean tray in the owner's session",
+        Json{{"errc", to_string(Errc::refused)}});
+  }
+
   Json params = Json::object();
   if (const auto given = request.find("params"); given != request.end()) {
     if (!given->is_object()) {
@@ -267,7 +286,7 @@ std::string Dispatcher::handle(std::string_view request_text) const {
   }
 
   try {
-    Result<Json> result = method->second.handler(params);
+    Result<Json> result = method->second.handler(params, caller);
     if (!result) {
       return error_response(*id, rpc_error::server_error, result.error().message,
                             Json{{"errc", to_string(result.error().code)}});
@@ -285,9 +304,9 @@ std::string Dispatcher::handle(std::string_view request_text) const {
   }
 }
 
-std::string Dispatcher::handle_frame(std::string_view frame) const {
+std::string Dispatcher::handle_frame(std::string_view frame, const Caller& caller) const {
   const Result<std::string> request = decode_frame(frame);
-  const std::string response = request ? handle(*request)
+  const std::string response = request ? handle(*request, caller)
                                        : error_response(nullptr, rpc_error::parse_error,
                                                         "parse error: " + request.error().message);
   // handle() never answers with more than max_payload_size bytes, so this cannot fail.

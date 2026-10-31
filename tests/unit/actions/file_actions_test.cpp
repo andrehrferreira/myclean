@@ -255,12 +255,16 @@ TEST_F(FileActionsTest, QuarantinePurgedAfterExpiryThroughSafeRemove) {
   EXPECT_EQ(quarantine().purge(Actor::scheduler()).value(), 0U);
 }
 
-TEST_F(FileActionsTest, VerifiedPlanIsNotRolledBack) {
+TEST_F(FileActionsTest, OnlyTheOwnerRollsBackAVerifiedPlan) {
   const Plan plan = quarantined();
   QuarantineItems action{environment(), quarantine(), plan.id, Actor::owner()};
-  // Only an applied plan can be rolled back; a verified run is restored through the quarantine.
-  EXPECT_EQ(engine().undo(plan.id, action, Actor::owner()).error().code, Errc::invalid_state);
+  EXPECT_EQ(engine().undo(plan.id, action, Actor::scheduler()).error().code, Errc::refused);
   EXPECT_EQ(records(plan.id)[0].state, QuarantineState::held);
+
+  ASSERT_TRUE(engine().undo(plan.id, action, Actor::owner()).has_value());
+  EXPECT_EQ(stored(plan.id).state, PlanState::rolled_back);
+  EXPECT_TRUE(fs().exists(L"F:\\proj\\big.log"));
+  EXPECT_EQ(records(plan.id)[0].state, QuarantineState::restored);
 }
 
 TEST_F(FileActionsTest, OwnerUndoAfterRestartRestoresAppliedPlan) {

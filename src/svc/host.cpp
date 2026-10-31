@@ -97,13 +97,15 @@ Result<void> open_log(const fs::path& dir, bool console) {
 // The Service options of this run; in service mode also records the owner, secures the state
 // folder and installs crash dumps.
 Result<ServiceOptions> prepare(const HostOptions& options, const fs::path& state_dir,
-                               const InstallLayout& layout) {
-  ServiceOptions service{.database = state_dir / "myclean.db",
-                         .data_dir = layout.data_dir,
-                         .pipe_name = options.pipe_name,
-                         .owner_sid = {},
-                         .mode = std::string(mode_name(options.mode)),
-                         .version = manifest_version(layout.manifest)};
+                               const fs::path& exe, const InstallLayout& layout) {
+  ServiceOptions service{
+      .database = state_dir / "myclean.db",
+      .data_dir = layout.data_dir,
+      .pipe_name = options.pipe_name,
+      .owner_sid = {},
+      .mode = std::string(mode_name(options.mode)),
+      .version = manifest_version(layout.manifest),
+      .tray_image = options.tray_image.value_or(exe.parent_path() / "myclean-tray.exe")};
   if (options.mode == Mode::console) {
     Result<std::string> owner = platform::current_user_sid();
     if (!owner) {
@@ -141,15 +143,23 @@ Result<HostOptions> parse_command_line(std::span<const std::wstring> args) {
   options.mode = Mode::console;
   for (std::size_t index = 1; index < args.size(); index += 2) {
     const std::wstring& name = args[index];
-    if (index + 1 >= args.size() || (name != L"--state" && name != L"--pipe")) {
+    if (index + 1 >= args.size() ||
+        (name != L"--state" && name != L"--pipe" && name != L"--tray" && name != L"--sandbox")) {
       return fail(Errc::invalid_argument, "unknown or incomplete argument");
     }
     const std::wstring& value = args[index + 1];
-    if (name == L"--state") {
+    if (name == L"--state" || name == L"--tray" || name == L"--sandbox") {
       std::error_code error;
-      options.state_dir = fs::absolute(value, error);
+      const fs::path absolute = fs::absolute(value, error).lexically_normal();
       if (error) {
-        return fail(Errc::invalid_argument, "--state: " + error.message());
+        return fail(Errc::invalid_argument, "--state, --tray, --sandbox: " + error.message());
+      }
+      if (name == L"--state") {
+        options.state_dir = absolute;
+      } else if (name == L"--tray") {
+        options.tray_image = absolute;
+      } else {
+        options.sandbox = absolute;
       }
     } else {
       const std::optional<std::string> pipe = ascii(value);
@@ -164,8 +174,10 @@ Result<HostOptions> parse_command_line(std::span<const std::wstring> args) {
 
 std::string_view usage() {
   return "usage: myclean-svc.exe                      run as the MyClean service (SCM only)\n"
-         "       myclean-svc.exe --console [--state <dir>] [--pipe <name>]\n"
-         "                                            run in this console until Ctrl+C\n";
+         "       myclean-svc.exe --console [--state <dir>] [--pipe <name>] [--tray <exe>]\n"
+         "                                 [--sandbox <dir>]\n"
+         "                                            run in this console until Ctrl+C; cleaning\n"
+         "                                            runs only on the rules of <dir>\\data\n";
 }
 
 InstallLayout install_layout(const fs::path& exe) {
@@ -257,7 +269,7 @@ int run(const HostOptions& options, std::vector<std::unique_ptr<IComponent>> com
 
   const os::SystemClock clock;
   Result<std::unique_ptr<Service>> service =
-      prepare(options, *state_dir, layout).and_then([&](ServiceOptions service_options) {
+      prepare(options, *state_dir, *exe, layout).and_then([&](ServiceOptions service_options) {
         return Service::start(std::move(service_options), std::move(components), clock);
       });
   if (!service) {

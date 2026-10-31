@@ -63,6 +63,22 @@ TEST(CommandLineTest, ConsoleTakesStateAndPipe) {
   EXPECT_EQ(defaults->pipe_name, platform::default_pipe_name);
 }
 
+TEST(CommandLineTest, ConsoleTakesTheTrayImageAndTheCleaningSandbox) {
+  const std::vector<std::wstring> args{L"--console", L"--tray", LR"(C:\dev\..\dev\tray.exe)",
+                                       L"--sandbox", LR"(C:\tmp\sandbox)"};
+  const Result<HostOptions> options = parse_command_line(args);
+  ASSERT_TRUE(options.has_value()) << options.error().message;
+  EXPECT_EQ(options->tray_image, fs::path(LR"(C:\dev\tray.exe)"));
+  EXPECT_EQ(options->sandbox, fs::path(LR"(C:\tmp\sandbox)"));
+
+  const std::vector<std::wstring> bare{L"--console"};
+  const Result<HostOptions> defaults = parse_command_line(bare);
+  ASSERT_TRUE(defaults.has_value());
+  EXPECT_FALSE(defaults->tray_image.has_value());
+  EXPECT_FALSE(defaults->sandbox.has_value());
+  EXPECT_FALSE(parse_command_line(std::vector<std::wstring>{L"--tray", L"x.exe"}).has_value());
+}
+
 TEST(CommandLineTest, RejectsAnythingElse) {
   const std::vector<std::vector<std::wstring>> invalid{
       {L"--service"},

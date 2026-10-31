@@ -1,6 +1,7 @@
 myclean_add_test(actions
   SOURCES
     actions_test_support.hpp
+    executor_support_test.cpp
     file_actions_test.cpp
     policy_test.cpp
     schema_test.cpp

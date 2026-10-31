@@ -19,8 +19,8 @@ inline constexpr std::array<std::string_view, 4> protocol_versions{"2025-11-25",
                                                                    "2025-03-26", "2024-11-05"};
 
 // An MCP server over the stdio transport: JSON-RPC 2.0 messages, one per line. It answers
-// initialize, ping, tools/list and tools/call, and offers only read tools, each mapped to a
-// service read method through `call`:
+// initialize, ping, tools/list and tools/call, and offers read tools and two proposal tools,
+// each mapped to a service method through `call`:
 //   health_snapshot   the prompt-1 snapshot (see health_snapshot())
 //   metrics_latest    metrics.latest
 //   metrics_history   metrics.query over the last `hours`
@@ -30,9 +30,17 @@ inline constexpr std::array<std::string_view, 4> protocol_versions{"2025-11-25",
 //   disk_health       disks.health
 //   list_alerts       alerts.list
 //   freeze_summary    input.summary
+//   storage_top, find_old_downloads, find_duplicates, find_used_installers
+//                     space.top, space.old_downloads, space.duplicates, space.used_installers
+//   list_plans, get_plan
+//                     plans.list, plans.get
+//   propose_cleanup, propose_optimization
+//                     plans.propose_cleanup, plans.propose_optimization, as "mcp:<client>"
+//                     (the clientInfo name of initialize): plans awaiting the owner's approval
 // No tool can change anything: there is no tool that closes, suspends or reprioritizes a
-// process, and none that creates a plan. A tool whose service call fails returns a tool error
-// (isError) naming what is unavailable; the server keeps running.
+// process, and none that approves, executes or undoes a plan (the service accepts those only
+// from the tray). A tool whose service call fails returns a tool error (isError) naming what is
+// unavailable; the server keeps running.
 //
 // Protocol errors are JSON-RPC errors: -32700 for text that is not JSON, -32600 for a message
 // that is not a request object (batches included), -32601 for an unknown method, -32602 for an
@@ -53,7 +61,7 @@ class Server {
   [[nodiscard]] static nlohmann::json tools();
 
  private:
-  [[nodiscard]] nlohmann::json initialize(const nlohmann::json& params) const;
+  [[nodiscard]] nlohmann::json initialize(const nlohmann::json& params);
   // The tools/call result, or a JSON-RPC error message for malformed parameters.
   [[nodiscard]] tl::expected<nlohmann::json, std::string> call_tool(
       const nlohmann::json& params) const;
@@ -61,6 +69,7 @@ class Server {
   Caller call_;
   const os::IClock* clock_;
   std::string version_;
+  std::string client_ = "unknown";  // the MCP client, as a token
 };
 
 }  // namespace myclean::mcp

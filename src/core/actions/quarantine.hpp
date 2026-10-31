@@ -4,8 +4,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -23,15 +25,23 @@
 
 namespace myclean::actions {
 
-// Quarantine layout: <volume>\.myclean-quarantine\<run>\<item>\<original name>, where <run> is
-// the id of the plan that quarantined the item and <item> its plan item id, so two items with
-// the same name never collide. The move is a rename on the item's own volume: the item keeps
-// its identity, and nothing is copied.
+// Quarantine layout: <root>\.myclean-quarantine\<run>\<item>\<original name>, where <root> is
+// the item's own volume root (or the overflow volume, see QuarantineRoot), <run> the id of the
+// plan that quarantined the item and <item> its plan item id, so two items with the same name
+// never collide. On the item's own volume the move is a rename: the item keeps its identity and
+// nothing is copied; a file moved to another volume gets the identity it has there.
 inline constexpr std::string_view quarantine_folder = ".myclean-quarantine";
 
-// Where `original`, item `item` of run `run`, is kept while quarantined.
+// Where `original`, item `item` of run `run`, is kept while quarantined below `root` (its own
+// volume root when `root` is empty).
 [[nodiscard]] std::filesystem::path quarantine_location(const std::filesystem::path& original,
-                                                        PlanId run, PlanItemId item);
+                                                        PlanId run, PlanItemId item,
+                                                        const std::filesystem::path& root = {});
+
+// The folder below which QuarantineItems keeps `item` (a volume root such as "L:\"), or the
+// reason it must stay where it is: the item is then skipped with that reason.
+using QuarantineRoot =
+    std::function<tl::expected<std::filesystem::path, std::string>(const PlanItem& item)>;
 
 enum class QuarantineState { held, restored, purged };
 
@@ -57,6 +67,9 @@ struct QuarantineRecord {
                                                   const QuarantineRecord& record);
 [[nodiscard]] Result<void> set_quarantine_state(store::Database& db, std::int64_t id,
                                                 QuarantineState state);
+// Records the identity an item got when it moved to another volume.
+[[nodiscard]] Result<void> set_quarantine_identity(store::Database& db, std::int64_t id,
+                                                   const FileIdentity& identity);
 // Removes a record written ahead of a move that did not happen.
 [[nodiscard]] Result<void> remove_quarantine(store::Database& db, std::int64_t id);
 // The records of run `run`, in item order.
@@ -103,17 +116,21 @@ class Quarantine {
 // each in `quarantine` before the move with an expiry 7 days later. Undo restores them.
 class QuarantineItems final : public ItemAction {
  public:
-  // `quarantine` must outlive the action.
-  QuarantineItems(const Environment& environment, Quarantine& quarantine, PlanId plan, Actor actor);
+  // `quarantine` must outlive the action. `root` chooses each item's quarantine root; empty
+  // keeps every item on its own volume.
+  QuarantineItems(const Environment& environment, Quarantine& quarantine, PlanId plan, Actor actor,
+                  QuarantineRoot root = {});
 
   [[nodiscard]] ActionInfo describe() const override;
-  // Undo holds, for every moved item, its quarantine location.
+  // Undo holds, for every moved item, its quarantine location. An item `root` refuses is
+  // skipped and logged with the reason.
   [[nodiscard]] Result<Undo> apply(const Preview& preview) override;
   // Restores the items of `undo` to their original paths.
   [[nodiscard]] Result<void> undo(const Undo& undo) override;
 
  private:
   Quarantine* quarantine_;
+  QuarantineRoot root_;
 };
 
 }  // namespace myclean::actions

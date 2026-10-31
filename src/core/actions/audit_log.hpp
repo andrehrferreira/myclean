@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/model/action.hpp"
@@ -47,5 +48,11 @@ struct LogEntry {
                                      const Undo& undo);
 // The stored undo data of `plan`; fails with not_found when none was stored.
 [[nodiscard]] Result<Undo> load_undo(store::Database& db, PlanId plan);
+
+// The action parameters of `plan` (table plan_params), written once when it is submitted, so
+// that the executor rebuilds exactly the action the owner approved.
+[[nodiscard]] Result<void> save_params(store::Database& db, PlanId plan, std::string_view params);
+// Empty when the plan was stored without parameters.
+[[nodiscard]] Result<std::string> load_params(store::Database& db, PlanId plan);
 
 }  // namespace myclean::actions

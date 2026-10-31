@@ -58,6 +58,11 @@ class DiskHealthComponent final : public IComponent {
 
   // disks.health. Thread-safe.
   [[nodiscard]] Result<nlohmann::json> drives() const;
+  // The newest reading of every drive; null before start() and before the first read.
+  // Thread-safe.
+  [[nodiscard]] std::shared_ptr<const health::HealthView> latest() const {
+    return collector_ != nullptr ? collector_->latest() : nullptr;
+  }
 
  private:
   void run(const std::stop_token& stop);

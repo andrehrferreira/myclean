@@ -149,22 +149,33 @@ TEST_F(ServerTest, NotificationsAndResponsesGetNoAnswer) {
             Json::object());
 }
 
-TEST_F(ServerTest, ListsOnlyReadToolsEachWithAnInputSchema) {
+TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
   const Json tools =
       send(Json{{"jsonrpc", "2.0"}, {"id", 3}, {"method", "tools/list"}}).at("result").at("tools");
   std::vector<std::string> names;
   for (const Json& tool : tools) {
-    names.push_back(tool.at("name").get<std::string>());
+    const std::string name = tool.at("name").get<std::string>();
+    names.push_back(name);
     EXPECT_FALSE(tool.at("description").get<std::string>().empty());
     const Json& schema = tool.at("inputSchema");
     EXPECT_EQ(schema.at("type"), "object");
     EXPECT_TRUE(schema.at("properties").is_object());
     EXPECT_EQ(schema.at("additionalProperties"), false);
-    EXPECT_EQ(tool.at("annotations").at("readOnlyHint"), true);
+    EXPECT_EQ(tool.at("annotations").at("readOnlyHint"), !name.starts_with("propose_")) << name;
   }
-  EXPECT_EQ(names, (std::vector<std::string>{"health_snapshot", "metrics_latest", "metrics_history",
-                                             "top_processes", "list_volumes", "explain_process",
-                                             "disk_health", "list_alerts", "freeze_summary"}));
+  EXPECT_EQ(names,
+            (std::vector<std::string>{
+                "health_snapshot", "metrics_latest", "metrics_history", "top_processes",
+                "list_volumes", "explain_process", "disk_health", "list_alerts", "freeze_summary",
+                "storage_top", "find_old_downloads", "find_duplicates", "find_used_installers",
+                "list_plans", "get_plan", "propose_cleanup", "propose_optimization"}));
+  // No tool approves, rejects, executes, undoes, restores or deletes anything.
+  for (const std::string& name : names) {
+    for (const char* verb :
+         {"approve", "reject", "execute", "undo", "restore", "recycle", "delete", "apply", "run"}) {
+      EXPECT_EQ(name.find(verb), std::string::npos) << name;
+    }
+  }
   EXPECT_EQ(tools[2].at("inputSchema").at("required"), Json::array({"metric"}));
   EXPECT_EQ(tools[5].at("inputSchema").at("required"), Json::array({"pid"}));
   for (const Json& tool : tools) {
@@ -204,6 +215,56 @@ TEST_F(ServerTest, ToolsCallTheirReadMethods) {
                                      {"max_points", 500}}));
   EXPECT_EQ(calls()[4].params.at("entity"), "system");
   EXPECT_EQ(calls()[4].params.at("from"), noon_seconds - 3600);
+}
+
+TEST_F(ServerTest, StorageAndPlanToolsCallTheirMethods) {
+  static_cast<void>(text(call_tool("storage_top"), false));
+  static_cast<void>(text(call_tool("storage_top", {{"path", "downloads"}, {"n", 5}}), false));
+  static_cast<void>(text(call_tool("find_old_downloads"), false));
+  static_cast<void>(text(call_tool("find_duplicates", {{"refresh", true}}), false));
+  static_cast<void>(text(call_tool("find_used_installers"), false));
+  static_cast<void>(text(call_tool("list_plans", {{"state", "awaiting_approval"}}), false));
+  static_cast<void>(text(call_tool("get_plan", {{"id", 12}}), false));
+
+  ASSERT_EQ(calls().size(), 7U);
+  EXPECT_EQ(calls()[0].method, "space.top");
+  EXPECT_EQ(calls()[0].params, (Json{{"path", "C"}, {"n", 20}, {"refresh", false}}));
+  EXPECT_EQ(calls()[1].params, (Json{{"path", "downloads"}, {"n", 5}, {"refresh", false}}));
+  EXPECT_EQ(calls()[2].method, "space.old_downloads");
+  EXPECT_EQ(calls()[3].method, "space.duplicates");
+  EXPECT_EQ(calls()[3].params, (Json{{"refresh", true}}));
+  EXPECT_EQ(calls()[4].method, "space.used_installers");
+  EXPECT_EQ(calls()[5].method, "plans.list");
+  EXPECT_EQ(calls()[5].params, (Json{{"state", "awaiting_approval"}}));
+  EXPECT_EQ(calls()[6].method, "plans.get");
+  EXPECT_EQ(calls()[6].params, (Json{{"id", 12}}));
+}
+
+TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
+  static_cast<void>(send(Json{{"jsonrpc", "2.0"},
+                              {"id", 1},
+                              {"method", "initialize"},
+                              {"params", {{"clientInfo", {{"name", "claude code"}}}}}}));
+  static_cast<void>(text(call_tool("propose_cleanup", {{"candidate_ids", {3, 4, 5}}}), false));
+  static_cast<void>(text(
+      call_tool("propose_optimization", {{"kind", "hibernation"}, {"mode", "reduced"}}), false));
+  ASSERT_EQ(calls().size(), 2U);
+  EXPECT_EQ(calls()[0].method, "plans.propose_cleanup");
+  EXPECT_EQ(calls()[0].params,
+            (Json{{"candidates", {{"ids", {3, 4, 5}}}}, {"client", "claude-code"}}));
+  EXPECT_EQ(calls()[1].method, "plans.propose_optimization");
+  EXPECT_EQ(calls()[1].params,
+            (Json{{"kind", "hibernation"}, {"mode", "reduced"}, {"client", "claude-code"}}));
+
+  // A raw path is not a candidate id: a tool error, and the service is not called.
+  EXPECT_NE(text(call_tool("propose_cleanup",
+                           {{"candidate_ids", {R"(C:\Users\owner\Documents\report.docx)"}}}),
+                 true)
+                .find("candidate_ids"),
+            std::string::npos);
+  static_cast<void>(text(call_tool("propose_cleanup", {{"candidate_ids", Json::array()}}), true));
+  static_cast<void>(text(call_tool("propose_optimization", {{"kind", "format_disk"}}), true));
+  EXPECT_EQ(calls().size(), 2U);
 }
 
 TEST_F(ServerTest, HealthSnapshotCombinesQualifyingTreesAndSystemSignals) {
@@ -314,7 +375,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 9U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 17U);
 }
 
 }  // namespace

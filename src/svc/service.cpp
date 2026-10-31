@@ -1,6 +1,7 @@
 #include "svc/service.hpp"
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <iterator>
 #include <memory>
@@ -21,6 +22,7 @@
 #include "core/store/store.hpp"
 #include "platform/ipc/pipe_server.hpp"
 #include "svc/component.hpp"
+#include "svc/owner_session.hpp"
 
 namespace myclean::svc {
 
@@ -72,7 +74,7 @@ Service::~Service() {
 }
 
 Result<void> Service::start_components(std::vector<std::unique_ptr<IComponent>> components) {
-  const Context context(*store_, methods_, *clock_, options_.data_dir);
+  const Context context(*store_, methods_, *clock_, options_.data_dir, options_.owner_sid);
   for (std::unique_ptr<IComponent>& component : components) {
     if (Result<void> started = component->start(context); !started) {
       return fail(started.error().code, "component " + std::string(component->name()) +
@@ -96,7 +98,13 @@ Result<void> Service::open_pipe() {
       platform::PipeServer::start(platform::PipeServerOptions{
           .name = options_.pipe_name,
           .owner_sid = options_.owner_sid,
-          .handler = [this](std::string_view request) { return methods_.handle_frame(request); },
+          .handler = {},
+          .client_handler =
+              [this](std::string_view request, std::uint32_t client_pid) {
+                const ipc::Caller caller{
+                    .tray = is_owner_tray(client_pid, options_.owner_sid, options_.tray_image)};
+                return methods_.handle_frame(request, caller);
+              },
           .on_error = [](const Error& error) { spdlog::error("pipe: {}", error.message); }});
   if (!server) {
     return tl::unexpected(server.error());

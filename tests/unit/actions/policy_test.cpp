@@ -103,6 +103,7 @@ TEST(PlanStateMachine, OnlyTheSpecifiedTransitionsAreLegal) {
       {PlanState::applied, PlanState::verified},
       {PlanState::applied, PlanState::rolled_back},
       {PlanState::applied, PlanState::failed},
+      {PlanState::verified, PlanState::rolled_back},
   };
   for (const PlanState from : all_states) {
     for (const PlanState to : all_states) {
