@@ -45,6 +45,8 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(wil CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
+find_package(implot CONFIG REQUIRED)
 
 # The toml++ 3.4.0 port ships only a pkg-config file; this is the target that file describes.
 set(_myclean_vcpkg_prefix "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
@@ -61,6 +63,14 @@ set_target_properties(tomlplusplus::tomlplusplus PROPERTIES
   IMPORTED_LOCATION_DEBUG "${MYCLEAN_TOMLPLUSPLUS_LIBRARY_DEBUG}"
   INTERFACE_INCLUDE_DIRECTORIES "${MYCLEAN_TOMLPLUSPLUS_INCLUDE_DIR}"
   INTERFACE_COMPILE_DEFINITIONS "TOML_HEADER_ONLY=0")
+
+# krabsetw (Microsoft's ETW wrapper) is header-only and its port ships no CMake config.
+find_path(MYCLEAN_KRABSETW_INCLUDE_DIR krabs.hpp
+  PATHS "${_myclean_vcpkg_prefix}/include" NO_DEFAULT_PATH REQUIRED)
+add_library(krabsetw::krabsetw INTERFACE IMPORTED)
+set_target_properties(krabsetw::krabsetw PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES "${MYCLEAN_KRABSETW_INCLUDE_DIR}"
+  INTERFACE_LINK_LIBRARIES "tdh;advapi32;ole32;oleaut32")
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(MyClean)

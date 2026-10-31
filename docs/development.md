@@ -118,6 +118,9 @@ modules only link the targets:
 | spdlog | `spdlog::spdlog` |
 | tl::expected | `tl::expected` (already public through `myclean::model`) |
 | WIL (platform only) | `WIL::WIL` |
+| Dear ImGui (DX11 + Win32 bindings, tray only) | `imgui::imgui` |
+| ImPlot (tray only) | `implot::implot` |
+| krabsetw, ETW consumer (platform only; links tdh) | `krabsetw::krabsetw` |
 | GoogleTest | linked by `myclean_add_test` |
 
 Third-party code is linked statically (triplet `x64-windows-static-md`), so no third-party DLL
