@@ -44,7 +44,23 @@ else()
   _myclean_missing_tool_target(format clang-format)
 endif()
 
+# New clang-tidy majors add checks that the enabled groups pick up (e.g. portability-* and
+# cppcoreguidelines-* in 20+), so every machine and CI must lint with the same major as the
+# Visual Studio 2022 bundle. CI installs that version and passes it as MYCLEAN_CLANG_TIDY.
+set(_myclean_clang_tidy_major 19)
 if(MYCLEAN_CLANG_TIDY)
+  execute_process(COMMAND "${MYCLEAN_CLANG_TIDY}" --version OUTPUT_VARIABLE _myclean_tidy_version
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT _myclean_tidy_version MATCHES "version ${_myclean_clang_tidy_major}\\.")
+    message(WARNING "lint disabled: clang-tidy ${_myclean_clang_tidy_major}.x is required, "
+      "found ${MYCLEAN_CLANG_TIDY}: ${_myclean_tidy_version}")
+    set(_myclean_tidy_usable FALSE)
+  else()
+    set(_myclean_tidy_usable TRUE)
+  endif()
+endif()
+
+if(MYCLEAN_CLANG_TIDY AND _myclean_tidy_usable)
   # One clang-tidy run per source file, so Ninja runs them in parallel and re-runs only what
   # changed. Any first-party header change re-lints every file (clang-tidy writes no depfile).
   file(GLOB_RECURSE _myclean_headers CONFIGURE_DEPENDS
