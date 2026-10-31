@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "core/mcp/client.hpp"
+#include "core/os/clock.hpp"
 
 namespace myclean::cli {
 
@@ -23,8 +24,11 @@ inline constexpr std::chrono::milliseconds default_timeout{8'000};
 // myclean.exe: the read-only command line and MCP server (see usage()). `args` are the
 // arguments after the program name, UTF-8. Results go to `out` (one JSON document with --json),
 // diagnostics to `err`; `mcp` reads its messages from `in`.
+// `clock` is the time the history window of `metrics query` is measured from; the service and
+// the CLI share the system clock in production, tests pass the service's fake clock.
 [[nodiscard]] int run(std::span<const std::string> args, std::istream& in, std::ostream& out,
-                      std::ostream& err, std::chrono::milliseconds timeout = default_timeout);
+                      std::ostream& err, const os::IClock& clock,
+                      std::chrono::milliseconds timeout = default_timeout);
 
 [[nodiscard]] std::string_view usage();
 

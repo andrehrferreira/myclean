@@ -1,0 +1,860 @@
+# What the well-known locations of a volume are, for `myclean map` (format:
+# src/core/map/attribution.hpp). Each area names its locations, what they are in plain English,
+# and how their space can be reclaimed:
+#   none            needed as it is
+#   clean-rule      a cleaning rule of data/rules (ref = rule id)
+#   handler         a Windows cleanup handler (ref = handler name)
+#   relocate        moves to another drive: a relocation target of MyClean (ref = temp, gradle,
+#                   cargo, npm, nuget, pip, go_modules, go_build or unreal_ddc), or the tool's
+#                   own move (ref = wsl: `wsl --manage <distro> --move`; docker: Docker Desktop's
+#                   disk image location)
+#   setting         a system setting (ref = hibernation, page_file or shadow_storage)
+#   uninstall       goes away when its program, game or toolchain is uninstalled
+#   manual-review   only the owner can decide; the note says how
+# A folder belongs to the area whose location names it most precisely (the most path
+# components); between two equally precise locations the first in this file wins. Locations
+# with a variable that is not set on this machine are skipped.
+
+# ---- Windows ----------------------------------------------------------------------------------
+
+[[area]]
+id       = "windows.hibernation"
+paths    = ['?:\hiberfil.sys']
+category = "page-hibernate"
+label    = "Hibernation file (memory saved for Fast Startup and hibernate)"
+reclaim  = { kind = "setting", ref = "hibernation", note = "Reduced hibernation halves it and keeps Fast Startup; off removes it." }
+
+[[area]]
+id       = "windows.page_file"
+paths    = ['?:\pagefile.sys', '?:\swapfile.sys']
+category = "page-hibernate"
+label    = "Page file (virtual memory)"
+reclaim  = { kind = "setting", ref = "page_file", note = "Move most of it to another drive, keeping a small one here for crash dumps." }
+
+[[area]]
+id       = "windows.restore_points"
+paths    = ['?:\System Volume Information']
+category = "restore-points"
+label    = "Restore points and shadow copies (needs admin to size)"
+reclaim  = { kind = "setting", ref = "shadow_storage", note = "Cap the shadow storage; the oldest restore points that no longer fit are removed." }
+
+[[area]]
+id       = "windows.recycle_bin"
+paths    = ['?:\$Recycle.Bin']
+category = "recycle-bin"
+label    = "Recycle Bin"
+reclaim  = { kind = "clean-rule", ref = "windows.recycle_bin", note = "Empties the Recycle Bin; other users' bins need admin." }
+
+[[area]]
+id       = "windows.system"
+paths    = ['%WINDIR%']
+category = "system"
+label    = "Windows"
+reclaim  = { kind = "none" }
+
+[[area]]
+id       = "windows.component_store"
+paths    = ['%WINDIR%\WinSxS']
+category = "windows-servicing"
+label    = "Component store (WinSxS); most files are hard links shared with Windows, counted once"
+reclaim  = { kind = "clean-rule", ref = "windows.component_store", note = "DISM StartComponentCleanup removes superseded components only; DISM reports the exact amount." }
+
+[[area]]
+id       = "windows.installer_cache"
+paths    = ['%WINDIR%\Installer']
+category = "windows-servicing"
+label    = "Windows Installer cache (needed to repair and uninstall programs)"
+reclaim  = { kind = "manual-review", note = "Never delete. Orphaned packages can later be moved to another drive." }
+
+[[area]]
+id       = "windows.update_downloads"
+paths    = ['%WINDIR%\SoftwareDistribution']
+category = "windows-servicing"
+label    = "Windows Update downloads and history"
+reclaim  = { kind = "manual-review", note = "Windows removes downloads after updates install; a large folder usually means a stuck update." }
+
+[[area]]
+id       = "windows.driver_store"
+paths    = ['%WINDIR%\System32\DriverStore']
+category = "windows-servicing"
+label    = "Driver store (installed and older drivers)"
+reclaim  = { kind = "clean-rule", ref = "windows.driver_packages", note = "Removes older versions of drivers only." }
+
+[[area]]
+id       = "windows.temp"
+paths    = ['%WINDIR%\Temp']
+category = "app-caches"
+label    = "Windows temporary files"
+reclaim  = { kind = "clean-rule", ref = "windows.temp.system" }
+
+[[area]]
+id       = "windows.live_kernel_reports"
+paths    = ['%WINDIR%\LiveKernelReports']
+category = "system"
+label    = "Kernel crash reports"
+reclaim  = { kind = "clean-rule", ref = "windows.live_kernel_reports" }
+
+[[area]]
+id       = "windows.memory_dump"
+paths    = ['%WINDIR%\MEMORY.DMP']
+category = "system"
+label    = "System crash memory dump"
+reclaim  = { kind = "clean-rule", ref = "windows.memory_dumps" }
+
+[[area]]
+id       = "windows.minidumps"
+paths    = ['%WINDIR%\Minidump']
+category = "system"
+label    = "System crash minidumps"
+reclaim  = { kind = "clean-rule", ref = "windows.minidumps" }
+
+[[area]]
+id       = "windows.wer.system"
+paths    = ['%ProgramData%\Microsoft\Windows\WER']
+category = "system"
+label    = "Windows error reports (all users)"
+reclaim  = { kind = "clean-rule", ref = "windows.wer.system" }
+
+[[area]]
+id       = "windows.old"
+paths    = ['?:\Windows.old']
+category = "windows-servicing"
+label    = "Previous Windows installation (allows rolling back an upgrade)"
+reclaim  = { kind = "clean-rule", ref = "windows.previous_installations", note = "Removing it ends the option to go back to the previous Windows version." }
+
+[[area]]
+id       = "windows.setup_files"
+paths    = ['?:\$WINDOWS.~BT', '?:\$WINDOWS.~WS', '?:\$GetCurrent']
+category = "windows-servicing"
+label    = "Windows upgrade setup files"
+reclaim  = { kind = "clean-rule", ref = "windows.temporary_setup_files" }
+
+[[area]]
+id       = "windows.esd"
+paths    = ['?:\ESD']
+category = "windows-servicing"
+label    = "Windows installation images (ESD) used to reset the PC"
+reclaim  = { kind = "clean-rule", ref = "windows.esd_files", note = "Reset this PC can download them again." }
+
+[[area]]
+id       = "windows.recovery"
+paths    = ['?:\Recovery', '?:\$SysReset']
+category = "system"
+label    = "Windows recovery environment"
+reclaim  = { kind = "none" }
+
+[[area]]
+id       = "windows.setup_logs"
+paths    = ['%WINDIR%\Panther']
+category = "windows-servicing"
+label    = "Windows setup and upgrade logs"
+reclaim  = { kind = "clean-rule", ref = "windows.setup_logs" }
+
+[[area]]
+id       = "windows.assembly"
+paths    = ['%WINDIR%\assembly']
+category = "system"
+label    = ".NET Framework global assembly cache"
+reclaim  = { kind = "none" }
+
+[[area]]
+id       = "windows.hyperv_disks"
+paths    = ['%ProgramData%\Microsoft\Windows\Virtual Hard Disks', '%PUBLIC%\Documents\Hyper-V']
+category = "vm-disks"
+label    = "Hyper-V virtual machine disks"
+reclaim  = { kind = "manual-review", note = "Delete unused virtual machines in Hyper-V Manager, or move them to another drive." }
+
+# ---- Programs and games -----------------------------------------------------------------------
+
+[[area]]
+id       = "apps.program_files"
+paths    = ['%ProgramFiles%', '%ProgramFiles(x86)%']
+category = "apps"
+label    = "Installed programs"
+reclaim  = { kind = "uninstall", note = "Uninstall programs you no longer use: Settings > Apps > Installed apps." }
+
+[[area]]
+id       = "apps.store_apps"
+paths    = ['%ProgramFiles%\WindowsApps']
+category = "apps"
+label    = "Microsoft Store apps and Xbox app games"
+reclaim  = { kind = "uninstall", note = "Uninstall in Settings > Apps, or move an app to another drive there." }
+
+[[area]]
+id       = "apps.user_programs"
+paths    = ['%LOCALAPPDATA%\Programs', '%LOCALAPPDATA%\Discord']
+category = "apps"
+label    = "Programs installed for this user only"
+reclaim  = { kind = "uninstall", note = "Uninstall programs you no longer use: Settings > Apps > Installed apps." }
+
+[[area]]
+id       = "apps.store_app_data"
+paths    = ['%LOCALAPPDATA%\Packages']
+category = "apps"
+label    = "Microsoft Store app data"
+reclaim  = { kind = "manual-review", note = "Settings > Apps > (app) > Advanced options > Reset clears one app's data." }
+
+[[area]]
+id       = "apps.uzpainter"
+paths    = ['%LOCALAPPDATA%\UzPainter']
+category = "apps"
+label    = "UzPainter app data (work, verification and parity stores)"
+reclaim  = { kind = "manual-review", note = "Only the app's owner knows which stores are still needed." }
+
+[[area]]
+id       = "apps.uzpainter_cache"
+paths    = ['%LOCALAPPDATA%\UzPainter\cache']
+category = "app-caches"
+label    = "UzPainter cache"
+reclaim  = { kind = "manual-review", note = "A cache; no cleaning rule covers it yet." }
+
+[[area]]
+id       = "apps.ai_cli_history"
+paths    = ['%USERPROFILE%\.codex', '%USERPROFILE%\.claude']
+category = "apps"
+label    = "AI coding assistant sessions, history and generated images (Codex, Claude)"
+reclaim  = { kind = "manual-review", note = "Old sessions and generated images can be deleted from sessions/ and generated_images/ once no longer needed." }
+
+[[area]]
+id       = "apps.installer_leftovers"
+paths    = ['?:\Autodesk', '%LOCALAPPDATA%\Microsoft\PowerToys\Updates']
+category = "app-caches"
+label    = "Installer files left behind by setup programs (Autodesk, PowerToys updates)"
+reclaim  = { kind = "manual-review", note = "Not needed once the program is installed; no cleaning rule covers them yet." }
+
+[[area]]
+id       = "apps.local_low"
+paths    = ['%USERPROFILE%\AppData\LocalLow']
+category = "apps"
+label    = "Low-integrity app data (games, sandboxed apps)"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "apps.package_cache"
+paths    = ['%ProgramData%\Package Cache']
+category = "app-caches"
+label    = "Installer copies kept to repair and uninstall programs"
+reclaim  = { kind = "manual-review", note = "Do not delete: repairs and uninstalls need these copies." }
+
+[[area]]
+id       = "apps.onedrive"
+paths    = ['%USERPROFILE%\OneDrive', '%USERPROFILE%\OneDrive - *']
+category = "user-documents"
+label    = "OneDrive files kept on this PC"
+reclaim  = { kind = "manual-review", note = "Right-click > Free up space keeps files online only; they download again when opened." }
+
+[[area]]
+id       = "games.steam_client"
+paths    = ['%ProgramFiles(x86)%\Steam']
+category = "games"
+label    = "Steam client"
+reclaim  = { kind = "none" }
+
+[[area]]
+id       = "games.steam_library"
+paths    = ['%ProgramFiles(x86)%\Steam\steamapps', '?:\SteamLibrary', '?:\Program Files\Steam\steamapps']
+category = "games"
+label    = "Steam games"
+reclaim  = { kind = "uninstall", note = "Uninstall games you no longer play, or move them in Steam > Settings > Storage." }
+
+[[area]]
+id       = "games.steam_httpcache"
+paths    = ['%ProgramFiles(x86)%\Steam\appcache\httpcache']
+category = "app-caches"
+label    = "Steam web cache"
+reclaim  = { kind = "clean-rule", ref = "games.steam.httpcache" }
+
+[[area]]
+id       = "games.steam_depotcache"
+paths    = ['%ProgramFiles(x86)%\Steam\depotcache']
+category = "app-caches"
+label    = "Steam download cache"
+reclaim  = { kind = "clean-rule", ref = "games.steam.depotcache" }
+
+[[area]]
+id       = "games.epic"
+paths    = ['%ProgramFiles%\Epic Games', '?:\Epic Games']
+category = "games"
+label    = "Epic Games launcher and games"
+reclaim  = { kind = "uninstall", note = "Uninstall games in the Epic Games launcher (Library > ... > Uninstall)." }
+
+[[area]]
+id       = "games.epic_webcache"
+paths    = ['%LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*']
+category = "app-caches"
+label    = "Epic Games launcher web cache"
+reclaim  = { kind = "clean-rule", ref = "games.epic.webcache" }
+
+[[area]]
+id       = "games.other_launchers"
+paths    = ['?:\XboxGames', '?:\Riot Games', '%ProgramFiles%\EA Games', '%ProgramFiles(x86)%\Origin Games',
+            '%ProgramFiles(x86)%\Ubisoft\Ubisoft Game Launcher\games', '%ProgramFiles(x86)%\GOG Galaxy\Games',
+            '?:\GOG Games', '%ProgramFiles(x86)%\Battle.net']
+category = "games"
+label    = "Games from other launchers"
+reclaim  = { kind = "uninstall", note = "Uninstall games you no longer play in their launcher." }
+
+# ---- Developer toolchains, caches and projects ------------------------------------------------
+
+[[area]]
+id       = "dev.visual_studio"
+paths    = ['%ProgramFiles%\Microsoft Visual Studio', '%ProgramFiles(x86)%\Microsoft Visual Studio']
+category = "dev-toolchains"
+label    = "Visual Studio installations"
+reclaim  = { kind = "uninstall", note = "Visual Studio Installer > Modify removes workloads you do not use." }
+
+[[area]]
+id       = "dev.visual_studio_packages"
+paths    = ['%ProgramData%\Microsoft\VisualStudio\Packages']
+category = "dev-caches"
+label    = "Visual Studio installer download cache"
+reclaim  = { kind = "manual-review", note = "Visual Studio Installer > More > Settings: turn off 'Keep download cache after the installation', which removes it." }
+
+[[area]]
+id       = "dev.visual_studio_user"
+paths    = ['%LOCALAPPDATA%\Microsoft\VisualStudio']
+category = "dev-caches"
+label    = "Visual Studio per-user settings and caches"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "dev.visual_studio_mef_cache"
+paths    = ['%LOCALAPPDATA%\Microsoft\VisualStudio\*\ComponentModelCache']
+category = "dev-caches"
+label    = "Visual Studio component cache"
+reclaim  = { kind = "clean-rule", ref = "ide.visualstudio.component_model_cache" }
+
+[[area]]
+id       = "dev.windows_kits"
+paths    = ['%ProgramFiles(x86)%\Windows Kits', '%ProgramFiles%\dotnet', '%ProgramFiles%\NVIDIA GPU Computing Toolkit',
+            '%ProgramFiles%\LLVM', '%ProgramFiles%\Go', '%ProgramFiles%\Android']
+category = "dev-toolchains"
+label    = "SDKs and toolchains (Windows SDK, .NET, CUDA, LLVM, Go, Android Studio)"
+reclaim  = { kind = "uninstall", note = "Uninstall SDK versions you no longer build with." }
+
+[[area]]
+id       = "dev.unreal_engine"
+paths    = ['%ProgramFiles%\Epic Games\UE_*', '?:\Epic Games\UE_*']
+category = "dev-toolchains"
+label    = "Unreal Engine installations"
+reclaim  = { kind = "uninstall", note = "Epic Games launcher > Unreal Engine > Library removes engine versions or optional parts." }
+
+[[area]]
+id       = "dev.unreal_ddc"
+paths    = ['%LOCALAPPDATA%\UnrealEngine\Common\DerivedDataCache']
+category = "dev-caches"
+label    = "Unreal Engine shared derived data cache"
+reclaim  = { kind = "relocate", ref = "unreal_ddc" }
+
+[[area]]
+id       = "dev.unreal_user"
+paths    = ['%LOCALAPPDATA%\UnrealEngine']
+category = "dev-caches"
+label    = "Unreal Engine per-user data and caches (Zen storage, editor settings)"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "dev.unreal_vault"
+paths    = ['%ProgramData%\Epic\EpicGamesLauncher\VaultCache']
+category = "dev-caches"
+label    = "Unreal Marketplace (Fab) download cache"
+reclaim  = { kind = "manual-review", note = "Epic Games launcher > Settings > Edit Vault cache location, or remove downloaded packs you no longer add to projects." }
+
+[[area]]
+id       = "dev.unity_editors"
+paths    = ['%ProgramFiles%\Unity', '%ProgramFiles%\Unity Hub']
+category = "dev-toolchains"
+label    = "Unity Hub and Unity editors"
+reclaim  = { kind = "uninstall", note = "Unity Hub > Installs removes editor versions you no longer use." }
+
+[[area]]
+id       = "dev.unity_cache"
+paths    = ['%LOCALAPPDATA%\Unity\cache', '%APPDATA%\Unity\Asset Store-5.x']
+category = "dev-caches"
+label    = "Unity package and Asset Store cache"
+reclaim  = { kind = "manual-review", note = "Packages download again when a project needs them." }
+
+[[area]]
+id       = "dev.jetbrains"
+paths    = ['%LOCALAPPDATA%\JetBrains', '%APPDATA%\JetBrains']
+category = "dev-caches"
+label    = "JetBrains IDE settings, indexes and caches"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "dev.jetbrains_caches"
+paths    = ['%LOCALAPPDATA%\JetBrains\*\caches']
+category = "dev-caches"
+label    = "JetBrains IDE caches"
+reclaim  = { kind = "clean-rule", ref = "ide.jetbrains.caches" }
+
+[[area]]
+id       = "dev.jetbrains_toolbox"
+paths    = ['%LOCALAPPDATA%\JetBrains\Toolbox\apps', '%LOCALAPPDATA%\Programs\JetBrains*']
+category = "dev-toolchains"
+label    = "JetBrains IDEs"
+reclaim  = { kind = "uninstall", note = "JetBrains Toolbox removes IDE versions you no longer use." }
+
+[[area]]
+id       = "dev.vscode_caches"
+paths    = ['%APPDATA%\Code\CachedData']
+category = "dev-caches"
+label    = "VS Code cached data of older versions"
+reclaim  = { kind = "clean-rule", ref = "ide.vscode.cached_data" }
+
+[[area]]
+id       = "dev.vscode_workspace_storage"
+paths    = ['%APPDATA%\Code\User\workspaceStorage']
+category = "dev-caches"
+label    = "VS Code per-workspace storage"
+reclaim  = { kind = "clean-rule", ref = "ide.vscode.workspace_storage" }
+
+[[area]]
+id       = "dev.vscode_web_storage"
+paths    = ['%APPDATA%\Code\WebStorage']
+category = "dev-caches"
+label    = "VS Code extension web storage"
+reclaim  = { kind = "manual-review", note = "Data extensions keep for themselves; removing an extension's data resets it." }
+
+[[area]]
+id       = "dev.vscode_vsix_cache"
+paths    = ['%APPDATA%\Code\CachedExtensionVSIXs']
+category = "app-caches"
+label    = "VS Code downloaded extension packages"
+reclaim  = { kind = "manual-review", note = "Regenerates when an extension updates. No cleaning rule covers it yet." }
+
+[[area]]
+id       = "dev.editor_extensions"
+paths    = ['%USERPROFILE%\.vscode', '%USERPROFILE%\.cursor']
+category = "dev-toolchains"
+label    = "Code editor extensions"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "dev.rustup"
+paths    = ['%USERPROFILE%\.rustup']
+category = "dev-toolchains"
+label    = "Rust toolchains (rustup)"
+reclaim  = { kind = "manual-review", note = "`rustup toolchain list`, then `rustup toolchain uninstall <name>` for ones you do not use." }
+
+[[area]]
+id       = "dev.cargo"
+paths    = ['%USERPROFILE%\.cargo']
+category = "dev-caches"
+label    = "Cargo registry, git checkouts and installed tools"
+reclaim  = { kind = "relocate", ref = "cargo" }
+
+[[area]]
+id       = "dev.gradle"
+paths    = ['%USERPROFILE%\.gradle']
+category = "dev-caches"
+label    = "Gradle caches and wrapper distributions"
+reclaim  = { kind = "relocate", ref = "gradle", note = "Rule pkg.gradle.versions also removes versions unused for 90 days." }
+
+[[area]]
+id       = "dev.maven"
+paths    = ['%USERPROFILE%\.m2']
+category = "dev-caches"
+label    = "Maven local repository"
+reclaim  = { kind = "manual-review", note = "Set localRepository in .m2\\settings.xml to another drive, or delete it to download again." }
+
+[[area]]
+id       = "dev.nuget_packages"
+paths    = ['%USERPROFILE%\.nuget\packages']
+category = "dev-caches"
+label    = "NuGet global packages"
+reclaim  = { kind = "relocate", ref = "nuget", note = "Rule pkg.nuget.locals clears it instead." }
+
+[[area]]
+id       = "dev.nuget_caches"
+paths    = ['%LOCALAPPDATA%\NuGet']
+category = "dev-caches"
+label    = "NuGet HTTP and v3 caches"
+reclaim  = { kind = "clean-rule", ref = "pkg.nuget.locals" }
+
+[[area]]
+id       = "dev.npm_cache"
+paths    = ['%LOCALAPPDATA%\npm-cache']
+category = "dev-caches"
+label    = "npm cache"
+reclaim  = { kind = "relocate", ref = "npm", note = "Rule pkg.npm.cache verifies and trims it instead." }
+
+[[area]]
+id       = "dev.npm_global"
+paths    = ['%APPDATA%\npm']
+category = "dev-toolchains"
+label    = "Globally installed npm packages"
+reclaim  = { kind = "manual-review", note = "`npm ls -g` lists them; `npm rm -g <name>` removes one." }
+
+[[area]]
+id       = "dev.pnpm_store"
+paths    = ['%LOCALAPPDATA%\pnpm']
+category = "dev-caches"
+label    = "pnpm content store"
+reclaim  = { kind = "clean-rule", ref = "pkg.pnpm.store" }
+
+[[area]]
+id       = "dev.yarn_cache"
+paths    = ['%LOCALAPPDATA%\Yarn']
+category = "dev-caches"
+label    = "Yarn cache"
+reclaim  = { kind = "clean-rule", ref = "pkg.yarn.cache" }
+
+[[area]]
+id       = "dev.pip_cache"
+paths    = ['%LOCALAPPDATA%\pip']
+category = "dev-caches"
+label    = "pip cache"
+reclaim  = { kind = "relocate", ref = "pip", note = "Rule pkg.pip.cache purges it instead." }
+
+[[area]]
+id       = "dev.uv_cache"
+paths    = ['%LOCALAPPDATA%\uv']
+category = "dev-caches"
+label    = "uv cache and Python installs"
+reclaim  = { kind = "clean-rule", ref = "pkg.uv.cache" }
+
+[[area]]
+id       = "dev.go_build"
+paths    = ['%LOCALAPPDATA%\go-build']
+category = "dev-caches"
+label    = "Go build cache"
+reclaim  = { kind = "relocate", ref = "go_build", note = "Rule pkg.go.cache cleans it instead." }
+
+[[area]]
+id       = "dev.go_modules"
+paths    = ['%USERPROFILE%\go\pkg\mod']
+category = "dev-caches"
+label    = "Go module cache"
+reclaim  = { kind = "relocate", ref = "go_modules", note = "Rule pkg.go.cache cleans it instead." }
+
+[[area]]
+id       = "dev.python"
+paths    = ['%LOCALAPPDATA%\Programs\Python', '%USERPROFILE%\miniconda3', '%USERPROFILE%\anaconda3',
+            '%ProgramData%\miniconda3', '%ProgramData%\anaconda3']
+category = "dev-toolchains"
+label    = "Python and Conda installations"
+reclaim  = { kind = "uninstall", note = "For Conda, `conda clean --all` removes cached packages." }
+
+[[area]]
+id       = "dev.ai_models"
+paths    = ['%USERPROFILE%\.cache\huggingface', '%USERPROFILE%\.ollama', '%USERPROFILE%\.lmstudio',
+            '%USERPROFILE%\.elyriu-local-ai']
+category = "dev-caches"
+label    = "Downloaded AI models (Hugging Face, Ollama, LM Studio)"
+reclaim  = { kind = "manual-review", note = "Delete models you no longer use with the tool itself (`ollama rm`, `huggingface-cli delete-cache`)." }
+
+[[area]]
+id       = "dev.user_cache"
+paths    = ['%USERPROFILE%\.cache']
+category = "dev-caches"
+label    = "Developer tool caches (~/.cache)"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "dev.android_sdk"
+paths    = ['%LOCALAPPDATA%\Android']
+category = "dev-toolchains"
+label    = "Android SDK"
+reclaim  = { kind = "manual-review", note = "Android Studio > SDK Manager removes platforms and system images you do not use." }
+
+[[area]]
+id       = "dev.android_user"
+paths    = ['%USERPROFILE%\.android']
+category = "dev-caches"
+label    = "Android tools settings and caches"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "dev.android_avd"
+paths    = ['%USERPROFILE%\.android\avd']
+category = "vm-disks"
+label    = "Android emulator devices"
+reclaim  = { kind = "manual-review", note = "Android Studio > Device Manager deletes emulators you do not use." }
+
+[[area]]
+id       = "dev.wsl"
+paths    = ['%LOCALAPPDATA%\Packages\*\LocalState\*.vhdx', '%LOCALAPPDATA%\Packages\*\LocalState\rootfs',
+            '%LOCALAPPDATA%\Packages\*\rootfs', '%LOCALAPPDATA%\wsl']
+category = "vm-disks"
+label    = "WSL Linux distributions (WSL 2 virtual disks, WSL 1 file systems)"
+reclaim  = { kind = "relocate", ref = "wsl", note = "WSL 2: `wsl --manage <distro> --move <folder>`; the disk never shrinks by itself (`wsl --shutdown`, then Optimize-VHD). WSL 1: `wsl --export`, then `wsl --import` on another drive." }
+
+[[area]]
+id       = "dev.docker"
+paths    = ['%LOCALAPPDATA%\Docker\wsl', '%ProgramData%\DockerDesktop\vm-data']
+category = "vm-disks"
+label    = "Docker Desktop disk (images, containers, volumes)"
+reclaim  = { kind = "relocate", ref = "docker", note = "Docker Desktop > Settings > Resources > Disk image location moves it; rule pkg.docker.prune frees space inside it." }
+
+[[area]]
+id       = "dev.python_store"
+paths    = ['%LOCALAPPDATA%\Packages\PythonSoftwareFoundation.Python.*']
+category = "dev-toolchains"
+label    = "Python from the Microsoft Store (with its installed packages)"
+reclaim  = { kind = "uninstall", note = "Settings > Apps uninstalls Python versions you no longer use." }
+
+[[area]]
+id       = "dev.zig_cache"
+paths    = ['%LOCALAPPDATA%\zig']
+category = "dev-caches"
+label    = "Zig global build cache"
+reclaim  = { kind = "manual-review", note = "Regenerates; safe to delete while no zig build runs. No cleaning rule covers it yet." }
+
+[[area]]
+id       = "dev.vcpkg"
+paths    = ['?:\vcpkg', '%USERPROFILE%\vcpkg']
+category = "dev-toolchains"
+label    = "vcpkg package manager"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "dev.vcpkg_build"
+paths    = ['?:\vcpkg\buildtrees', '?:\vcpkg\downloads', '?:\vcpkg\packages', '%USERPROFILE%\vcpkg\buildtrees',
+            '%USERPROFILE%\vcpkg\downloads', '%USERPROFILE%\vcpkg\packages', '%LOCALAPPDATA%\vcpkg\archives',
+            '%LOCALAPPDATA%\vcpkg\downloads']
+category = "dev-caches"
+label    = "vcpkg build trees, downloads and binary cache"
+reclaim  = { kind = "manual-review", note = "Regenerates; safe to delete while no vcpkg install runs (the binary cache makes the next builds slower). No cleaning rule covers it yet." }
+
+[[area]]
+id       = "dev.js_runtime_caches"
+paths    = ['%USERPROFILE%\.bun\install\cache', '%LOCALAPPDATA%\electron\Cache']
+category = "dev-caches"
+label    = "Bun package cache and Electron download cache"
+reclaim  = { kind = "manual-review", note = "Regenerates (`bun pm cache rm`); no cleaning rule covers them yet." }
+
+[[area]]
+id       = "dev.playwright"
+paths    = ['%LOCALAPPDATA%\ms-playwright', '%LOCALAPPDATA%\ms-playwright-mcp']
+category = "dev-caches"
+label    = "Playwright test browsers"
+reclaim  = { kind = "manual-review", note = "Reinstallable: `npx playwright uninstall --all`, then install again when needed. No cleaning rule covers it yet." }
+
+[[area]]
+id       = "dev.projects"
+paths    = ['%USERPROFILE%\source\repos', '%USERPROFILE%\Documents\GitHub', '%USERPROFILE%\Projects',
+           '%USERPROFILE%\dev', '%USERPROFILE%\Documents\Unreal Projects', '%USERPROFILE%\Documents\Visual Studio 2022\Projects']
+category = "dev-projects"
+label    = "Source code projects"
+reclaim  = { kind = "manual-review", note = "Projects can move to the workspace drives; build output inside them is listed separately." }
+
+[[area]]
+id       = "dev.unreal_project_output"
+paths    = ['%USERPROFILE%\Documents\Unreal Projects\*\Intermediate', '%USERPROFILE%\Documents\Unreal Projects\*\DerivedDataCache',
+            '%USERPROFILE%\Documents\Unreal Projects\*\Binaries']
+category = "build-artifacts"
+label    = "Unreal project build output and derived data"
+reclaim  = { kind = "clean-rule", ref = "dev.unreal" }
+
+# ---- Browsers and app caches ------------------------------------------------------------------
+
+[[area]]
+id       = "browser.profiles"
+paths    = ['%LOCALAPPDATA%\Google\Chrome\User Data', '%LOCALAPPDATA%\Microsoft\Edge\User Data',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data', '%APPDATA%\Mozilla\Firefox\Profiles',
+            '%LOCALAPPDATA%\Mozilla\Firefox\Profiles']
+category = "apps"
+label    = "Browser profiles (history, extensions, site data)"
+reclaim  = { kind = "manual-review", note = "Site data can be cleared per site in the browser's settings; never removed by MyClean." }
+
+[[area]]
+id       = "browser.chrome_ai_model"
+paths    = ['%LOCALAPPDATA%\Google\Chrome\User Data\OptGuideOnDeviceModel']
+category = "browser-caches"
+label    = "Chrome on-device AI model"
+reclaim  = { kind = "manual-review", note = "Disable 'Enables optimization guide on device' in chrome://flags to remove it; Chrome downloads it again while enabled." }
+
+[[area]]
+id       = "browser.service_worker_cache"
+paths    = ['%LOCALAPPDATA%\Google\Chrome\User Data\*\Service Worker', '%LOCALAPPDATA%\Microsoft\Edge\User Data\*\Service Worker',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*\Service Worker']
+category = "browser-caches"
+label    = "Browser service worker caches of web sites"
+reclaim  = { kind = "manual-review", note = "Cleared with the site data of each site in the browser's settings. No cleaning rule covers it yet." }
+
+[[area]]
+id       = "browser.chrome_cache"
+paths    = ['%LOCALAPPDATA%\Google\Chrome\User Data\*\Cache', '%LOCALAPPDATA%\Google\Chrome\User Data\*\Code Cache',
+            '%LOCALAPPDATA%\Google\Chrome\User Data\*\GPUCache', '%LOCALAPPDATA%\Google\Chrome\User Data\ShaderCache',
+            '%LOCALAPPDATA%\Google\Chrome\User Data\GrShaderCache', '%LOCALAPPDATA%\Google\Chrome\User Data\GraphiteDawnCache']
+category = "browser-caches"
+label    = "Chrome cache"
+reclaim  = { kind = "clean-rule", ref = "browser.chrome.cache" }
+
+[[area]]
+id       = "browser.edge_cache"
+paths    = ['%LOCALAPPDATA%\Microsoft\Edge\User Data\*\Cache', '%LOCALAPPDATA%\Microsoft\Edge\User Data\*\Code Cache',
+            '%LOCALAPPDATA%\Microsoft\Edge\User Data\*\GPUCache', '%LOCALAPPDATA%\Microsoft\Edge\User Data\ShaderCache',
+            '%LOCALAPPDATA%\Microsoft\Edge\User Data\GrShaderCache', '%LOCALAPPDATA%\Microsoft\Edge\User Data\GraphiteDawnCache']
+category = "browser-caches"
+label    = "Edge cache"
+reclaim  = { kind = "clean-rule", ref = "browser.edge.cache" }
+
+[[area]]
+id       = "browser.brave_cache"
+paths    = ['%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*\Cache',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*\Code Cache',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*\GPUCache',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\ShaderCache',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\GrShaderCache',
+            '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\GraphiteDawnCache']
+category = "browser-caches"
+label    = "Brave cache"
+reclaim  = { kind = "clean-rule", ref = "browser.brave.cache" }
+
+[[area]]
+id       = "browser.firefox_cache"
+paths    = ['%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\cache2', '%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\startupCache']
+category = "browser-caches"
+label    = "Firefox cache"
+reclaim  = { kind = "clean-rule", ref = "browser.firefox.cache" }
+
+[[area]]
+id       = "apps.discord_cache"
+paths    = ['%APPDATA%\discord\Cache', '%APPDATA%\discord\Code Cache', '%APPDATA%\discord\GPUCache',
+            '%APPDATA%\discord\Crashpad']
+category = "app-caches"
+label    = "Discord cache"
+reclaim  = { kind = "clean-rule", ref = "electron.discord" }
+
+[[area]]
+id       = "apps.vscode_cache"
+paths    = ['%APPDATA%\Code\Cache', '%APPDATA%\Code\Code Cache', '%APPDATA%\Code\GPUCache', '%APPDATA%\Code\Crashpad']
+category = "app-caches"
+label    = "VS Code cache"
+reclaim  = { kind = "clean-rule", ref = "electron.vscode" }
+
+[[area]]
+id       = "apps.slack_cache"
+paths    = ['%APPDATA%\Slack\Cache', '%APPDATA%\Slack\Code Cache', '%APPDATA%\Slack\GPUCache', '%APPDATA%\Slack\Crashpad']
+category = "app-caches"
+label    = "Slack cache"
+reclaim  = { kind = "clean-rule", ref = "electron.slack" }
+
+[[area]]
+id       = "apps.teams_classic_cache"
+paths    = ['%APPDATA%\Microsoft\Teams\Cache', '%APPDATA%\Microsoft\Teams\Code Cache', '%APPDATA%\Microsoft\Teams\GPUCache',
+            '%APPDATA%\Microsoft\Teams\Crashpad']
+category = "app-caches"
+label    = "Teams (classic) cache"
+reclaim  = { kind = "clean-rule", ref = "electron.teams_classic" }
+
+[[area]]
+id       = "apps.teams_cache"
+paths    = ['%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\*\Cache',
+            '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\*\Code Cache',
+            '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\*\GPUCache']
+category = "app-caches"
+label    = "Teams cache"
+reclaim  = { kind = "clean-rule", ref = "electron.teams" }
+
+[[area]]
+id       = "apps.adobe"
+paths    = ['%LOCALAPPDATA%\Adobe', '%APPDATA%\Adobe']
+category = "app-caches"
+label    = "Adobe app data and caches (including Substance 3D)"
+reclaim  = { kind = "manual-review", note = "Each Adobe app clears its cache in its preferences." }
+
+[[area]]
+id       = "apps.adobe_media_cache"
+paths    = ['%APPDATA%\Adobe\Common\Media Cache Files', '%APPDATA%\Adobe\Common\Media Cache']
+category = "app-caches"
+label    = "Adobe media cache (Premiere Pro, After Effects)"
+reclaim  = { kind = "manual-review", note = "Preferences > Media Cache > Delete; it is rebuilt when footage is opened." }
+
+[[area]]
+id       = "apps.user_temp"
+paths    = ['%TEMP%']
+category = "app-caches"
+label    = "Your temporary files"
+reclaim  = { kind = "clean-rule", ref = "windows.temp.user", note = "Relocating TEMP (relocation 'temp') keeps it off this drive for good." }
+
+[[area]]
+id       = "apps.crash_dumps"
+paths    = ['%LOCALAPPDATA%\CrashDumps']
+category = "app-caches"
+label    = "App crash dumps"
+reclaim  = { kind = "clean-rule", ref = "windows.crash_dumps" }
+
+[[area]]
+id       = "apps.wer_user"
+paths    = ['%LOCALAPPDATA%\Microsoft\Windows\WER']
+category = "app-caches"
+label    = "Your Windows error reports"
+reclaim  = { kind = "clean-rule", ref = "windows.wer.user" }
+
+[[area]]
+id       = "apps.thumbnail_cache"
+paths    = ['%LOCALAPPDATA%\Microsoft\Windows\Explorer']
+category = "app-caches"
+label    = "Thumbnail and icon caches"
+reclaim  = { kind = "clean-rule", ref = "windows.thumbnail_cache" }
+
+[[area]]
+id       = "apps.internet_cache"
+paths    = ['%LOCALAPPDATA%\Microsoft\Windows\INetCache']
+category = "app-caches"
+label    = "Internet cache of Windows components"
+reclaim  = { kind = "clean-rule", ref = "windows.internet_cache" }
+
+# ---- GPU drivers ------------------------------------------------------------------------------
+
+[[area]]
+id       = "gpu.nvidia_dxcache"
+paths    = ['%LOCALAPPDATA%\NVIDIA\DXCache', '%USERPROFILE%\AppData\LocalLow\NVIDIA\PerDriverVersion\DXCache']
+category = "app-caches"
+label    = "NVIDIA DirectX shader cache"
+reclaim  = { kind = "clean-rule", ref = "gpu.nvidia.dxcache", note = "Games rebuild it, with some stutter at first." }
+
+[[area]]
+id       = "gpu.nvidia_glcache"
+paths    = ['%LOCALAPPDATA%\NVIDIA\GLCache', '%USERPROFILE%\AppData\LocalLow\NVIDIA\PerDriverVersion\GLCache']
+category = "app-caches"
+label    = "NVIDIA OpenGL and Vulkan shader cache"
+reclaim  = { kind = "clean-rule", ref = "gpu.nvidia.glcache", note = "Games rebuild it, with some stutter at first." }
+
+[[area]]
+id       = "gpu.d3dscache"
+paths    = ['%LOCALAPPDATA%\D3DSCache']
+category = "app-caches"
+label    = "DirectX shader cache"
+reclaim  = { kind = "clean-rule", ref = "gpu.d3dscache" }
+
+[[area]]
+id       = "gpu.amd_cache"
+paths    = ['%LOCALAPPDATA%\AMD\DxCache', '%LOCALAPPDATA%\AMD\DxcCache', '%LOCALAPPDATA%\AMD\VkCache']
+category = "app-caches"
+label    = "AMD shader cache"
+reclaim  = { kind = "clean-rule", ref = "gpu.amd.dxcache", note = "Games rebuild it, with some stutter at first." }
+
+[[area]]
+id       = "gpu.driver_installers"
+paths    = ['?:\NVIDIA', '?:\AMD', '%ProgramData%\NVIDIA Corporation\Downloader', '%ProgramFiles%\NVIDIA Corporation\Installer2',
+            '%ProgramData%\NVIDIA Corporation\NVIDIA App\UpdateFramework']
+category = "app-caches"
+label    = "Graphics driver installer files"
+reclaim  = { kind = "manual-review", note = "Left behind by driver installs; not needed once the driver is installed." }
+
+# ---- Your files -------------------------------------------------------------------------------
+
+[[area]]
+id       = "user.documents"
+paths    = ['%USERPROFILE%\Documents', '%USERPROFILE%\Desktop', '%PUBLIC%\Documents']
+category = "user-documents"
+label    = "Documents and desktop (yours and the shared Public Documents)"
+reclaim  = { kind = "manual-review", note = "Move or archive what you do not need on this drive." }
+
+[[area]]
+id       = "user.media"
+paths    = ['%USERPROFILE%\Pictures', '%USERPROFILE%\Videos', '%USERPROFILE%\Music']
+category = "user-media"
+label    = "Your pictures, videos and music"
+reclaim  = { kind = "manual-review", note = "Move libraries to another drive: right-click the folder > Properties > Location." }
+
+[[area]]
+id       = "user.downloads"
+paths    = ['%USERPROFILE%\Downloads']
+category = "downloads"
+label    = "Your downloads"
+reclaim  = { kind = "manual-review", note = "Old installers and archives are usually safe to delete after a look." }

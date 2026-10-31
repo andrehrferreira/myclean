@@ -1,8 +1,12 @@
 #include "cli/cli.hpp"
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <future>
+#include <ios>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -52,12 +56,17 @@ std::string nobody() {
   return "myclean-cli-test-nobody-" + std::to_string(::GetCurrentProcessId());
 }
 
+const os::IClock& system_clock() {
+  static const os::SystemClock clock;
+  return clock;
+}
+
 Outcome run_cli(const std::vector<std::string>& args, const std::string& input = {},
-                std::chrono::milliseconds timeout = 5s) {
+                std::chrono::milliseconds timeout = 5s, const os::IClock& clock = system_clock()) {
   std::istringstream in(input);
   std::ostringstream out;
   std::ostringstream err;
-  const int code = run(args, in, out, err, timeout);
+  const int code = run(args, in, out, err, clock, timeout);
   return Outcome{.code = code, .out = out.str(), .err = err.str()};
 }
 
@@ -92,7 +101,7 @@ class CliTest : public ::testing::Test {
 
   [[nodiscard]] Outcome cli(std::vector<std::string> args, const std::string& input = {}) const {
     args.insert(args.begin(), {"--pipe", pipe_token(pipe_)});
-    return run_cli(args, input);
+    return run_cli(args, input, 5s, clock_);
   }
 
   [[nodiscard]] const std::wstring& pipe() const { return pipe_; }
@@ -228,7 +237,7 @@ class CliPhase1Test : public ::testing::Test {
 
   [[nodiscard]] Outcome cli(std::vector<std::string> args, const std::string& input = {}) const {
     args.insert(args.begin(), {"--pipe", pipe_token(pipe_)});
-    return run_cli(args, input);
+    return run_cli(args, input, 5s, clock_);
   }
 
  private:
@@ -331,12 +340,82 @@ TEST(CliStatusTest, UsageErrorsExitThree) {
                                              {"explain", "notepad"},
                                              {"explain", "-4"},
                                              {"disks", "extra"},
-                                             {"metrics", "query", "cpu.utility", "--hours"}}) {
+                                             {"metrics", "query", "cpu.utility", "--hours"},
+                                             {"map", "C:", "D:"},
+                                             {"map", "--min-gb", "one"},
+                                             {"map", "--min-gb", "-1"},
+                                             {"map", "--depth", "-2"}}) {
     const Outcome outcome = run_cli(args);
     EXPECT_EQ(outcome.code, exit_usage) << (args.empty() ? "(none)" : args.front());
     EXPECT_TRUE(outcome.out.empty());
     EXPECT_FALSE(outcome.err.empty());
   }
+}
+
+// A folder of its own under %TEMP%\myclean-it, removed afterwards.
+class MapSandbox {
+ public:
+  MapSandbox()
+      : path_(std::filesystem::temp_directory_path() / "myclean-it" /
+              ("map-cli-" + std::to_string(::GetCurrentProcessId()) + "-" +
+               ::testing::UnitTest::GetInstance()->current_test_info()->name())) {
+    std::filesystem::remove_all(path_);
+    std::filesystem::create_directories(path_ / "work" / "deep");
+    write(path_ / "work" / "deep" / "data.bin", 200'000);
+    write(path_ / "loose.bin", 50'000);
+  }
+  MapSandbox(const MapSandbox&) = delete;
+  MapSandbox& operator=(const MapSandbox&) = delete;
+  MapSandbox(MapSandbox&&) = delete;
+  MapSandbox& operator=(MapSandbox&&) = delete;
+  ~MapSandbox() {
+    std::error_code ignored;
+    std::filesystem::remove_all(path_, ignored);
+  }
+
+  [[nodiscard]] std::string utf8() const {
+    const std::u8string text = path_.u8string();
+    return {text.begin(), text.end()};
+  }
+
+ private:
+  static void write(const std::filesystem::path& file, std::size_t size) {
+    std::ofstream(file, std::ios::binary) << std::string(size, 'x');
+  }
+
+  std::filesystem::path path_;
+};
+
+TEST(CliMapTest, MapsAFolderWithoutTheService) {
+  const MapSandbox sandbox;
+  const Outcome json = run_cli({"map", sandbox.utf8(), "--json", "--min-gb", "0", "--depth", "1",
+                                "--data", MYCLEAN_DATA_DIR});
+  ASSERT_EQ(json.code, exit_ok) << json.err;
+  const Json map = document(json);
+  EXPECT_EQ(map.at("root"), sandbox.utf8());
+  EXPECT_FALSE(map.at("volume_root").get<bool>());
+  EXPECT_TRUE(map.at("not_visible").is_null());
+  EXPECT_TRUE(map.at("volume").is_object());
+  EXPECT_GE(map.at("scanned").get<std::uint64_t>(), 250'000U);
+  // %TEMP% is an area of data/attribution.toml: everything is explained, as the user's temp.
+  EXPECT_EQ(map.at("explained"), map.at("scanned"));
+  EXPECT_EQ(map.at("tree").at("area"), "apps.user_temp");
+  EXPECT_EQ(map.at("tree").at("children").size(), 2U);  // depth 1: "work" and "loose.bin"
+
+  const Outcome text =
+      run_cli({"map", sandbox.utf8(), "--min-gb", "0", "--data", MYCLEAN_DATA_DIR});
+  ASSERT_EQ(text.code, exit_ok) << text.err;
+  EXPECT_NE(text.out.find("Your temporary files (clean rule windows.temp.user)"), std::string::npos)
+      << text.out;
+  EXPECT_NE(text.err.find("scanning:"), std::string::npos);
+}
+
+TEST(CliMapTest, ReportsAMissingAttributionFile) {
+  const MapSandbox sandbox;
+  const Outcome outcome = run_cli({"map", sandbox.utf8(), "--data", sandbox.utf8()});
+  EXPECT_EQ(outcome.code, exit_unavailable);
+  EXPECT_TRUE(outcome.out.empty());
+  EXPECT_NE(outcome.err.find("attribution.toml"), std::string::npos) << outcome.err;
 }
 
 TEST_F(CliTest, McpAnswersFromTheService) {

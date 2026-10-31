@@ -37,5 +37,6 @@ int wmain(int argc, wchar_t** argv) {
   for (const wchar_t* arg : raw.subspan(1)) {
     args.push_back(utf8(arg));
   }
-  return myclean::cli::run(args, std::cin, std::cout, std::cerr);
+  const myclean::os::SystemClock clock;
+  return myclean::cli::run(args, std::cin, std::cout, std::cerr, clock);
 }

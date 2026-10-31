@@ -19,5 +19,6 @@ namespace myclean::cli::text {
 [[nodiscard]] std::string disks(const nlohmann::json& health);     // disks.health
 [[nodiscard]] std::string alerts(const nlohmann::json& list);      // alerts.list
 [[nodiscard]] std::string freezes(const nlohmann::json& summary);  // input.summary
+[[nodiscard]] std::string map(const nlohmann::json& map);          // map::DiskMap (core/map/json)
 
 }  // namespace myclean::cli::text

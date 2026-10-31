@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <istream>
 #include <memory>
@@ -20,6 +21,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cli/map_command.hpp"
 #include "cli/text.hpp"
 #include "core/ipc/alerts.hpp"
 #include "core/ipc/disk_health.hpp"
@@ -59,8 +61,8 @@ const std::string* find_option(const CommandLine& line, std::string_view name) {
 }
 
 Result<CommandLine> parse(std::span<const std::string> args) {
-  constexpr std::array<std::string_view, 6> valued{"pipe",   "sort",  "limit",
-                                                   "entity", "hours", "max-points"};
+  constexpr std::array<std::string_view, 9> valued{
+      "pipe", "sort", "limit", "entity", "hours", "max-points", "min-gb", "depth", "data"};
   CommandLine line;
   for (std::size_t index = 0; index < args.size(); ++index) {
     const std::string& arg = args[index];
@@ -153,16 +155,16 @@ std::string render_volumes(const Json& reply) {
 }
 
 // metrics query <metric> [--entity <entity>] [--hours <n>] [--max-points <n>]
-int query(const CommandLine& line, const mcp::Caller& call, std::ostream& out, std::ostream& err) {
+int query(const CommandLine& line, const mcp::Caller& call, const os::IClock& clock,
+          std::ostream& out, std::ostream& err) {
   const Result<std::optional<double>> hours = option<double>(line, "hours");
   const Result<std::optional<std::int64_t>> points = option<std::int64_t>(line, "max-points");
   if (!hours || !points) {
     err << "myclean: " << (hours ? points.error() : hours.error()).message << '\n';
     return exit_usage;
   }
-  const auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
-                       .count();
+  const auto now =
+      std::chrono::duration_cast<std::chrono::seconds>(clock.now().time_since_epoch()).count();
   const auto span = static_cast<std::int64_t>(hours->value_or(1.0) * 3600.0);
   const std::string* entity = find_option(line, "entity");
   return show(
@@ -201,8 +203,31 @@ int explain(const CommandLine& line, const mcp::Caller& call, std::ostream& out,
               &text::explain);
 }
 
-int dispatch(const CommandLine& line, const mcp::Caller& call, std::istream& in, std::ostream& out,
-             std::ostream& err) {
+// map [<volume-or-path>] [--min-gb <n>] [--depth <n>] [--data <dir>]
+int map_volume(const CommandLine& line, std::ostream& out, std::ostream& err) {
+  const Result<std::optional<double>> min_gb = option<double>(line, "min-gb");
+  const Result<std::optional<int>> depth = option<int>(line, "depth");
+  if (!min_gb || !depth) {
+    err << "myclean: " << (min_gb ? depth.error() : min_gb.error()).message << '\n';
+    return exit_usage;
+  }
+  MapRequest request{
+      .min_gb = min_gb->value_or(1.0), .depth = depth->value_or(6), .json = line.json};
+  if (!(request.min_gb >= 0.0) || request.depth < 0) {
+    err << "myclean: map: --min-gb and --depth must not be negative\n";
+    return exit_usage;
+  }
+  if (line.words.size() == 2) {
+    request.target = line.words[1];
+  }
+  if (const std::string* data = find_option(line, "data"); data != nullptr) {
+    request.data_dir = std::filesystem::path{std::u8string(data->begin(), data->end())};
+  }
+  return map_command(request, out, err);
+}
+
+int dispatch(const CommandLine& line, const mcp::Caller& call, const os::IClock& clock,
+             std::istream& in, std::ostream& out, std::ostream& err) {
   const std::vector<std::string>& words = line.words;
   const std::string& command = words.front();
   if (command == "status" && words.size() == 1) {
@@ -238,10 +263,9 @@ int dispatch(const CommandLine& line, const mcp::Caller& call, std::istream& in,
                 &text::system);
   }
   if (command == "metrics" && words.size() == 3 && words[1] == "query") {
-    return query(line, call, out, err);
+    return query(line, call, clock, out, err);
   }
   if (command == "mcp" && words.size() == 1) {
-    const os::SystemClock clock;
     mcp::Server server(call, clock, MYCLEAN_VERSION);
     server.serve(in, out);
     return exit_ok;
@@ -269,6 +293,10 @@ std::string_view usage() {
          "  metrics latest              the newest CPU, memory, disk and GPU values\n"
          "  metrics query <metric> [--entity <entity>] [--hours <n>] [--max-points <n>]\n"
          "                              history of one metric over the last hours\n"
+         "  map [<volume-or-path>] [--min-gb <n>] [--depth <n>] [--data <dir>]\n"
+         "                              scans here (no service needed, low priority) and\n"
+         "                              explains what uses the space and how to reclaim it;\n"
+         "                              default: the system drive, 1 GiB, 6 levels\n"
          "  mcp                         MCP server on stdin/stdout with read-only tools\n"
          "--json writes one JSON document to stdout; --pipe <name> talks to \\\\.\\pipe\\<name>\n"
          "instead of the service's pipe. Nothing here changes the system.\n";
@@ -304,11 +332,14 @@ mcp::Caller pipe_caller(std::wstring pipe, std::chrono::milliseconds timeout) {
 }
 
 int run(std::span<const std::string> args, std::istream& in, std::ostream& out, std::ostream& err,
-        std::chrono::milliseconds timeout) {
+        const os::IClock& clock, std::chrono::milliseconds timeout) {
   const Result<CommandLine> line = parse(args);
   if (!line) {
     err << "myclean: " << line.error().message << '\n' << usage();
     return exit_usage;
+  }
+  if (line->words.front() == "map" && line->words.size() <= 2) {
+    return map_volume(*line, out, err);  // runs here, without the service
   }
   std::wstring pipe(platform::default_pipe_name);
   if (const std::string* name = find_option(*line, "pipe"); name != nullptr) {
@@ -318,7 +349,7 @@ int run(std::span<const std::string> args, std::istream& in, std::ostream& out, 
     }
     pipe = LR"(\\.\pipe\)" + std::wstring(name->begin(), name->end());
   }
-  return dispatch(*line, pipe_caller(std::move(pipe), timeout), in, out, err);
+  return dispatch(*line, pipe_caller(std::move(pipe), timeout), clock, in, out, err);
 }
 
 }  // namespace myclean::cli

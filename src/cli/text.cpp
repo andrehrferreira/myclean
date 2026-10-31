@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -340,6 +342,203 @@ std::string freezes(const Json& summary) {
       out += "\n";
     }
   }
+  return out;
+}
+
+namespace {
+
+// How an area's space can be reclaimed, from its "reclaim" object.
+std::string how(const Json& reclaim) {
+  const std::string kind = text_of(reclaim, "kind");
+  const std::string ref = text_of(reclaim, "ref");
+  if (kind == "clean-rule") {
+    return "clean rule " + ref;
+  }
+  if (kind == "handler") {
+    return "cleanup handler " + ref;
+  }
+  if (kind == "relocate" || kind == "setting") {
+    return kind + " " + ref;
+  }
+  if (kind == "manual-review") {
+    return "your review";
+  }
+  return kind == "uninstall" ? "uninstall" : "needed as it is";
+}
+
+// The areas of a map by id.
+class AreaIndex {
+ public:
+  explicit AreaIndex(const Json& map) {
+    const auto found = map.find("areas");
+    if (found == map.end() || !found->is_array()) {
+      return;
+    }
+    for (const Json& area : *found) {
+      areas_.emplace(text_of(area, "id"), &area);
+    }
+  }
+
+  // "[category] label (how)" for an area id; empty for null or an unknown id.
+  [[nodiscard]] std::string describe(const Json& id) const {
+    const auto found = id.is_string() ? areas_.find(id.get<std::string>()) : areas_.end();
+    if (found == areas_.end()) {
+      return {};
+    }
+    const Json& area = *found->second;
+    return std::format("[{}] {} ({})", text_of(area, "category"), text_of(area, "label"),
+                       how(area.value("reclaim", Json::object())));
+  }
+
+ private:
+  std::map<std::string, const Json*, std::less<>> areas_;
+};
+
+std::string leaf_of(const std::string& path) {
+  const std::size_t separator = path.find_last_of("\\/");
+  return separator == std::string::npos || separator + 1 == path.size()
+             ? path
+             : path.substr(separator + 1);
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): the depth is bounded by the map's depth option
+void tree_lines(const Json& node, int level, const AreaIndex& areas, std::string& out) {
+  const std::string path = text_of(node, "path");
+  std::string line = std::format("{:>12}  {}{}", bytes(number(node, "size")),
+                                 std::string(static_cast<std::size_t>(level) * 2, ' '),
+                                 level == 0 ? path : leaf_of(path));
+  if (node.value("matched_here", false)) {
+    line += "  " + areas.describe(node.value("area", Json()));
+  } else if (!node.value("area", Json()).is_string() && number(node, "unexplained") > 0.0) {
+    line += "  unexplained " + bytes(number(node, "unexplained"));
+  }
+  if (number(node, "apparent") > number(node, "size")) {
+    line += "  (" + bytes(number(node, "apparent")) + " counting hard links)";
+  }
+  out += line + "\n";
+  if (const auto children = node.find("children"); children != node.end()) {
+    for (const Json& child : *children) {
+      tree_lines(child, level + 1, areas, out);
+    }
+  }
+}
+
+std::string percent_of(std::optional<double> part, std::optional<double> whole) {
+  return part && whole && *whole > 0.0 ? std::format("{:.0f} %", *part * 100.0 / *whole) : "n/a";
+}
+
+// The reclaimable areas by kind, with how and the note of each.
+std::string reclaim_lines(const Json& map) {
+  std::string out;
+  out += std::format(
+      "\nReclaimable: up to {} (each action previews the exact amount before it runs)\n",
+      bytes(number(map, "reclaimable")));
+  for (const std::string_view kind :
+       {"setting", "relocate", "clean-rule", "handler", "uninstall"}) {
+    for (const Json& area : map.value("areas", Json::array())) {
+      const Json& reclaim = area.value("reclaim", Json::object());
+      if (text_of(reclaim, "kind") != kind || number(area, "size").value_or(0.0) <= 0.0) {
+        continue;
+      }
+      out += std::format("  {:>12}  {}: {}\n", bytes(number(area, "size")), how(reclaim),
+                         text_of(area, "label"));
+      if (!text_of(reclaim, "note").empty()) {
+        out += std::string(16, ' ') + text_of(reclaim, "note") + "\n";
+      }
+    }
+  }
+  out += std::format("Needs your review: {}\n", bytes(number(map, "review")));
+  return out;
+}
+
+// The used space the scan could not see and the folders it could not read.
+std::string not_visible_lines(const Json& map, const AreaIndex& areas) {
+  std::string out;
+  out += "\nNot visible:\n";
+  if (map.value("not_visible", Json()).is_number()) {
+    out += std::format(
+        "  {} of the used space was not seen by this scan. MyClean does not guess what it is;\n"
+        "  it is made of the folders below that could not be read (restore points, other\n"
+        "  users' profiles, protected system folders), NTFS metadata ($MFT, $LogFile) and\n"
+        "  anything else a folder listing cannot see. Run as administrator to see more.\n",
+        bytes(number(map, "not_visible")));
+  } else {
+    out += "  (the volume's used space is known only when a whole volume is mapped)\n";
+  }
+  const Json& unreadable = map.value("unreadable", Json::array());
+  out += std::format("  {} folders could not be read{}\n", unreadable.size(),
+                     unreadable.empty() ? "." : ":");
+  constexpr std::size_t shown = 30;
+  for (std::size_t index = 0; index < unreadable.size() && index < shown; ++index) {
+    const Json& folder = unreadable[index];
+    out += std::format("    {}  ({})  {}\n", text_of(folder, "path"), text_of(folder, "error"),
+                       areas.describe(folder.value("area", Json())));
+  }
+  if (unreadable.size() > shown) {
+    out += std::format("    ... and {} more (--json lists every one)\n", unreadable.size() - shown);
+  }
+  return out;
+}
+
+}  // namespace
+
+std::string map(const Json& map) {
+  const AreaIndex areas(map);
+  const std::string minimum = bytes(number(map, "min_size"));
+  std::string out = "Disk map of " + text_of(map, "root");
+  if (const Json& volume = map.value("volume", Json()); volume.is_object()) {
+    out += std::format(" (volume {}, {} used, {} free)", bytes(number(volume, "total")),
+                       bytes(number(volume, "used")), bytes(number(volume, "free")));
+  }
+  out += map.value("cancelled", false) ? " - the scan stopped early\n" : "\n";
+  out += std::format("  scanned     {:>12}", bytes(number(map, "scanned")));
+  if (number(map, "apparent") > number(map, "scanned")) {
+    out += std::format("  ({} counting every hard link)", bytes(number(map, "apparent")));
+  }
+  out += std::format("\n  explained   {:>12}  ({} of the scan)\n  unexplained {:>12}\n",
+                     bytes(number(map, "explained")),
+                     percent_of(number(map, "explained"), number(map, "scanned")),
+                     bytes(number(map, "unexplained")));
+  if (map.value("not_visible", Json()).is_number()) {
+    out += std::format("  not visible {:>12}  (used space the scan could not see; see the end)\n",
+                       bytes(number(map, "not_visible")));
+  }
+
+  out += std::format("\nBy category:\n  {:<18} {:>12} {:>14}\n", "category", "size", "reclaimable");
+  for (const Json& category : map.value("categories", Json::array())) {
+    out += std::format("  {:<18} {:>12} {:>14}\n", text_of(category, "category"),
+                       bytes(number(category, "size")), bytes(number(category, "reclaimable")));
+  }
+  out += std::format("  {:<18} {:>12}\n", "(unexplained)", bytes(number(map, "unexplained")));
+
+  out += reclaim_lines(map);
+
+  out += std::format("\nLargest explained places (at least {}):\n", minimum);
+  for (const Json& match : map.value("matches", Json::array())) {
+    if (number(match, "size") < number(map, "min_size")) {
+      break;
+    }
+    out += std::format("  {:>12}  {}  {}\n", bytes(number(match, "size")), text_of(match, "path"),
+                       areas.describe(match.value("area", Json())));
+  }
+
+  out += std::format("\nTree (folders and files of at least {}, {} levels):\n", minimum,
+                     fixed(number(map, "depth"), 0));
+  if (const auto tree = map.find("tree"); tree != map.end()) {
+    tree_lines(*tree, 0, areas, out);
+  }
+
+  out += std::format("\nUnexplained folders (at least {} that no area explains):\n", minimum);
+  const Json& unexplained = map.value("unexplained_folders", Json::array());
+  if (unexplained.empty()) {
+    out += "  none\n";
+  }
+  for (const Json& folder : unexplained) {
+    out += std::format("  {:>12}  {}\n", bytes(number(folder, "unexplained")),
+                       text_of(folder, "path"));
+  }
+
+  out += not_visible_lines(map, areas);
   return out;
 }
 

@@ -4,12 +4,17 @@ myclean_add_library(cli
   SOURCES
     cli.cpp
     cli.hpp
+    map_command.cpp
+    map_command.hpp
     text.cpp
     text.hpp
   DEPENDS
+    myclean::map
     myclean::mcp
     myclean::os
-    myclean::platform_ipc)
+    myclean::platform_clean
+    myclean::platform_ipc
+    myclean::platform_scan)
 target_compile_definitions(myclean_cli PRIVATE MYCLEAN_VERSION="${PROJECT_VERSION}")
 
 add_executable(myclean main.cpp)
