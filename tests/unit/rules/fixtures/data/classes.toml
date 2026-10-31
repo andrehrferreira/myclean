@@ -1,0 +1,42 @@
+# Test fixture: governor process classes in the shipped format. The first match wins.
+
+[[match]]
+id     = "system.myclean"
+class  = "system"
+image  = ["MyClean.exe", "MyCleanTray.exe"]
+
+[[match]]
+id     = "system.windows"
+class  = "system"
+image  = ["csrss.exe", "dwm.exe", "winlogon.exe", "lsass.exe", "svchost.exe", "audiodg.exe"]
+
+[[match]]
+id        = "game.library"
+class     = "game"
+path_root = ['steamapps\common', 'E:\Games']
+
+[[match]]
+id           = "test.node"
+class        = "test"
+image        = ["node.exe"]
+command_line = '\b(jest|vitest|playwright)\b'
+
+[[match]]
+id           = "build.node"
+class        = "build"
+image        = ["node.exe"]
+command_line = '\b(webpack|vite|tsc|esbuild|next build)\b'
+
+[[match]]
+id    = "build.native"
+class = "build"
+image = ["cl.exe", "link.exe", "lld-link.exe", "clang*.exe", "msbuild.exe", "ninja.exe",
+         "cmake.exe", "rustc.exe", "cargo.exe"]
+
+[caps.build]
+cpu_percent = 75
+commit_gib  = 96
+
+[caps.test]
+cpu_percent = 75
+commit_gib  = 64

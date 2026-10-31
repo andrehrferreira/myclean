@@ -1,0 +1,24 @@
+{
+  "entries": [
+    {
+      "id": "windows.svchost",
+      "image": "svchost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^c:\\\\windows\\\\system32\\\\",
+      "description": "Hosts Windows services; many copies run at once.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "microsoft.powertoys.keyboard-manager",
+      "image": "PowerToys.KeyboardManagerEngine.exe",
+      "signer": "Microsoft Corporation",
+      "path": "\\\\PowerToys\\\\",
+      "description": "Part of PowerToys: remaps keys and shortcuts. A known cause of input delays.",
+      "category": "utility",
+      "needed_at_startup": false,
+      "safe_to_remove": true
+    }
+  ]
+}

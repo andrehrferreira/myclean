@@ -1,0 +1,29 @@
+# Test fixture: developer artifact and package-manager rules in the shipped format.
+
+[[rule]]
+id          = "dev.node.node_modules"
+category    = "dev-artifacts"
+tier        = "auto"
+scope       = "user"                 # runs in tray process, user token
+project     = { marker = "package.json" }
+targets     = ["node_modules", ".next", ".turbo", ".parcel-cache"]
+require     = { git_ignored = true, inactive_days = 30, not_in_use = true }
+strategy    = "delete"               # delete | quarantine | native | handler
+
+[[rule]]
+id       = "dev.rust.target"
+category = "dev-artifacts"
+tier     = "ask"
+scope    = "user"
+project  = { marker = "Cargo.toml" }
+targets  = ["target"]
+require  = { git_ignored = true, not_in_use = true }
+strategy = "quarantine"
+
+[[rule]]
+id       = "pkg.pnpm.store"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "pnpm store prune"
