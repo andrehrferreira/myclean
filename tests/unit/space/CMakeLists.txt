@@ -1,0 +1,11 @@
+myclean_add_test(space
+  SOURCES
+    downloads_test.cpp
+    duplicates_test.cpp
+    installers_test.cpp
+    json_test.cpp
+    scanner_test.cpp
+    space_fakes.hpp
+    top_test.cpp
+  DEPENDS
+    myclean::space)
