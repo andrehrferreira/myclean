@@ -1,0 +1,216 @@
+# Windows temp folders, crash data and system areas (cleaning spec; analysis F-011, F-016).
+# Format: src/core/rules/schema.hpp. Targets are absolute patterns: %VARIABLES% are expanded,
+# '*' and '?' match within one path component, and every entry the last component matches is
+# one item. System areas go through their Windows cleanup handler or DISM, never through
+# MyClean's own delete path. `handler` is the handler's key name under
+# HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches; handlers that look at
+# the owner's profile are scope "user" (run in the tray), the others "system" (run in the
+# service); see docs/spikes/X3-cleanup-handlers.md. The DownloadsFolder (the owner's Downloads)
+# and "User file versions" (File History) handlers are never offered.
+
+[[rule]]
+id       = "windows.temp.user"
+category = "windows"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%TEMP%\*']
+require  = { min_age_days = 2, not_in_use = true }
+
+[[rule]]
+id       = "windows.temp.system"
+category = "windows"
+tier     = "auto"
+scope    = "system"
+strategy = "delete"
+targets  = ['%WINDIR%\Temp\*']
+require  = { min_age_days = 2, not_in_use = true }
+
+[[rule]]
+id       = "windows.crash_dumps"
+category = "windows"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\CrashDumps\*']
+require  = { min_age_days = 7, not_in_use = true }
+
+[[rule]]
+id       = "windows.wer.user"
+category = "windows"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\Microsoft\Windows\WER\ReportArchive\*',
+            '%LOCALAPPDATA%\Microsoft\Windows\WER\ReportQueue\*']
+require  = { min_age_days = 7, not_in_use = true }
+
+# The deny-list protects %WINDIR% except Temp, so the engine drops these items with
+# "deny_list:windir" until the deny-list allows this folder; no Windows handler covers it.
+[[rule]]
+id       = "windows.live_kernel_reports"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "delete"
+targets  = ['%WINDIR%\LiveKernelReports\*']
+require  = { min_age_days = 7, not_in_use = true }
+
+# Explorer keeps these open while it runs, so they are selected only when it does not.
+[[rule]]
+id       = "windows.icon_cache"
+category = "windows"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\Microsoft\Windows\Explorer\iconcache_*.db']
+require  = { not_in_use = true }
+
+[[rule]]
+id       = "windows.thumbnail_cache"
+category = "windows"
+tier     = "ask"
+scope    = "user"
+strategy = "handler"
+handler  = "Thumbnail Cache"
+
+# Legacy Internet Explorer / WebView INetCache of the owner.
+[[rule]]
+id       = "windows.internet_cache"
+category = "windows"
+tier     = "ask"
+scope    = "user"
+strategy = "handler"
+handler  = "Internet Cache Files"
+
+[[rule]]
+id       = "windows.wer.system"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Windows Error Reporting Files"
+
+[[rule]]
+id       = "windows.memory_dumps"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "System error memory dump files"
+
+[[rule]]
+id       = "windows.minidumps"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "System error minidump files"
+
+[[rule]]
+id       = "windows.update_cleanup"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Update Cleanup"
+
+[[rule]]
+id       = "windows.delivery_optimization"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Delivery Optimization Files"
+
+[[rule]]
+id       = "windows.temporary_setup_files"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Temporary Setup Files"
+
+[[rule]]
+id       = "windows.setup_logs"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Setup Log Files"
+
+[[rule]]
+id       = "windows.upgrade_logs"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Windows Upgrade Log Files"
+
+[[rule]]
+id       = "windows.upgrade_discarded_files"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Upgrade Discarded Files"
+
+[[rule]]
+id       = "windows.reset_logs"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Windows Reset Log Files"
+
+[[rule]]
+id       = "windows.esd_files"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Windows ESD installation files"
+
+# Older versions of installed drivers.
+[[rule]]
+id       = "windows.driver_packages"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Device Driver Packages"
+
+# Language resources no installed language uses.
+[[rule]]
+id       = "windows.language_packs"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Language Pack"
+
+# Windows.old: removing it ends the option to roll back to the previous Windows version.
+[[rule]]
+id       = "windows.previous_installations"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "handler"
+handler  = "Previous Installations"
+
+# The owner's own deleted files.
+[[rule]]
+id       = "windows.recycle_bin"
+category = "windows"
+tier     = "ask"
+scope    = "user"
+strategy = "handler"
+handler  = "Recycle Bin"
+
+[[rule]]
+id       = "windows.component_store"
+category = "windows"
+tier     = "ask"
+scope    = "system"
+strategy = "native"
+command  = "DISM /Online /Cleanup-Image /StartComponentCleanup"

@@ -1,0 +1,41 @@
+# GPU shader caches. They regenerate at the cost of one-time stutter in games, so they are
+# "ask" (cleaning spec, "Shader caches default to ask"). Files a running game holds are skipped.
+
+[[rule]]
+id       = "gpu.nvidia.dxcache"
+category = "gpu-shader-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\NVIDIA\DXCache\*',
+            '%USERPROFILE%\AppData\LocalLow\NVIDIA\PerDriverVersion\DXCache\*']
+require  = { not_in_use = true }
+
+[[rule]]
+id       = "gpu.nvidia.glcache"
+category = "gpu-shader-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\NVIDIA\GLCache\*',
+            '%USERPROFILE%\AppData\LocalLow\NVIDIA\PerDriverVersion\GLCache\*']
+require  = { not_in_use = true }
+
+[[rule]]
+id       = "gpu.d3dscache"
+category = "gpu-shader-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\D3DSCache\*']
+require  = { not_in_use = true }
+
+[[rule]]
+id       = "gpu.amd.dxcache"
+category = "gpu-shader-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\AMD\DxCache\*', '%LOCALAPPDATA%\AMD\DxcCache\*',
+            '%LOCALAPPDATA%\AMD\VkCache\*']
+require  = { not_in_use = true }

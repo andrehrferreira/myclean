@@ -1,0 +1,94 @@
+# Global package caches (cleaning spec, "Native Prune Commands Under the User Token"; analysis
+# F-013). Each is pruned with its tool's own command, run by the tray under the owner's token:
+# deleting files under a content-addressed store breaks it. For native rules, `targets` are only
+# measured: the rule is offered when they hold anything (a rule without targets always is),
+# sized by what they hold now.
+
+[[rule]]
+id       = "pkg.pnpm.store"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "pnpm store prune"
+targets  = ['%LOCALAPPDATA%\pnpm\store']
+
+# `npm cache verify` garbage-collects unreferenced data and checks the rest.
+[[rule]]
+id       = "pkg.npm.cache"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "npm cache verify"
+targets  = ['%LOCALAPPDATA%\npm-cache']
+
+[[rule]]
+id       = "pkg.yarn.cache"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "yarn cache clean"
+targets  = ['%LOCALAPPDATA%\Yarn\Cache']
+
+[[rule]]
+id       = "pkg.pip.cache"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "pip cache purge"
+targets  = ['%LOCALAPPDATA%\pip\cache']
+
+[[rule]]
+id       = "pkg.uv.cache"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "uv cache prune"
+targets  = ['%LOCALAPPDATA%\uv\cache']
+
+[[rule]]
+id       = "pkg.nuget.locals"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "dotnet nuget locals all --clear"
+targets  = ['%USERPROFILE%\.nuget\packages', '%LOCALAPPDATA%\NuGet\v3-cache']
+
+[[rule]]
+id       = "pkg.go.cache"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "go clean -cache -modcache"
+targets  = ['%LOCALAPPDATA%\go-build', '%USERPROFILE%\go\pkg\mod']
+
+# --force: without a terminal the confirmation prompt would abort the command. Docker keeps its
+# data inside a virtual disk whose location varies, so there is no folder to measure: the rule
+# is always offered and the command reports what it frees.
+[[rule]]
+id       = "pkg.docker.prune"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "native"
+command  = "docker system prune --force"
+
+# Gradle has no prune command: version folders of its caches and wrapper distributions not
+# used for 90 days are deleted (cleaning spec, "Cache without a native command").
+[[rule]]
+id       = "pkg.gradle.versions"
+category = "package-managers"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%GRADLE_USER_HOME%\caches\?.*', '%GRADLE_USER_HOME%\caches\??.*',
+            '%GRADLE_USER_HOME%\wrapper\dists\*',
+            '%USERPROFILE%\.gradle\caches\?.*', '%USERPROFILE%\.gradle\caches\??.*',
+            '%USERPROFILE%\.gradle\wrapper\dists\*']
+require  = { min_age_days = 90, not_in_use = true }
