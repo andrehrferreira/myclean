@@ -10,5 +10,6 @@ myclean_add_test(cli
     myclean::fakes)
 # The service test helpers ("svc/fake_machine.hpp") and the telemetry fakes they use.
 target_include_directories(myclean_cli_tests PRIVATE "${PROJECT_SOURCE_DIR}/tests/unit")
-target_compile_definitions(myclean_cli_tests PRIVATE MYCLEAN_CLI_EXE="$<TARGET_FILE:myclean>")
+target_compile_definitions(myclean_cli_tests PRIVATE MYCLEAN_CLI_EXE="$<TARGET_FILE:myclean>"
+  MYCLEAN_DATA_DIR="${PROJECT_SOURCE_DIR}/data")
 add_dependencies(myclean_cli_tests myclean)

@@ -26,6 +26,10 @@ inline constexpr std::array<std::string_view, 4> protocol_versions{"2025-11-25",
 //   metrics_history   metrics.query over the last `hours`
 //   top_processes     processes.top
 //   list_volumes      volumes.list
+//   explain_process   processes.explain
+//   disk_health       disks.health
+//   list_alerts       alerts.list
+//   freeze_summary    input.summary
 // No tool can change anything: there is no tool that closes, suspends or reprioritizes a
 // process, and none that creates a plan. A tool whose service call fails returns a tool error
 // (isError) naming what is unavailable; the server keeps running.

@@ -290,6 +290,11 @@ TEST_F(AlertEngineTest, SnoozedAlertFiringAgainIsRecordedWithoutToastOrBadge) {
   const std::vector<Alert> alerts = stored();
   ASSERT_EQ(alerts.size(), 2U);
   EXPECT_EQ(alerts[0].last, noon + hours{2});
+  // The listing carries the snooze of the key, on every record of it, until it expires.
+  EXPECT_EQ(alerts[0].snoozed_until, noon + hours{24});
+  EXPECT_EQ(alerts[1].snoozed_until, noon + hours{24});
+  clock().advance(hours{22});
+  EXPECT_FALSE(stored()[0].snoozed_until.has_value());
 }
 
 TEST_F(AlertEngineTest, ToastIsShownAgainWhenTheSnoozeHasExpired) {

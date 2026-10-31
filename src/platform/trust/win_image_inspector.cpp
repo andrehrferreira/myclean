@@ -5,8 +5,10 @@
 #include <filesystem>
 #include <format>
 #include <optional>
+#include <ratio>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 // clang-format off
@@ -20,6 +22,7 @@
 // clang-format on
 
 #include "core/model/result.hpp"
+#include "core/model/units.hpp"
 #include "core/trust/trust.hpp"
 
 namespace myclean::platform {
@@ -213,6 +216,41 @@ Result<trust::Signature> WinImageInspector::verify(const std::filesystem::path& 
     }
   }
   return trust::Signature{.status = trust::SignatureStatus::none, .signer = std::nullopt};
+}
+
+Result<std::filesystem::path> WinProcessImages::image_path(std::uint32_t pid,
+                                                           WallTime created) const {
+  const std::string name = "process " + std::to_string(pid);
+  const wil::unique_handle process{::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)};
+  if (!process) {
+    const DWORD code = ::GetLastError();
+    return tl::unexpected(error_of(code == ERROR_INVALID_PARAMETER ? ERROR_FILE_NOT_FOUND : code,
+                                   name, "cannot be opened"));
+  }
+  FILETIME creation{};
+  FILETIME exit{};
+  FILETIME kernel{};
+  FILETIME user{};
+  if (::GetProcessTimes(process.get(), &creation, &exit, &kernel, &user) == FALSE) {
+    return tl::unexpected(error_of(::GetLastError(), name, "cannot read its times"));
+  }
+  // FILETIME units: 100 ns since 1601-01-01, as NtProcessTable converts them.
+  constexpr std::int64_t unix_epoch = 116'444'736'000'000'000;
+  const auto ticks = static_cast<std::int64_t>(
+      (static_cast<std::uint64_t>(creation.dwHighDateTime) << 32U) | creation.dwLowDateTime);
+  const WallTime started{std::chrono::duration_cast<WallTime::duration>(
+      std::chrono::duration<std::int64_t, std::ratio<1, 10'000'000>>{ticks - unix_epoch})};
+  if (started - created > std::chrono::milliseconds{1} ||
+      created - started > std::chrono::milliseconds{1}) {
+    return fail(Errc::not_found, name + " has exited; its PID now belongs to another process");
+  }
+  std::wstring path(UNICODE_STRING_MAX_CHARS, L'\0');
+  auto size = static_cast<DWORD>(path.size());
+  if (::QueryFullProcessImageNameW(process.get(), 0, path.data(), &size) == FALSE) {
+    return tl::unexpected(error_of(::GetLastError(), name, "cannot read its image path"));
+  }
+  path.resize(size);
+  return std::filesystem::path{std::move(path)};
 }
 
 Result<std::vector<std::filesystem::path>> user_writable_roots() {

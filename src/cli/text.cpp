@@ -68,6 +68,33 @@ std::string fill(const Json& volume) {
   return state == "not_filling" ? "not filling" : "trend not known yet";
 }
 
+// One line on the trust signal of a process: facts only, never a verdict.
+std::string trust_line(const Json& trust) {
+  if (!trust.is_object()) {
+    return "trust: not known (the image cannot be read)";
+  }
+  std::string out = "trust: " + text_of(trust, "status");
+  if (trust.value("signer", Json()).is_string()) {
+    out += " by " + text_of(trust, "signer");
+  }
+  out += ", " + text_of(trust, "path_class") + " path";
+  if (trust.value("unrecognized", false)) {
+    std::string reasons;
+    for (const Json& reason : trust.value("reasons", Json::array())) {
+      reasons += (reasons.empty() ? "" : ", ") + reason.get<std::string>();
+    }
+    out += "; UNRECOGNIZED (" + reasons + ")";
+  }
+  out += "; " + (trust.value("description", Json()).is_string() ? text_of(trust, "description")
+                                                                : std::string("unknown"));
+  return out;
+}
+
+std::string optional_integer(const Json& object, std::string_view key, std::string_view unit) {
+  const std::optional<double> value = number(object, key);
+  return value ? std::format("{:.0f}{}", *value, unit) : "n/a";
+}
+
 }  // namespace
 
 std::string status(const Json& status) {
@@ -114,6 +141,7 @@ std::string trees(const Json& top) {
                        fixed(number(tree, "processes"), 0), fixed(number(tree, "cpu_percent")),
                        bytes(number(tree, "private_working_set")),
                        fixed(number(tree, "memory_percent")));
+    out += "      " + trust_line(tree.value("trust", Json())) + "\n";
   }
   return out;
 }
@@ -187,6 +215,130 @@ std::string history(const Json& history) {
     out += std::format("  {}  mean {}  min {}  max {}\n", utc(point, "time"),
                        fixed(number(point, "mean"), 2), fixed(number(point, "min"), 2),
                        fixed(number(point, "max"), 2));
+  }
+  return out;
+}
+
+std::string explain(const Json& process) {
+  std::string out =
+      std::format("{} (pid {}, parent {})\n", text_of(process, "image"),
+                  fixed(number(process, "pid"), 0), fixed(number(process, "parent_pid"), 0));
+  out += "  path: " + text_of(process, "path") + "\n";
+  out += std::format(
+      "  CPU {} %, memory {} ({} %), private bytes {}\n", fixed(number(process, "cpu_percent")),
+      bytes(number(process, "private_working_set")), fixed(number(process, "memory_percent")),
+      bytes(number(process, "private_bytes")));
+  out += "  " + trust_line(process.value("trust", Json())) + "\n";
+  const Json& kb = process.value("kb", Json());
+  if (kb.is_object()) {
+    out += std::format("  knowledge base: {} ({}); needed at startup: {}; safe to remove: {}\n",
+                       text_of(kb, "description"), text_of(kb, "category"),
+                       kb.value("needed_at_startup", false) ? "yes" : "no",
+                       kb.value("safe_to_remove", false) ? "yes" : "no");
+  } else {
+    out += "  knowledge base: no entry\n";
+  }
+  const Json& tree = process.value("tree", Json());
+  if (tree.is_object()) {
+    out += std::format("  tree of {} (pid {}): {} processes, CPU {} %, memory {} %\n",
+                       text_of(tree, "image"), fixed(number(tree, "pid"), 0),
+                       fixed(number(tree, "processes"), 0), fixed(number(tree, "cpu_percent")),
+                       fixed(number(tree, "memory_percent")));
+    for (const Json& member : process.value("members", Json::array())) {
+      out += std::format("    {:<28} pid {:>6}  CPU {:>5} %  memory {}\n", text_of(member, "image"),
+                         fixed(number(member, "pid"), 0), fixed(number(member, "cpu_percent")),
+                         bytes(number(member, "private_working_set")));
+    }
+  }
+  return out;
+}
+
+std::string disks(const Json& health) {
+  const Json& drives = health.value("drives", Json::array());
+  std::string out = "Disk health:\n";
+  if (drives.empty()) {
+    out += "  no reading yet\n";
+  }
+  for (const Json& drive : drives) {
+    std::string volumes;
+    for (const Json& volume : drive.value("volumes", Json::array())) {
+      volumes += (volumes.empty() ? "" : " ") + volume.get<std::string>();
+    }
+    out += std::format("  disk {:<3} {:<32} {:<5} {}{}\n", text_of(drive, "disk"),
+                       text_of(drive, "model"), text_of(drive, "bus"), text_of(drive, "status"),
+                       volumes.empty() ? "" : "  (" + volumes + ")");
+    if (!drive.value("readable", false)) {
+      out += "      " + text_of(drive, "unreadable_reason") + "\n";
+    }
+    for (const Json& reason : drive.value("reasons", Json::array())) {
+      if (reason != drive.value("unreadable_reason", Json())) {
+        out += "      " + reason.get<std::string>() + "\n";
+      }
+    }
+    const bool has_limit = drive.value("temperature_limit_c", Json()).is_number();
+    out += std::format(
+        "      temperature {} (limit {}), wear {}, spare {}, media errors {}, reallocated {}, "
+        "pending {}, power-on {}, written {}\n",
+        optional_integer(drive, "temperature_c", " C"),
+        has_limit ? optional_integer(drive, "temperature_limit_c", " C") : "not known",
+        optional_integer(drive, "percent_used", " %"),
+        optional_integer(drive, "available_spare", " %"),
+        optional_integer(drive, "media_errors", ""),
+        optional_integer(drive, "reallocated_sectors", ""),
+        optional_integer(drive, "pending_sectors", ""),
+        optional_integer(drive, "power_on_hours", " h"),
+        bytes(number(drive, "data_written_bytes")));
+    const Json& endurance = drive.value("endurance", Json::object());
+    if (text_of(endurance, "state") == "projected") {
+      out += std::format("      endurance: {} % of {} TBW used, about {} years left\n",
+                         fixed(number(endurance, "tbw_used_percent"), 0),
+                         fixed(number(endurance, "tbw_rated"), 0),
+                         fixed(number(endurance, "years_left"), 0));
+    } else if (!text_of(endurance, "note").empty()) {
+      out += "      endurance: " + text_of(endurance, "note") + "\n";
+    }
+  }
+  return out;
+}
+
+std::string alerts(const Json& list) {
+  const Json& alerts = list.value("alerts", Json::array());
+  std::string out = "Alerts:\n";
+  if (alerts.empty()) {
+    out += "  none\n";
+  }
+  for (const Json& alert : alerts) {
+    std::string state = alert.value("active", false) ? "active" : "ended";
+    if (alert.value("snoozed_until", Json()).is_number()) {
+      state += ", snoozed until " + utc(alert, "snoozed_until");
+    }
+    out += std::format("  [{}] {} ({}, {}): {}x, last {}\n", text_of(alert, "severity"),
+                       text_of(alert, "title"), text_of(alert, "entity"), state,
+                       fixed(number(alert, "count"), 0), utc(alert, "last_at"));
+    out += std::format("      rule {}; {}\n", text_of(alert, "rule"), text_of(alert, "detail"));
+  }
+  return out;
+}
+
+std::string freezes(const Json& summary) {
+  const Json& groups = summary.value("groups", Json::array());
+  if (groups.empty()) {
+    return "No freeze over 250 ms has been recorded since the watchdog started.\n";
+  }
+  std::string out = "Copy/paste freezes by mechanism and process:\n";
+  for (const Json& group : groups) {
+    out += std::format("  {} {}: {} incidents, latest {}\n", text_of(group, "mechanism"),
+                       group.value("process", Json()).is_string() ? text_of(group, "process")
+                                                                  : std::string("(no process)"),
+                       fixed(number(group, "count"), 0), utc(group, "latest"));
+    for (const Json& incident : group.value("incidents", Json::array())) {
+      out += std::format("    {} {} {} ms", utc(incident, "time"), text_of(incident, "chord"),
+                         fixed(number(incident, "latency_ms"), 0));
+      for (const Json& evidence : incident.value("evidence", Json::array())) {
+        out += "; " + evidence.get<std::string>();
+      }
+      out += "\n";
+    }
   }
   return out;
 }

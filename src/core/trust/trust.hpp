@@ -80,6 +80,25 @@ class IImageInspector {
   IImageInspector() = default;
 };
 
+// The image file of a running process. Implemented by src/platform/trust; tests use fakes.
+class IProcessImages {
+ public:
+  virtual ~IProcessImages() = default;
+  IProcessImages(const IProcessImages&) = delete;
+  IProcessImages& operator=(const IProcessImages&) = delete;
+  IProcessImages(IProcessImages&&) = delete;
+  IProcessImages& operator=(IProcessImages&&) = delete;
+
+  // The full image path of process `pid` created at `created`. Fails with not_found when no such
+  // process runs (it exited, or the PID now belongs to a later process), and with the OS's
+  // reason when the process cannot be queried (System, protected processes).
+  [[nodiscard]] virtual Result<std::filesystem::path> image_path(std::uint32_t pid,
+                                                                 WallTime created) const = 0;
+
+ protected:
+  IProcessImages() = default;
+};
+
 struct TrustSignal {
   std::filesystem::path image;
   Signature signature;

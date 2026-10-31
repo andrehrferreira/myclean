@@ -368,6 +368,13 @@ Result<std::vector<Alert>> AlertEngine::list(WallTime since) const {
   if (!read) {
     return tl::unexpected(std::move(read.error()));
   }
+  const std::scoped_lock lock(mutex_);
+  const WallTime now = this->now();
+  for (Alert& alert : alerts) {
+    if (snoozed(alert.key, now)) {
+      alert.snoozed_until = snoozes_.at(alert.key);
+    }
+  }
   return alerts;
 }
 

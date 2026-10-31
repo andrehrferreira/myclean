@@ -21,6 +21,9 @@
 #include <nlohmann/json.hpp>
 
 #include "cli/text.hpp"
+#include "core/ipc/alerts.hpp"
+#include "core/ipc/disk_health.hpp"
+#include "core/ipc/input.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/status.hpp"
 #include "core/ipc/telemetry.hpp"
@@ -170,6 +173,34 @@ int query(const CommandLine& line, const mcp::Caller& call, std::ostream& out, s
       line.json, out, err, &text::history);
 }
 
+// A one-word command that calls one method without parameters.
+struct PlainCommand {
+  std::string_view name;
+  std::string_view method;
+  std::string (*render)(const Json&);
+};
+
+constexpr std::array<PlainCommand, 4> plain_commands{
+    PlainCommand{.name = "volumes", .method = ipc::volumes_list_method, .render = &render_volumes},
+    PlainCommand{.name = "disks", .method = ipc::disks_health_method, .render = &text::disks},
+    PlainCommand{.name = "alerts", .method = ipc::alerts_list_method, .render = &text::alerts},
+    PlainCommand{.name = "freezes", .method = ipc::input_summary_method, .render = &text::freezes}};
+
+// explain <pid>
+int explain(const CommandLine& line, const mcp::Caller& call, std::ostream& out,
+            std::ostream& err) {
+  const std::string& text = line.words[1];
+  const char* const last = std::to_address(text.end());
+  std::int64_t pid = 0;
+  const auto [end, error] = std::from_chars(text.data(), last, pid);
+  if (error != std::errc{} || end != last || pid < 0) {
+    err << "myclean: explain: not a process id: " << text << '\n';
+    return exit_usage;
+  }
+  return show(call(ipc::processes_explain_method, Json{{"pid", pid}}), line.json, out, err,
+              &text::explain);
+}
+
 int dispatch(const CommandLine& line, const mcp::Caller& call, std::istream& in, std::ostream& out,
              std::ostream& err) {
   const std::vector<std::string>& words = line.words;
@@ -180,9 +211,12 @@ int dispatch(const CommandLine& line, const mcp::Caller& call, std::istream& in,
   if (command == "health" && words.size() == 1) {
     return show(mcp::health_snapshot(call), line.json, out, err, &text::health);
   }
-  if (command == "volumes" && words.size() == 1) {
-    return show(call(ipc::volumes_list_method, Json::object()), line.json, out, err,
-                &render_volumes);
+  if (words.size() == 1) {
+    for (const PlainCommand& plain : plain_commands) {
+      if (command == plain.name) {
+        return show(call(plain.method, Json::object()), line.json, out, err, plain.render);
+      }
+    }
   }
   if (command == "processes" && words.size() == 1) {
     const Result<std::optional<std::int64_t>> limit = option<std::int64_t>(line, "limit");
@@ -195,6 +229,9 @@ int dispatch(const CommandLine& line, const mcp::Caller& call, std::istream& in,
       params["sort"] = *sort;
     }
     return show(call(ipc::processes_top_method, params), line.json, out, err, &text::trees);
+  }
+  if (command == "explain" && words.size() == 2) {
+    return explain(line, call, out, err);
   }
   if (command == "metrics" && words.size() == 2 && words[1] == "latest") {
     return show(call(ipc::metrics_latest_method, Json::object()), line.json, out, err,
@@ -222,7 +259,12 @@ std::string_view usage() {
          "  health                      process trees above 5 % CPU or memory, and a system\n"
          "                              summary\n"
          "  processes [--sort cpu|memory] [--limit <n>]\n"
-         "                              the top process trees\n"
+         "                              the top process trees, with their trust signal\n"
+         "  explain <pid>               one process: tree, use, signer, path, trust and\n"
+         "                              knowledge-base entry\n"
+         "  disks                       health of every physical disk\n"
+         "  alerts                      stored alerts, newest first\n"
+         "  freezes                     copy/paste freezes grouped by mechanism and process\n"
          "  volumes                     volumes with free space and days until full\n"
          "  metrics latest              the newest CPU, memory, disk and GPU values\n"
          "  metrics query <metric> [--entity <entity>] [--hours <n>] [--max-points <n>]\n"

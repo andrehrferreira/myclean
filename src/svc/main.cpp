@@ -2,26 +2,39 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <wil/resource.h>
 #include <windows.h>
 
 #include "core/model/result.hpp"
+#include "core/model/units.hpp"
+#include "core/rules/data_files.hpp"
 #include "platform/disk/win32_volume_info.hpp"
+#include "platform/disk_health/win32_disk_health.hpp"
+#include "platform/etw/etw_event_source.hpp"
+#include "platform/etw/ip_helper_connections.hpp"
 #include "platform/ipc/pipe_io.hpp"
 #include "platform/perf/pdh_counters.hpp"
 #include "platform/perf/win32_memory_status.hpp"
 #include "platform/proc/nt_process_table.hpp"
 #include "platform/service/scm.hpp"
+#include "platform/trust/win_image_inspector.hpp"
+#include "svc/alerts_component.hpp"
 #include "svc/component.hpp"
+#include "svc/disk_health_component.hpp"
+#include "svc/events_adapter.hpp"
 #include "svc/host.hpp"
+#include "svc/input_component.hpp"
 #include "svc/telemetry_component.hpp"
+#include "svc/trust_component.hpp"
 
 namespace {
 
@@ -51,15 +64,43 @@ std::string system_drive() {
   return {static_cast<char>(windows[0]), ':'};
 }
 
-// Every component the service runs, in start order. Collectors are registered here.
+// Every component the service runs, in start order: a component starts after those it uses and
+// stops before them. Collectors are registered here.
 std::vector<std::unique_ptr<svc::IComponent>> make_components() {
+  namespace platform = myclean::platform;
+  static const myclean::rules::DiskDataFiles files;
+  auto alerts = std::make_unique<svc::AlertsComponent>(files);
+  auto trust = std::make_unique<svc::TrustComponent>(
+      svc::TrustSources{.inspector = std::make_unique<platform::WinImageInspector>(),
+                        .images = std::make_unique<platform::WinProcessImages>(),
+                        .user_writable_roots = platform::user_writable_roots()},
+      files);
+  auto telemetry = std::make_unique<svc::TelemetryComponent>(
+      svc::TelemetrySources{.processes = std::make_unique<platform::NtProcessTable>(),
+                            .counters = std::make_unique<platform::PdhCounters>(),
+                            .memory = std::make_unique<platform::Win32MemoryStatus>(),
+                            .volumes = std::make_unique<platform::Win32VolumeInfo>(),
+                            .system_drive = system_drive()},
+      [trust = trust.get()](std::uint32_t pid, myclean::WallTime created) {
+        return trust->process(pid, created);
+      },
+      alerts.get());
+  auto disk_health = std::make_unique<svc::DiskHealthComponent>(
+      std::make_unique<platform::Win32DiskHealthSource>(), files, *alerts,
+      [telemetry = telemetry.get()] { return telemetry->volumes(); });
+  auto events = std::make_unique<svc::EventsAdapter>(
+      svc::EventSources{.events = std::make_unique<platform::etw::EtwEventSource>(),
+                        .connections = std::make_unique<platform::etw::IpHelperConnectionTable>(),
+                        .processes = std::make_unique<platform::NtProcessTable>()},
+      trust.get());
+
   std::vector<std::unique_ptr<svc::IComponent>> components;
-  components.push_back(std::make_unique<svc::TelemetryComponent>(
-      svc::TelemetrySources{.processes = std::make_unique<myclean::platform::NtProcessTable>(),
-                            .counters = std::make_unique<myclean::platform::PdhCounters>(),
-                            .memory = std::make_unique<myclean::platform::Win32MemoryStatus>(),
-                            .volumes = std::make_unique<myclean::platform::Win32VolumeInfo>(),
-                            .system_drive = system_drive()}));
+  components.push_back(std::move(alerts));
+  components.push_back(std::move(trust));
+  components.push_back(std::move(telemetry));
+  components.push_back(std::move(disk_health));
+  components.push_back(std::move(events));
+  components.push_back(std::make_unique<svc::InputComponent>());
   return components;
 }
 

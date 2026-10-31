@@ -54,7 +54,27 @@ src/core/safety/        SafeRemove and its hard deny-list: the only code that de
 src/core/actions/       plan state machine, action_log/undo_blob/quarantine, DeleteItems,
                         QuarantineItems
 src/core/sched/         in-app scheduler (cron, catch-up) and its store-backed repository
-src/platform/<module>/  Win32 implementations of src/core/os interfaces
+src/core/rules/         data-file schemas and loaders: cleaning rules, classes, knowledge base
+src/core/telemetry/     collectors (processes, CPU, memory, disks, volumes, GPU), the pipeline
+                        that samples them, history queries and the volume fill projection
+src/core/events/        process start/stop and network events: router, proc_start/net_minute,
+                        the events component
+src/core/health/        disk health: NVMe log / SMART interpretation, assessment, daily
+                        history, endurance projection, the 10-min collector
+src/core/alerts/        alert rules (data/alerts.toml) and the engine: thresholds, changes,
+                        rate limit, snooze, badge
+src/core/trust/         trust signal: signature, signer, path class, knowledge-base match
+src/core/input/         copy/paste freeze watchdog logic, mechanism classifier, incident store,
+                        the incident record sent over the pipe
+src/core/ipc/           frames, the JSON-RPC dispatcher with typed parameters, the method
+                        contracts (status, telemetry, disk_health, alerts, input)
+src/core/mcp/           the `myclean mcp` stdio server and the health snapshot
+src/core/tray_model/    tray state, the poller and the dashboard model (no UI)
+src/platform/<module>/  Win32 implementations of src/core interfaces (proc, perf, disk,
+                        disk_health, etw, trust, input, ipc, fs, service)
+src/svc/                myclean-svc: host, Service and its components (see below)
+src/tray/               myclean-tray: tray icon, toasts, dashboard, input watchdog
+src/cli/                myclean: read-only CLI and `myclean mcp`
 tests/fakes/            in-memory fakes of the src/core/os interfaces (myclean::fakes)
 tests/unit/<module>/    GoogleTest suite of one module
 cmake/                  helper functions, lint/format targets, vcpkg toolchain
@@ -177,6 +197,27 @@ refusals included, are written to `action_log`, whose triggers reject any UPDATE
 Quarantined items live in `<volume>\.myclean-quarantine\<plan id>\<item id>\<name>` (a rename on
 their own volume) for 7 days; `quarantine.restore` and `quarantine.purge` act through their own
 stored plans, so they too go through SafeRemove.
+
+### Service components
+
+`myclean-svc` runs these `svc::IComponent`s, built in `src/svc/main.cpp` (`make_components`) and
+started in this order (stopped in reverse), so that each starts after those it uses:
+
+| Component | Does | Methods |
+|---|---|---|
+| `alerts` | AlertEngine over `data/alerts.toml`; the alert sink of every producer | `alerts.*` |
+| `trust` | TrustEvaluator + knowledge base (`data/kb`); signer lookup for events | (used below) |
+| `telemetry` | 1 s / 60 s collectors; volume facts to `alerts` | `metrics.*`, `processes.*`, `volumes.list` |
+| `disk_health` | HealthCollector on its own pipeline thread (a read may wait 60 s on WMI); health facts to `alerts` | `disks.health` |
+| `events` | ETW process and network events, connection snapshots | none yet |
+| `input` | `input_incident` table for the tray's watchdog | `input.*` |
+
+Failures stay inside a component and show in `status` (`component_health`): a data file that
+fails its schema, a failed disk read, ETW unavailable without elevation (listed under
+`unavailable`). Only what would leave the service half-initialized fails the start (contract
+C7): the store refusing a component's tables or retention, or a method that cannot be
+registered. Tests drive each component on a `ComponentHarness` and the whole set in one
+console-mode service (`tests/unit/svc/phase1_fakes.hpp`).
 
 ### Result type: tl::expected on C++20
 

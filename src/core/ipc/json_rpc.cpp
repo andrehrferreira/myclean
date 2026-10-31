@@ -50,6 +50,8 @@ std::string_view type_name(ParamType type) {
       return "a boolean";
     case ParamType::token:
       return "a token (letters, digits, '_', '.', '-'; no path or command line)";
+    case ParamType::record:
+      return "an object";
   }
   return "unknown";
 }
@@ -64,8 +66,56 @@ bool has_type(const Json& value, ParamType type) {
       return value.is_boolean();
     case ParamType::token:
       return value.is_string() && is_token(value.get_ref<const std::string&>());
+    case ParamType::record:
+      return value.is_object();
   }
   return false;
+}
+
+bool printable(const std::string& text) {
+  constexpr unsigned char first_printable = 0x20;
+  constexpr unsigned char del = 0x7F;
+  return std::ranges::none_of(text, [](char c) {
+    const auto byte = static_cast<unsigned char>(c);
+    return byte < first_printable || byte == del;
+  });
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): the depth is bounded by max_record_depth
+std::string check_bounds(const Json& value, int depth) {
+  if (depth > max_record_depth) {
+    return "nested deeper than " + std::to_string(max_record_depth) + " levels";
+  }
+  if (value.is_string()) {
+    const auto& text = value.get_ref<const std::string&>();
+    if (text.size() > max_record_string || !printable(text)) {
+      return "a string is not printable or longer than " + std::to_string(max_record_string) +
+             " bytes";
+    }
+  } else if (value.is_array()) {
+    if (value.size() > max_record_elements) {
+      return "an array has more than " + std::to_string(max_record_elements) + " elements";
+    }
+    for (const Json& element : value) {
+      if (std::string problem = check_bounds(element, depth + 1); !problem.empty()) {
+        return problem;
+      }
+    }
+  } else if (value.is_object()) {
+    if (value.size() > max_record_members) {
+      return "an object has more than " + std::to_string(max_record_members) + " members";
+    }
+    for (const auto& [key, member] : value.items()) {
+      if (key.size() > max_record_string || !printable(key)) {
+        return "a member name is not printable or longer than " +
+               std::to_string(max_record_string) + " bytes";
+      }
+      if (std::string problem = check_bounds(member, depth + 1); !problem.empty()) {
+        return problem;
+      }
+    }
+  }
+  return {};
 }
 
 // The reason `params` does not fit `declared`, or an empty string when it fits.
@@ -77,6 +127,15 @@ std::string check_params(const Json& params, const std::vector<Param>& declared)
     }
     if (!has_type(value, param->type)) {
       return "parameter '" + name + "' must be " + std::string(type_name(param->type));
+    }
+    if (param->type == ParamType::record) {
+      std::string problem = check_record_bounds(value);
+      if (problem.empty()) {
+        problem = param->schema(value);
+      }
+      if (!problem.empty()) {
+        return "parameter '" + name + "': " += problem;
+      }
     }
   }
   for (const Param& param : declared) {
@@ -120,6 +179,10 @@ Errc errc_of(int code, const Json& error) {
 
 }  // namespace
 
+std::string check_record_bounds(const Json& value) {
+  return check_bounds(value, 1);
+}
+
 bool is_token(std::string_view text) {
   if (text.empty() || text.size() > max_token_size || !is_ascii_alnum(text.front())) {
     return false;
@@ -140,6 +203,10 @@ Result<void> Dispatcher::add(std::string method, std::vector<Param> params, Hand
     if (std::find_if(params.begin(), param,
                      [&](const Param& earlier) { return earlier.name == param->name; }) != param) {
       return fail(Errc::invalid_argument, method + ": parameter declared twice: " + param->name);
+    }
+    if (param->type == ParamType::record && !param->schema) {
+      return fail(Errc::invalid_argument,
+                  method + ": record parameter without a schema: " + param->name);
     }
   }
   if (methods_.contains(method)) {

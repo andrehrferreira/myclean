@@ -5,6 +5,8 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <format>
+#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -13,12 +15,15 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+#include "core/alerts/engine.hpp"
+#include "core/health/analysis.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/status.hpp"
 #include "core/ipc/telemetry.hpp"
@@ -34,7 +39,9 @@
 #include "core/telemetry/process_collector.hpp"
 #include "core/telemetry/system_collectors.hpp"
 #include "core/telemetry/volume_collector.hpp"
+#include "core/trust/trust.hpp"
 #include "svc/component.hpp"
+#include "svc/trust_component.hpp"
 
 namespace myclean::svc {
 
@@ -80,6 +87,17 @@ T* add_tapped(telemetry::Pipeline& pipeline, Collectors& collectors, std::string
   return add_tapped(pipeline, collectors, std::move(*opened));
 }
 
+// Natural order of logical processors "<group>,<number>" ("0,2" before "0,10" before "1,0").
+bool processor_before(const std::string& left, const std::string& right) {
+  const auto split = [](const std::string& entity) {
+    const std::size_t comma = entity.find(',');
+    const std::string group = entity.substr(0, comma);
+    const std::string number = comma == std::string::npos ? "" : entity.substr(comma + 1);
+    return std::tuple{group.size(), group, number.size(), number};
+  };
+  return split(left) < split(right);
+}
+
 // Natural order of disk numbers ("2" before "10").
 bool disk_before(const std::string& left, const std::string& right) {
   return left.size() != right.size() ? left.size() < right.size() : left < right;
@@ -95,6 +113,21 @@ std::string_view fill_state_name(telemetry::FillState state) {
       return "insufficient_data";
   }
   return "insufficient_data";
+}
+
+// The members of processes.top's trees.
+Json members_json(const telemetry::ProcessView& view, const telemetry::ProcessTree& tree) {
+  Json members = Json::array();
+  for (const std::size_t index : tree.members) {
+    const telemetry::ProcessRow& row = view.rows[index];
+    members.push_back(Json{{"pid", row.info.pid},
+                           {"parent_pid", row.info.parent_pid},
+                           {"image", row.info.image},
+                           {"cpu_percent", row.cpu_percent},
+                           {"private_working_set", row.info.private_working_set.count()},
+                           {"private_bytes", row.info.private_bytes.count()}});
+  }
+  return members;
 }
 
 // Merges consecutive points so that at most `limit` remain: min of the minimums, max of the
@@ -149,13 +182,15 @@ Collectors add_collectors(telemetry::Pipeline& pipeline, TelemetrySources& sourc
 }
 
 TelemetryMethods::TelemetryMethods(const Collectors& collectors, store::Store& store,
-                                   const os::IClock& clock, const TelemetrySources& sources)
+                                   const os::IClock& clock, const TelemetrySources& sources,
+                                   ProcessTrust trust)
     : collectors_(&collectors),
       store_(&store),
       clock_(&clock),
       memory_(sources.memory.get()),
       logical_processors_(sources.processes->logical_processors()),
-      system_drive_(sources.system_drive) {}
+      system_drive_(sources.system_drive),
+      trust_(std::move(trust)) {}
 
 Result<void> TelemetryMethods::register_methods(ipc::Dispatcher& methods) const {
   using ipc::Param;
@@ -179,6 +214,11 @@ Result<void> TelemetryMethods::register_methods(ipc::Dispatcher& methods) const 
                            [this](const Json& params) { return top(params); });
       })
       .and_then([&] {
+        return methods.add(std::string(ipc::processes_explain_method),
+                           {Param{.name = "pid", .type = ParamType::integer, .required = true}},
+                           [this](const Json& params) { return explain(params); });
+      })
+      .and_then([&] {
         return methods.add(std::string(ipc::volumes_list_method), {},
                            [this](const Json&) { return volumes(); });
       });
@@ -187,6 +227,7 @@ Result<void> TelemetryMethods::register_methods(ipc::Dispatcher& methods) const 
 Result<Json> TelemetryMethods::latest() const {
   Json result{{"cpu", Json::object()}, {"memory", Json::object()}, {"process", Json::object()}};
   std::map<std::string, Json, decltype(&disk_before)> disks(&disk_before);
+  std::map<std::string, Json, decltype(&processor_before)> processors(&processor_before);
   std::map<std::string, Json> adapters;
   WallTime newest{};
   for (const Tap* tap : collectors_->taps) {
@@ -205,6 +246,8 @@ Result<Json> TelemetryMethods::latest() const {
         result[group][field] = measurement.value;
       } else if (group == "disk") {
         disks[entity][field] = measurement.value;
+      } else if (group == "cpu") {
+        processors[entity][field] = measurement.value;
       } else if (metric == telemetry::metric::gpu_engine) {
         const std::size_t slash = entity.rfind('/');
         adapters[entity.substr(0, slash)]["engines"][entity.substr(slash + 1)] = measurement.value;
@@ -214,6 +257,12 @@ Result<Json> TelemetryMethods::latest() const {
     }
   }
   result["cpu"]["logical_processors"] = logical_processors_;
+  Json processor_list = Json::array();
+  for (auto& [processor, values] : processors) {
+    values["entity"] = ipc::entity_token(processor);
+    processor_list.push_back(std::move(values));
+  }
+  result["cpu"]["processors"] = std::move(processor_list);
   result["time"] = unix_seconds(newest);
 
   Json disk_list = Json::array();
@@ -355,16 +404,6 @@ Result<Json> TelemetryMethods::top(const Json& params) const {
 
   Json list = Json::array();
   for (const telemetry::ProcessTree* tree : trees) {
-    Json members = Json::array();
-    for (const std::size_t index : tree->members) {
-      const telemetry::ProcessRow& row = view->rows[index];
-      members.push_back(Json{{"pid", row.info.pid},
-                             {"parent_pid", row.info.parent_pid},
-                             {"image", row.info.image},
-                             {"cpu_percent", row.cpu_percent},
-                             {"private_working_set", row.info.private_working_set.count()},
-                             {"private_bytes", row.info.private_bytes.count()}});
-    }
     const telemetry::ProcessInfo& root = view->rows[tree->members.front()].info;
     list.push_back(Json{{"pid", root.pid},
                         {"image", root.image},
@@ -377,8 +416,8 @@ Result<Json> TelemetryMethods::top(const Json& params) const {
                         {"io_bytes_per_second", tree->io_bytes_per_second},
                         {"handles", tree->handles},
                         {"threads", tree->threads},
-                        {"members", std::move(members)},
-                        {"trust", nullptr}});
+                        {"members", members_json(*view, *tree)},
+                        {"trust", trust_of(root)}});
   }
   return Json{{"time", unix_seconds(view->time)},
               {"logical_processors", logical_processors_},
@@ -388,6 +427,120 @@ Result<Json> TelemetryMethods::top(const Json& params) const {
                                     : Json(nullptr)},
               {"total_trees", total},
               {"trees", std::move(list)}};
+}
+
+Result<Json> TelemetryMethods::explain(const Json& params) const {
+  const auto pid = params.at("pid").get<std::int64_t>();
+  if (pid < 0 || pid > std::numeric_limits<std::uint32_t>::max()) {
+    return fail(Errc::invalid_argument, "processes.explain: pid must be 0 to 4294967295");
+  }
+  const std::shared_ptr<const telemetry::ProcessView> view =
+      collectors_->live.processes != nullptr ? collectors_->live.processes->latest() : nullptr;
+  if (!view) {
+    return fail(Errc::invalid_state,
+                "processes.explain: the process table has not been sampled yet");
+  }
+  const auto row =
+      std::ranges::find(view->rows, static_cast<std::uint32_t>(pid),
+                        [](const telemetry::ProcessRow& entry) { return entry.info.pid; });
+  if (row == view->rows.end()) {
+    return fail(Errc::not_found, "process " + std::to_string(pid) + " was not found");
+  }
+  const auto index = static_cast<std::size_t>(row - view->rows.begin());
+  const auto tree = std::ranges::find_if(view->trees, [index](const telemetry::ProcessTree& entry) {
+    return std::ranges::find(entry.members, index) != entry.members.end();
+  });
+  const Result<telemetry::MemoryStatus> memory = memory_->read();
+  if (!memory) {
+    return tl::unexpected(memory.error());
+  }
+  const telemetry::ProcessInfo& info = row->info;
+  const std::optional<trust::TrustSignal> signal = signal_of(info);
+  Json trust = signal ? trust_json(*signal) : Json(nullptr);
+  Json kb = nullptr;
+  if (signal && signal->entry) {
+    kb = Json{{"description", signal->entry->description},
+              {"category", signal->entry->category},
+              {"needed_at_startup", signal->entry->needed_at_startup},
+              {"safe_to_remove", signal->entry->safe_to_remove}};
+  }
+  Json result{{"pid", info.pid},
+              {"parent_pid", info.parent_pid},
+              {"image", info.image},
+              {"path", signal ? trust.at("path") : Json(nullptr)},
+              {"cpu_percent", row->cpu_percent},
+              {"memory_percent", percent(info.private_working_set, memory->total)},
+              {"private_working_set", info.private_working_set.count()},
+              {"private_bytes", info.private_bytes.count()},
+              {"working_set", info.working_set.count()},
+              {"tree", nullptr},
+              {"members", Json::array()},
+              {"trust", std::move(trust)},
+              {"kb", std::move(kb)}};
+  if (tree != view->trees.end()) {
+    const telemetry::ProcessInfo& root = view->rows[tree->members.front()].info;
+    result["tree"] = Json{{"pid", root.pid},
+                          {"image", root.image},
+                          {"processes", tree->members.size()},
+                          {"cpu_percent", tree->cpu_percent},
+                          {"memory_percent", percent(tree->private_working_set, memory->total)}};
+    result["members"] = members_json(*view, *tree);
+  }
+  return result;
+}
+
+std::optional<trust::TrustSignal> TelemetryMethods::signal_of(
+    const telemetry::ProcessInfo& process) const {
+  if (!trust_) {
+    return std::nullopt;
+  }
+  Result<trust::TrustSignal> signal = trust_(process.pid, process.created);
+  return signal ? std::optional<trust::TrustSignal>{*std::move(signal)} : std::nullopt;
+}
+
+Json TelemetryMethods::trust_of(const telemetry::ProcessInfo& process) const {
+  const std::optional<trust::TrustSignal> signal = signal_of(process);
+  return signal ? trust_json(*signal) : Json(nullptr);
+}
+
+Result<std::vector<alerts::Reading>> TelemetryMethods::volume_facts() const {
+  const std::shared_ptr<const telemetry::VolumeView> view =
+      collectors_->live.volumes != nullptr ? collectors_->live.volumes->latest() : nullptr;
+  std::vector<alerts::Reading> facts;
+  if (!view) {
+    return facts;
+  }
+  constexpr double gib = 1024.0 * 1024.0 * 1024.0;
+  const WallTime now = clock_->now();
+  for (const telemetry::VolumeStatus& volume : view->volumes) {
+    const std::string entity = telemetry::volume_entity(volume);
+    const std::string free =
+        std::format("{:.1f} GiB free of {:.1f} GiB", static_cast<double>(volume.free.count()) / gib,
+                    static_cast<double>(volume.size.count()) / gib);
+    facts.push_back(alerts::Reading{.metric = "volume.free_percent",
+                                    .entity = entity,
+                                    .value = percent(volume.free, volume.size),
+                                    .detail = free});
+    const Result<telemetry::FillProjection> fill =
+        telemetry::project_volume_fill(*store_, entity, now);
+    if (!fill) {
+      return tl::unexpected(fill.error());
+    }
+    if (fill->state == telemetry::FillState::filling && fill->days_until_full) {
+      facts.push_back(
+          alerts::Reading{.metric = "volume.days_until_full",
+                          .entity = entity,
+                          .value = *fill->days_until_full,
+                          .detail = std::format("{}; full in {:.0f} days at the current rate", free,
+                                                *fill->days_until_full)});
+    } else if (fill->state == telemetry::FillState::not_filling) {
+      facts.push_back(alerts::Reading{.metric = "volume.days_until_full",
+                                      .entity = entity,
+                                      .value = std::numeric_limits<double>::infinity(),
+                                      .detail = free + "; not filling"});
+    }
+  }
+  return facts;
 }
 
 Result<Json> TelemetryMethods::volumes() const {
@@ -428,7 +581,9 @@ Result<Json> TelemetryMethods::volume_list() const {
   return list;
 }
 
-TelemetryComponent::TelemetryComponent(TelemetrySources sources) : sources_(std::move(sources)) {}
+TelemetryComponent::TelemetryComponent(TelemetrySources sources, ProcessTrust trust,
+                                       health::IAlertSink* alerts)
+    : sources_(std::move(sources)), trust_(std::move(trust)), alerts_(alerts) {}
 
 TelemetryComponent::~TelemetryComponent() {
   stop();
@@ -441,8 +596,8 @@ Result<void> TelemetryComponent::start(const Context& context) {
   for (const Error& error : collectors_.unavailable) {
     spdlog::warn("telemetry: collector unavailable: {}", error.message);
   }
-  methods_ =
-      std::make_unique<TelemetryMethods>(collectors_, context.store(), context.clock(), sources_);
+  methods_ = std::make_unique<TelemetryMethods>(collectors_, context.store(), context.clock(),
+                                                sources_, trust_);
   if (Result<void> registered = methods_->register_methods(context.methods()); !registered) {
     return registered;
   }
@@ -460,6 +615,7 @@ void TelemetryComponent::stop() {
 
 void TelemetryComponent::poll() {
   const std::vector<Error> errors = pipeline_->poll();
+  report_volumes();
   const MonoTime now = clock_->monotonic();
   const std::scoped_lock lock(mutex_);
   last_poll_ = now;
@@ -497,6 +653,24 @@ void TelemetryComponent::run(const std::stop_token& stop) {
     }
     poll();
   }
+}
+
+void TelemetryComponent::report_volumes() {
+  const std::shared_ptr<const telemetry::VolumeView> view = volumes();
+  if (alerts_ == nullptr || !view || volumes_reported_ == view->time) {
+    return;
+  }
+  volumes_reported_ = view->time;
+  Result<std::vector<alerts::Reading>> facts = methods_->volume_facts();
+  if (!facts) {
+    spdlog::warn("telemetry: volume alert facts: {}", facts.error().message);
+    return;
+  }
+  alerts_->report(*facts);
+}
+
+std::shared_ptr<const telemetry::VolumeView> TelemetryComponent::volumes() const {
+  return collectors_.live.volumes != nullptr ? collectors_.live.volumes->latest() : nullptr;
 }
 
 ipc::ComponentHealth TelemetryComponent::health() const {

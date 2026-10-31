@@ -1,9 +1,11 @@
 #include "platform/trust/win_image_inspector.hpp"
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <ratio>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -12,6 +14,7 @@
 #include <windows.h>
 
 #include "core/model/result.hpp"
+#include "core/model/units.hpp"
 #include "core/trust/trust.hpp"
 
 // Against real files of this machine: Windows images signed through a catalog or embedded, this
@@ -159,6 +162,43 @@ TEST(TrustEvaluator, RealImagesEndToEnd) {
   ASSERT_TRUE(unknown.has_value()) << unknown.error().message;
   EXPECT_TRUE(unknown->unrecognized());
   EXPECT_EQ(unknown->reasons.at(1), trust::Reason::unsigned_image);
+}
+
+// The creation time of this process, as the process table reports it.
+WallTime this_process_created() {
+  FILETIME creation{};
+  FILETIME exit{};
+  FILETIME kernel{};
+  FILETIME user{};
+  EXPECT_NE(::GetProcessTimes(::GetCurrentProcess(), &creation, &exit, &kernel, &user), FALSE);
+  constexpr std::int64_t unix_epoch = 116'444'736'000'000'000;
+  const auto ticks = static_cast<std::int64_t>(
+      (static_cast<std::uint64_t>(creation.dwHighDateTime) << 32U) | creation.dwLowDateTime);
+  return WallTime{std::chrono::duration_cast<WallTime::duration>(
+      std::chrono::duration<std::int64_t, std::ratio<1, 10'000'000>>{ticks - unix_epoch})};
+}
+
+TEST(WinProcessImages, GivesTheImagePathOfARunningProcess) {
+  const WinProcessImages images;
+  const Result<path> image = images.image_path(::GetCurrentProcessId(), this_process_created());
+  ASSERT_TRUE(image.has_value()) << image.error().message;
+  EXPECT_TRUE(std::filesystem::equivalent(*image, this_executable()));
+}
+
+TEST(WinProcessImages, RefusesAProcessWithAnotherCreationTime) {
+  const WinProcessImages images;
+  const Result<path> reused =
+      images.image_path(::GetCurrentProcessId(), this_process_created() - std::chrono::hours{1});
+  ASSERT_FALSE(reused.has_value());
+  EXPECT_EQ(reused.error().code, Errc::not_found);
+}
+
+TEST(WinProcessImages, ANonexistentProcessIsNotFound) {
+  const WinProcessImages images;
+  // PIDs are multiples of 4; 4294967292 is never handed out on a desktop.
+  const Result<path> missing = images.image_path(4'294'967'292U, WallTime{});
+  ASSERT_FALSE(missing.has_value());
+  EXPECT_EQ(missing.error().code, Errc::not_found);
 }
 
 }  // namespace

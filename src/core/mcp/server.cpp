@@ -13,6 +13,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/ipc/alerts.hpp"
+#include "core/ipc/disk_health.hpp"
+#include "core/ipc/input.hpp"
 #include "core/ipc/telemetry.hpp"
 #include "core/mcp/client.hpp"
 #include "core/os/clock.hpp"
@@ -60,8 +63,13 @@ const Json& tool_list() {
            "all logical processors or whose private working set exceeds 5 % of physical memory "
            "(each expandable to its member processes), CPU, memory, per-disk and per-volume "
            "figures with days until full, GPU, and signals (commit charge %, system volume free "
-           "%, total disk queue). Each tree's 'trust' is null until MyClean's trust signal is "
-           "available. Reads only; changes nothing.",
+           "%, total disk queue). Each tree carries 'trust' for its root process: signature "
+           "status (signed, unsigned, invalid), signer, path, path class (protected or "
+           "user_writable), the knowledge-base description and category (null: unknown), and "
+           "'unrecognized' with its reasons; 'unrecognized' lists those trees. Unrecognized is a "
+           "fact, not a verdict: never call a process dangerous or malicious. 'trust' is null "
+           "when the image cannot be read (System, protected processes). Reads only; changes "
+           "nothing.",
            object_schema()),
       tool("metrics_latest",
            "The newest CPU, memory, process-count, per-disk, GPU and per-volume measurements. "
@@ -97,8 +105,8 @@ const Json& tool_list() {
                Json::array({"metric"}))),
       tool("top_processes",
            "Process trees (a root process with its descendants) ordered by CPU or by memory, "
-           "with totals and members. Each tree's 'trust' is null until MyClean's trust signal "
-           "is available. Reads only; changes nothing.",
+           "with totals, members and the trust signal of the root process (as in "
+           "health_snapshot). Reads only; changes nothing.",
            object_schema(
                {{"sort", {{"type", "string"}, {"enum", {"cpu", "memory"}}, {"default", "cpu"}}},
                 {"limit", {{"type", "integer"}, {"minimum", 1}, {"maximum", ipc::max_top_trees}}},
@@ -109,6 +117,37 @@ const Json& tool_list() {
       tool("list_volumes",
            "Every mounted volume: size, free space, physical disks, free-space trend and days "
            "until full. Reads only.",
+           object_schema()),
+      tool("explain_process",
+           "One running process explained: image, path, its process tree and the tree's "
+           "members, current CPU and memory use, signer and trust signal with reasons, and the "
+           "knowledge-base entry (plain description, category, whether it is needed at startup "
+           "and safe to remove; null when the process is not in the knowledge base). Fails when "
+           "no process has the PID. Reads only; changes nothing.",
+           object_schema({{"pid",
+                           {{"type", "integer"},
+                            {"minimum", 0},
+                            {"maximum", 4294967295.0},
+                            {"description", "Process id, from health_snapshot or top_processes"}}}},
+                         Json::array({"pid"}))),
+      tool("disk_health",
+           "Health of every physical disk: model, bus, volumes, status (good, warning, failing, "
+           "unknown) with reasons, temperature against the model's rated limit, wear, spare, "
+           "media errors, reallocated and pending sectors, power-on hours, data written and the "
+           "write-endurance projection. A drive whose own health data cannot be read (such as "
+           "one behind a USB bridge) says why. Reads only.",
+           object_schema()),
+      tool("list_alerts",
+           "Alerts MyClean has raised (drive almost full or filling up, disk health changes, "
+           "drive temperature), newest first: rule, entity, title, severity, first and last "
+           "time, count, whether active or snoozed, and detail. Reads only; snoozing and "
+           "dismissing are left to the owner.",
+           object_schema()),
+      tool("freeze_summary",
+           "Copy/paste freezes over 250 ms recorded by the input watchdog, grouped by "
+           "mechanism (delayed rendering, clipboard held open, viewer chain, slow keyboard hook, "
+           "heavy payload, unexplained) and by the process involved, with counts, latest time "
+           "and each incident's evidence. Reads only.",
            object_schema()),
   });
   return list;
@@ -254,8 +293,12 @@ Json Server::initialize(const Json& params) const {
       {"serverInfo", {{"name", "myclean"}, {"version", version_}}},
       {"instructions",
        "Read-only view of this PC from the MyClean service: live CPU, memory, disk, GPU, volume "
-       "and process-tree telemetry and its history. No tool changes anything. Process trees "
-       "carry a 'trust' field that is null until MyClean's trust signal is available."}};
+       "and process-tree telemetry and its history, the trust signal of processes "
+       "(explain_process), disk health, alerts and copy/paste freezes. No tool changes "
+       "anything: nothing can close, suspend or reprioritize a process. A process flagged "
+       "'unrecognized' is not in MyClean's knowledge base and has a stated reason (unsigned, "
+       "invalid signature, signer not listed, user-writable path); describe it with those "
+       "reasons and never as dangerous or malicious."}};
 }
 
 tl::expected<Json, std::string> Server::call_tool(const Json& params) const {
@@ -298,6 +341,14 @@ tl::expected<Json, std::string> Server::call_tool(const Json& params) const {
                   Json{{"sort", arguments.value("sort", "cpu")},
                        {"limit", arguments.value("limit", 10)},
                        {"qualifying", arguments.value("qualifying_only", false)}});
+  } else if (tool_name == "explain_process") {
+    reply = call_(ipc::processes_explain_method, Json{{"pid", arguments.at("pid")}});
+  } else if (tool_name == "disk_health") {
+    reply = call_(ipc::disks_health_method, Json::object());
+  } else if (tool_name == "list_alerts") {
+    reply = call_(ipc::alerts_list_method, Json::object());
+  } else if (tool_name == "freeze_summary") {
+    reply = call_(ipc::input_summary_method, Json::object());
   } else {
     reply = call_(ipc::volumes_list_method, Json::object());
   }

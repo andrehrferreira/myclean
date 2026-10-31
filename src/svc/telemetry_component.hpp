@@ -1,6 +1,8 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -12,6 +14,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/health/analysis.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/status.hpp"
 #include "core/model/result.hpp"
@@ -24,7 +27,9 @@
 #include "core/telemetry/pipeline.hpp"
 #include "core/telemetry/process_table.hpp"
 #include "core/telemetry/registration.hpp"
+#include "core/telemetry/volume_collector.hpp"
 #include "core/telemetry/volume_info.hpp"
+#include "core/trust/trust.hpp"
 #include "svc/component.hpp"
 
 namespace myclean::svc {
@@ -37,6 +42,10 @@ struct TelemetrySources {
   std::unique_ptr<telemetry::IVolumeInfo> volumes;
   std::string system_drive;  // the volume Windows runs from, as a series entity ("C:")
 };
+
+// The trust signal of the running process `pid` created at `created` (TrustComponent::process);
+// fails when its image cannot be located or read.
+using ProcessTrust = std::function<Result<trust::TrustSignal>(std::uint32_t pid, WallTime created)>;
 
 // The newest successful sample of one collector.
 struct Reading {
@@ -77,20 +86,29 @@ struct Collectors {
 // the collectors' latest views, the store and the memory source.
 class TelemetryMethods {
  public:
-  // Everything must outlive this object.
+  // Everything must outlive this object. Without `trust`, every "trust" is null.
   TelemetryMethods(const Collectors& collectors, store::Store& store, const os::IClock& clock,
-                   const TelemetrySources& sources);
+                   const TelemetrySources& sources, ProcessTrust trust = {});
 
-  // Registers metrics.latest, metrics.query, processes.top and volumes.list.
+  // Registers metrics.latest, metrics.query, processes.top, processes.explain and volumes.list.
   [[nodiscard]] Result<void> register_methods(ipc::Dispatcher& methods) const;
 
   [[nodiscard]] Result<nlohmann::json> latest() const;
   [[nodiscard]] Result<nlohmann::json> query(const nlohmann::json& params) const;
   [[nodiscard]] Result<nlohmann::json> top(const nlohmann::json& params) const;
+  [[nodiscard]] Result<nlohmann::json> explain(const nlohmann::json& params) const;
   [[nodiscard]] Result<nlohmann::json> volumes() const;
+
+  // The alert facts of every volume: volume.free_percent and volume.days_until_full (infinite
+  // when not filling, absent while there is too little history), entity the volume entity.
+  [[nodiscard]] Result<std::vector<alerts::Reading>> volume_facts() const;
 
  private:
   [[nodiscard]] Result<nlohmann::json> volume_list() const;
+  [[nodiscard]] std::optional<trust::TrustSignal> signal_of(
+      const telemetry::ProcessInfo& process) const;
+  // The trust JSON of a process, null when unknown.
+  [[nodiscard]] nlohmann::json trust_of(const telemetry::ProcessInfo& process) const;
 
   const Collectors* collectors_;
   store::Store* store_;
@@ -98,19 +116,22 @@ class TelemetryMethods {
   const telemetry::IMemoryStatus* memory_;
   unsigned logical_processors_;
   std::string system_drive_;
+  ProcessTrust trust_;
 };
 
 // Samples the machine on a thread of its own: a telemetry::Pipeline over every collector, with
 // the read methods above. A collector this machine lacks is logged and reported as unavailable
 // in `status`; one that fails while sampling makes the component degraded until it has not
 // failed for failure_window. The first sample is taken in start(), so the methods have data from
-// the first request on.
+// the first request on. After every new volume sample, the volume facts go to `alerts`.
 class TelemetryComponent final : public IComponent {
  public:
   static constexpr std::chrono::seconds failure_window{120};  // twice the longest interval
   static constexpr std::chrono::seconds stall_limit{30};      // no poll for this long: degraded
 
-  explicit TelemetryComponent(TelemetrySources sources);
+  // `alerts` (may be null) must outlive the component.
+  explicit TelemetryComponent(TelemetrySources sources, ProcessTrust trust = {},
+                              health::IAlertSink* alerts = nullptr);
   TelemetryComponent(const TelemetryComponent&) = delete;
   TelemetryComponent& operator=(const TelemetryComponent&) = delete;
   TelemetryComponent(TelemetryComponent&&) = delete;
@@ -122,6 +143,9 @@ class TelemetryComponent final : public IComponent {
   void stop() override;
   [[nodiscard]] ipc::ComponentHealth health() const override;
 
+  // The newest volume table; null before the first volume sample. Thread-safe, after start().
+  [[nodiscard]] std::shared_ptr<const telemetry::VolumeView> volumes() const;
+
  private:
   struct Failure {
     std::string message;
@@ -129,9 +153,13 @@ class TelemetryComponent final : public IComponent {
   };
 
   void poll();
+  void report_volumes();
   void run(const std::stop_token& stop);
 
   TelemetrySources sources_;
+  ProcessTrust trust_;
+  health::IAlertSink* alerts_;
+  std::optional<WallTime> volumes_reported_;  // the sampling thread only
   const os::IClock* clock_ = nullptr;
   std::unique_ptr<telemetry::Pipeline> pipeline_;  // the sampling thread only, after start()
   Collectors collectors_;

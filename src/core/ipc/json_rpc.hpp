@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -29,19 +30,41 @@ inline constexpr int server_error = -32000;
 // shell metacharacter fits, so no file path and no command line can be passed as a token.
 [[nodiscard]] bool is_token(std::string_view text);
 
-// The parameter types a method may declare. Strings are always tokens; there is no free-text,
-// path, array or object parameter.
+// The parameter types a method may declare. Strings are tokens, with one exception: the strings
+// inside a `record`. There is no free-text, path or array parameter.
 enum class ParamType {
   integer,  // a JSON integer
   number,   // any JSON number
   boolean,
   token,  // a string that is_token() accepts
+  // A JSON object of data to store, such as an input incident the tray measured. It is the only
+  // way a string that is not a token reaches the service, so it is held to two checks, both
+  // before the handler runs: the generic bounds of within_record_bounds(), and the method's own
+  // strict schema (Param::schema: every member known and typed, unknown members rejected). A
+  // record is stored and displayed as data only; its strings are NEVER passed to a file,
+  // process, registry or any other OS API (architecture section 8).
+  record,
 };
+
+// Generic bounds of a record (ParamType::record): nesting depth, members per object, elements
+// per array, and the size of every string, key or value. Strings must also be printable: no
+// control character (U+0000-U+001F, U+007F). The parser already rejects invalid UTF-8.
+inline constexpr int max_record_depth = 4;
+inline constexpr std::size_t max_record_members = 32;
+inline constexpr std::size_t max_record_elements = 64;
+inline constexpr std::size_t max_record_string = 260;
+
+// The reason `value` exceeds the bounds above, or an empty string when it fits.
+[[nodiscard]] std::string check_record_bounds(const nlohmann::json& value);
+
+// A method-specific record schema: the reason `record` does not fit, or an empty string.
+using RecordSchema = std::function<std::string(const nlohmann::json& record)>;
 
 struct Param {
   std::string name;
   ParamType type = ParamType::token;
   bool required = false;
+  RecordSchema schema;  // ParamType::record only, and required there
 };
 
 // A method implementation. `params` is an object holding only declared parameters of the
@@ -57,7 +80,8 @@ using Handler = std::function<Result<nlohmann::json>(const nlohmann::json& param
 //   -32600  not a valid request object
 //   -32601  the method is not registered (nothing runs)
 //   -32602  an undeclared parameter, a missing required one, or a value of the wrong type,
-//           including any string that is not a token (nothing runs)
+//           including any string that is not a token and any record that exceeds the bounds or
+//           does not fit its method's schema (nothing runs)
 //   -32603  the handler threw
 //   -32000  the handler returned an error; error.data.errc names its Errc
 //
@@ -65,7 +89,7 @@ using Handler = std::function<Result<nlohmann::json>(const nlohmann::json& param
 class Dispatcher {
  public:
   // Fails with already_exists for a registered method, invalid_argument when the method or a
-  // parameter name is not a token or a parameter is declared twice.
+  // parameter name is not a token, a parameter is declared twice, or a record has no schema.
   [[nodiscard]] Result<void> add(std::string method, std::vector<Param> params, Handler handler);
 
   // The JSON-RPC 2.0 response to one request text.

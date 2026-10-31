@@ -5,8 +5,8 @@
 #include <nlohmann/json.hpp>
 
 // Plain-text renderings of the service's read results for people (the JSON shapes are those of
-// core/ipc/status.hpp, core/ipc/telemetry.hpp and mcp::health_snapshot). A value the service did
-// not report prints as "n/a".
+// core/ipc/status.hpp, telemetry.hpp, disk_health.hpp, alerts.hpp, input.hpp and
+// mcp::health_snapshot). A value the service did not report prints as "n/a".
 namespace myclean::cli::text {
 
 [[nodiscard]] std::string status(const nlohmann::json& status);
@@ -15,5 +15,9 @@ namespace myclean::cli::text {
 [[nodiscard]] std::string trees(const nlohmann::json& top);        // processes.top
 [[nodiscard]] std::string volumes(const nlohmann::json& volumes);  // volumes.list "volumes"
 [[nodiscard]] std::string history(const nlohmann::json& history);  // metrics.query
+[[nodiscard]] std::string explain(const nlohmann::json& process);  // processes.explain
+[[nodiscard]] std::string disks(const nlohmann::json& health);     // disks.health
+[[nodiscard]] std::string alerts(const nlohmann::json& list);      // alerts.list
+[[nodiscard]] std::string freezes(const nlohmann::json& summary);  // input.summary
 
 }  // namespace myclean::cli::text

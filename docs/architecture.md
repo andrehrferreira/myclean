@@ -203,15 +203,56 @@ right before acting.
 
 ## 8. IPC and MCP
 
-- **Pipe:** `\\.\pipe\myclean`, message mode, length-prefixed JSON-RPC 2.0.
-  Methods are typed: `metrics.stream`, `metrics.query`, `inventory.get`,
-  `scan.run`, `plan.get`, `plan.approve` (tray only, checked via the client
-  process image and session), `governor.command`, `alerts.list`, and so on.
-  No method accepts a raw path or a command line.
-- **MCP:** `myclean mcp` runs a stdio server. Read tools map to read methods.
-  Proposal tools (`propose_cleanup`, `propose_disable_startup`,
-  `propose_uninstall`, `propose_optimization`) create plans in the
-  `awaiting_approval` state, which triggers a tray notification.
+- **Pipe:** `\\.\pipe\myclean`, message mode, length-prefixed JSON-RPC 2.0
+  (`src/core/ipc`). Methods are typed and registered by the service
+  components; the exact JSON of each is documented in the contract headers
+  of `src/core/ipc/` (`status.hpp`, `telemetry.hpp`, `disk_health.hpp`,
+  `alerts.hpp`, `input.hpp`). Phase 1:
+
+  | Method | Parameters | Component |
+  |---|---|---|
+  | `status` | none | service |
+  | `metrics.latest` (with per-processor CPU) | none | telemetry |
+  | `metrics.query` | metric, entity, from, to, max_points | telemetry |
+  | `processes.top` (trust signal per tree) | sort, limit, qualifying | telemetry + trust |
+  | `processes.explain` | pid | telemetry + trust |
+  | `volumes.list` | none | telemetry |
+  | `disks.health` | none | disk_health |
+  | `alerts.list` | since | alerts |
+  | `alerts.badge` | none | alerts |
+  | `alerts.snooze` | rule, entity, minutes | alerts |
+  | `alerts.dismiss` | rule, entity | alerts |
+  | `input.record_incident` | incident (record) | input |
+  | `input.summary` | none | input |
+
+  Later phases add `scan.run`, `plan.get`, `plan.approve` (tray only, checked
+  via the client process image and session), `governor.command` and so on.
+- **Parameters** are integers, numbers, booleans or tokens (ASCII letters,
+  digits, `_`, `.`, `-`; at most 128 characters), so no method accepts a raw
+  path or a command line. An undeclared parameter, a missing one or a value
+  of the wrong type is refused with -32602 before anything runs. Entities
+  (volumes, drives, processors) cross the pipe in token form (`C:` is `C`)
+  and the service maps them back.
+- **The record exception:** `ParamType::record` carries data the tray
+  measured that cannot be tokens, today only the `incident` of
+  `input.record_incident` (process image names, clipboard format names). A
+  record is a JSON object held to generic bounds (depth 4, 32 members per
+  object, 64 elements per array, every string printable and at most 260
+  bytes) and to a strict schema of its method
+  (`core/input/incident_record.hpp`: every member known and typed, unknown
+  members rejected), both checked before the handler runs. Its strings are
+  stored and displayed as data only and are never passed to a file,
+  process, registry or any other OS API. A new record parameter needs its
+  own schema and the same guarantee.
+- **MCP:** `myclean mcp` runs a stdio server. Its read tools map to read
+  methods: `health_snapshot` (qualifying trees with trust and the
+  unrecognized ones, system signals), `metrics_latest`, `metrics_history`,
+  `top_processes`, `list_volumes`, `explain_process`, `disk_health`,
+  `list_alerts`, `freeze_summary`. Phase 1 has no tool that changes
+  anything. Proposal tools (`propose_cleanup`, `propose_disable_startup`,
+  `propose_uninstall`, `propose_optimization`) arrive with the action phases
+  and create plans in the `awaiting_approval` state, which triggers a tray
+  notification.
 
 ## 9. Security
 

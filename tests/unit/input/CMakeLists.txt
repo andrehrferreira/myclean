@@ -5,6 +5,7 @@ myclean_add_test(input
     chord_filter_test.cpp
     classifier_test.cpp
     fake_probe.hpp
+    incident_record_test.cpp
     incident_store_test.cpp
     incident_test.cpp
     watchdog_test.cpp

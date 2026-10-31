@@ -1,8 +1,10 @@
 #include "core/ipc/json_rpc.hpp"
 
+#include <cstddef>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
@@ -228,6 +230,90 @@ TEST(ParseResponseTest, RejectsMalformedOrForeignResponses) {
     ASSERT_FALSE(parsed.has_value()) << response;
     EXPECT_EQ(parsed.error().code, Errc::invalid_data) << response;
   }
+}
+
+// A method with a record parameter: the generic bounds, then the method's schema (here: an
+// object whose only member is "name", a string).
+class RecordParamTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    const RecordSchema schema = [](const Json& record) -> std::string {
+      if (record.size() != 1 || !record.contains("name") || !record.at("name").is_string()) {
+        return "the record must hold exactly a string 'name'";
+      }
+      return {};
+    };
+    ASSERT_TRUE(dispatcher_
+                    .add("thing.record",
+                         {Param{.name = "thing",
+                                .type = ParamType::record,
+                                .required = true,
+                                .schema = schema}},
+                         [this](const Json& params) -> Result<Json> {
+                           ++calls_;
+                           return params.at("thing");
+                         })
+                    .has_value());
+  }
+
+  [[nodiscard]] Json call(const Json& thing) const {
+    return Json::parse(dispatcher_.handle(make_request(1, "thing.record", Json{{"thing", thing}})));
+  }
+
+  [[nodiscard]] int calls() const { return calls_; }
+
+ private:
+  Dispatcher dispatcher_;
+  int calls_ = 0;
+};
+
+TEST_F(RecordParamTest, AcceptsARecordThatFitsItsSchema) {
+  // A record may carry any printable text, path-like included: it is data, never an OS input.
+  const Json thing{{"name", R"(C:\Program Files\Täst\app.exe)"}};
+  EXPECT_EQ(call(thing).at("result"), thing);
+  EXPECT_EQ(calls(), 1);
+}
+
+TEST_F(RecordParamTest, RefusesRecordsOutsideTheBoundsOrTheSchema) {
+  const std::vector<Json> refused{
+      Json("text"),
+      Json::array(),
+      Json{{"name", "a"}, {"extra", 1}},
+      Json{{"name", 5}},
+      Json{{"name", std::string(max_record_string + 1, 'a')}},
+      Json{{"name", "line\nbreak"}},
+      Json{{"name", std::string("nul\0", 4)}},
+      Json{{"name", "del\x7F"}},
+      Json{{"name", Json(std::vector<int>(max_record_elements + 1, 1))}},
+      Json{{"name", {{"a", {{"b", {{"c", {{"d", 1}}}}}}}}}},
+  };
+  for (const Json& thing : refused) {
+    const Json response = call(thing);
+    ASSERT_TRUE(response.contains("error")) << thing.dump();
+    EXPECT_EQ(response.at("error").at("code"), rpc_error::invalid_params) << thing.dump();
+  }
+  Json wide = Json::object();
+  for (std::size_t index = 0; index <= max_record_members; ++index) {
+    wide["m" + std::to_string(index)] = 1;
+  }
+  EXPECT_EQ(call(wide).at("error").at("code"), rpc_error::invalid_params);
+  EXPECT_EQ(calls(), 0);
+}
+
+TEST(RecordBounds, NameTheFirstProblem) {
+  EXPECT_EQ(check_record_bounds(Json{{"a", Json::array({1, "b"})}}), "");
+  EXPECT_NE(check_record_bounds(Json{{"a", "	"}}).find("printable"), std::string::npos);
+  EXPECT_NE(check_record_bounds(Json{{std::string(300, 'k'), 1}}).find("member name"),
+            std::string::npos);
+}
+
+TEST(Dispatcher, ARecordParameterNeedsASchema) {
+  Dispatcher dispatcher;
+  const Result<void> added =
+      dispatcher.add("thing.record", {Param{.name = "thing", .type = ParamType::record}},
+                     [](const Json&) -> Result<Json> { return Json(); });
+  ASSERT_FALSE(added.has_value());
+  EXPECT_EQ(added.error().code, Errc::invalid_argument);
 }
 
 }  // namespace

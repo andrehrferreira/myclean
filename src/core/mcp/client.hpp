@@ -29,8 +29,10 @@ using Caller = std::function<Reply(std::string_view method, const nlohmann::json
 // The prompt-1 snapshot, for `myclean health` and the health_snapshot tool: the metrics.latest
 // document (cpu, memory, process, disks, gpu, volumes, unavailable), the members of a
 // processes.top answer for the qualifying trees (time, logical_processors, memory_total, filter,
-// total_trees, trees) and "signals": {"commit_percent", "system_volume",
-// "system_volume_free_percent", "disk_queue"}, each null when its source is missing.
+// total_trees, trees, each with its root's "trust"), "signals": {"commit_percent",
+// "system_volume", "system_volume_free_percent", "disk_queue"}, each null when its source is
+// missing, and "unrecognized": [{"pid", "image", "path", "reasons"}] for the trees whose root is
+// flagged unrecognized. The per-processor list of metrics.latest is left out.
 [[nodiscard]] Reply health_snapshot(const Caller& call);
 
 }  // namespace myclean::mcp

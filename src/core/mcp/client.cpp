@@ -61,7 +61,21 @@ Reply health_snapshot(const Caller& call) {
   }
   Json snapshot = std::move(*latest);
   snapshot["signals"] = signals(snapshot);
+  if (snapshot.contains("cpu")) {
+    snapshot["cpu"].erase("processors");  // 1 entry per logical processor: noise here
+  }
   snapshot.update(*top);
+  Json unrecognized = Json::array();
+  for (const Json& tree : snapshot.value("trees", Json::array())) {
+    const Json& trust = tree.value("trust", Json());
+    if (trust.is_object() && trust.value("unrecognized", false)) {
+      unrecognized.push_back(Json{{"pid", tree.at("pid")},
+                                  {"image", tree.at("image")},
+                                  {"path", trust.value("path", Json())},
+                                  {"reasons", trust.value("reasons", Json::array())}});
+    }
+  }
+  snapshot["unrecognized"] = std::move(unrecognized);
   return snapshot;
 }
 

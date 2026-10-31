@@ -1,6 +1,7 @@
 #include "svc/telemetry_component.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -11,14 +12,17 @@
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
+#include "core/alerts/engine.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/status.hpp"
 #include "core/ipc/telemetry.hpp"
 #include "core/model/result.hpp"
+#include "core/store/migrations.hpp"
 #include "core/store/store.hpp"
 #include "core/telemetry/pipeline.hpp"
 #include "fake_machine.hpp"
 #include "fakes/fake_clock.hpp"
+#include "phase1_fakes.hpp"
 #include "platform/ipc/pipe_client.hpp"
 #include "svc/service.hpp"
 #include "svc_test_support.hpp"
@@ -90,6 +94,7 @@ class TelemetryMethodsTest : public ::testing::Test {
   [[nodiscard]] fakes::FakeClock& clock() { return clock_; }
   [[nodiscard]] testing::FakeMachine& machine() { return machine_; }
   [[nodiscard]] const Collectors& collectors() const { return collectors_; }
+  [[nodiscard]] const TelemetryMethods& methods() const { return *methods_; }
 
  private:
   testing::TempDir dir_;
@@ -135,6 +140,72 @@ TEST_F(TelemetryMethodsTest, LatestGroupsTheNewestMeasurementsOfEveryCollector) 
   EXPECT_EQ(volumes[0].at("disks"), Json::array({2}));
   EXPECT_EQ(volumes[0].at("fill").at("state"), "insufficient_data");
   EXPECT_TRUE(volumes[0].at("fill").at("days_until_full").is_null());
+}
+
+TEST_F(TelemetryMethodsTest, LatestListsLogicalProcessorsInNaturalOrder) {
+  machine().counters->set(R"(\Processor Information(*)\% Processor Utility)",
+                          {{.instance = "0,10", .value = 10.0},
+                           {.instance = "1,0", .value = 20.0},
+                           {.instance = "0,2", .value = 30.0},
+                           {.instance = "0,_Total", .value = 50.0},
+                           {.instance = "_Total", .value = 12.5}});
+  machine().counters->set(R"(\Processor Information(*)\% of Maximum Frequency)",
+                          {{.instance = "0,2", .value = 95.0}});
+  poll();
+  const Json cpu = ok(ipc::metrics_latest_method).at("cpu");
+  EXPECT_EQ(cpu.at("utility"), 12.5);
+  EXPECT_EQ(cpu.at("processors"),
+            (Json::array({{{"entity", "0_2"}, {"utility", 30.0}, {"frequency", 95.0}},
+                          {{"entity", "0_10"}, {"utility", 10.0}},
+                          {{"entity", "1_0"}, {"utility", 20.0}}})));
+}
+
+TEST_F(TelemetryMethodsTest, ExplainDescribesAProcessAndItsTree) {
+  poll();
+  advance(1s);
+  const Json child = ok(ipc::processes_explain_method, Json{{"pid", 101}});
+  EXPECT_EQ(child.at("image"), "browser.exe");
+  EXPECT_EQ(child.at("parent_pid"), 100);
+  EXPECT_EQ(child.at("private_working_set"), (200_MiB).count());
+  EXPECT_EQ(child.at("tree").at("pid"), 100);
+  EXPECT_EQ(child.at("tree").at("processes"), 2);
+  EXPECT_NEAR(child.at("tree").at("cpu_percent").get<double>(), 9.0, 1e-9);
+  EXPECT_EQ(pids(child.at("members")), (std::vector<std::uint32_t>{100, 101}));
+  EXPECT_TRUE(child.at("trust").is_null());  // no trust signal wired here
+  EXPECT_TRUE(child.at("kb").is_null());
+  EXPECT_TRUE(child.at("path").is_null());
+
+  const Result<Json> gone = call(ipc::processes_explain_method, Json{{"pid", 4242}});
+  ASSERT_FALSE(gone.has_value());
+  EXPECT_EQ(gone.error().code, Errc::not_found);
+  for (const std::int64_t pid : {std::int64_t{-1}, std::int64_t{1} << 32}) {
+    const Result<Json> refused = call(ipc::processes_explain_method, Json{{"pid", pid}});
+    ASSERT_FALSE(refused.has_value());
+    EXPECT_EQ(refused.error().code, Errc::invalid_argument);
+  }
+  EXPECT_EQ(raw(ipc::processes_explain_method, Json::object()).at("error").at("code"),
+            ipc::rpc_error::invalid_params);
+}
+
+TEST_F(TelemetryMethodsTest, VolumeFactsCarryFreeSpaceAndDaysUntilFull) {
+  poll();
+  Result<std::vector<alerts::Reading>> facts = methods().volume_facts();
+  ASSERT_TRUE(facts.has_value()) << facts.error().message;
+  ASSERT_EQ(facts->size(), 1U);  // too little history for a fill projection
+  EXPECT_EQ(facts->at(0).metric, "volume.free_percent");
+  EXPECT_EQ(facts->at(0).entity, "C:");
+  EXPECT_EQ(facts->at(0).value, 10.0);
+  EXPECT_EQ(facts->at(0).detail, "100.0 GiB free of 1000.0 GiB");
+
+  // Three hours without change: not filling, so days until full is infinite.
+  for (int minute = 1; minute <= 180; ++minute) {
+    advance(60s);
+  }
+  facts = methods().volume_facts();
+  ASSERT_TRUE(facts.has_value()) << facts.error().message;
+  ASSERT_EQ(facts->size(), 2U);
+  EXPECT_EQ(facts->at(1).metric, "volume.days_until_full");
+  EXPECT_TRUE(std::isinf(facts->at(1).value));
 }
 
 TEST_F(TelemetryMethodsTest, TopListsTheQualifyingTreesButNeverTheIdleProcess) {
@@ -258,6 +329,12 @@ TEST_F(TelemetryMethodsTest, VolumesProjectDaysUntilFull) {
   EXPECT_NEAR(gib_per_day, -24.0, 0.01);
   // About 97 GiB left at 24 GiB a day.
   EXPECT_NEAR(fill.at("days_until_full").get<double>(), 97.0 / 24.0, 0.02);
+
+  const Result<std::vector<alerts::Reading>> facts = methods().volume_facts();
+  ASSERT_TRUE(facts.has_value()) << facts.error().message;
+  ASSERT_EQ(facts->size(), 2U);
+  EXPECT_EQ(facts->at(1).metric, "volume.days_until_full");
+  EXPECT_NEAR(facts->at(1).value, 97.0 / 24.0, 0.02);
 }
 
 // The component inside a running service, over the pipe.
@@ -307,6 +384,27 @@ TEST_F(TelemetryComponentTest, ServesTheReadMethodsAndReportsItsHealth) {
   const auto stopping = std::chrono::steady_clock::now();
   EXPECT_TRUE((*service)->stop().has_value());
   EXPECT_LT(std::chrono::steady_clock::now() - stopping, 5s);
+}
+
+TEST(TelemetryComponent, ReportsVolumeFactsToTheAlertSinkOncePerVolumeSample) {
+  const testing::TempDir dir;
+  const fakes::FakeClock clock{noon};
+  testing::RecordingAlertSink sink;
+  const std::vector<store::MigrationSet> sets;
+  Result<std::unique_ptr<store::Store>> store = store::Store::open(dir.path() / "db", clock, sets);
+  ASSERT_TRUE(store.has_value()) << store.error().message;
+  ipc::Dispatcher methods;
+  TelemetryComponent telemetry{testing::fake_machine().sources, {}, &sink};
+  ASSERT_TRUE(telemetry.start(Context(**store, methods, clock, dir.path())).has_value());
+  telemetry.stop();
+
+  // The first sample, taken in start(): one fact, free space of C:.
+  const std::vector<alerts::Reading> facts = sink.facts();
+  ASSERT_EQ(facts.size(), 1U);
+  EXPECT_EQ(facts[0].metric, "volume.free_percent");
+  EXPECT_EQ(facts[0].entity, "C:");
+  ASSERT_NE(telemetry.volumes(), nullptr);
+  EXPECT_EQ(telemetry.volumes()->volumes.size(), 1U);
 }
 
 TEST_F(TelemetryComponentTest, AFailingCollectorMakesTheServiceDegraded) {

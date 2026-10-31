@@ -60,7 +60,7 @@ struct Alert {
   WallTime last;
   std::int64_t count = 0;
   bool active = false;
-  std::optional<WallTime> snoozed_until;  // filled by active() while the alert is snoozed
+  std::optional<WallTime> snoozed_until;  // filled by active() and list() while it is snoozed
 
   friend bool operator==(const Alert&, const Alert&) = default;
 };
@@ -110,7 +110,8 @@ class AlertEngine {
   // The active alerts, ordered by key, snoozed ones included.
   [[nodiscard]] std::vector<Alert> active() const;
   [[nodiscard]] Badge badge() const;
-  // Stored alerts whose last occurrence is at or after `since`, newest first (alerts.list).
+  // Stored alerts whose last occurrence is at or after `since`, newest first (alerts.list),
+  // with the snooze of their key.
   [[nodiscard]] Result<std::vector<Alert>> list(WallTime since) const;
 
  private:

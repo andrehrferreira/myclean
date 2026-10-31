@@ -9,6 +9,8 @@ myclean_add_library(input
     classifier.hpp
     incident.cpp
     incident.hpp
+    incident_record.cpp
+    incident_record.hpp
     incident_store.cpp
     incident_store.hpp
     probe.hpp

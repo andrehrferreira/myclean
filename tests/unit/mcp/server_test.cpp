@@ -34,11 +34,24 @@ struct Call {
 Json latest_reply() {
   return Json{
       {"time", noon_seconds},
+      {"cpu", {{"utility", 12.5}, {"processors", Json::array({{{"entity", "0_0"}}})}}},
       {"memory", {{"commit", 40.0}, {"commit_limit", 80.0}}},
       {"disks", Json::array({{{"disk", "0"}, {"queue", 1.5}}, {{"disk", "1"}, {"queue", 0.5}}})},
       {"volumes", Json::array({{{"volume", "D:"}, {"system", false}, {"free_percent", 50.0}},
                                {{"volume", "C:"}, {"system", true}, {"free_percent", 8.0}}})},
       {"unavailable", Json::array()}};
+}
+
+// The trust signal of an unsigned image in a user-writable folder.
+Json unrecognized_trust() {
+  return Json{{"status", "unsigned"},
+              {"signer", nullptr},
+              {"path", R"(C:\Users\owner\AppData\Local\b\b.exe)"},
+              {"path_class", "user_writable"},
+              {"unrecognized", true},
+              {"reasons", {"not-in-knowledge-base", "unsigned", "user-writable-path"}},
+              {"description", nullptr},
+              {"category", nullptr}};
 }
 
 class ServerTest : public ::testing::Test {
@@ -54,10 +67,13 @@ class ServerTest : public ::testing::Test {
       return latest_reply();
     }
     if (method == "processes.top") {
-      return Json{{"time", noon_seconds + 1},
-                  {"filter", {{"cpu_percent", 5.0}, {"memory_percent", 5.0}}},
-                  {"total_trees", 3},
-                  {"trees", Json::array({{{"pid", 100}, {"trust", nullptr}}})}};
+      return Json{
+          {"time", noon_seconds + 1},
+          {"filter", {{"cpu_percent", 5.0}, {"memory_percent", 5.0}}},
+          {"total_trees", 3},
+          {"trees",
+           Json::array({{{"pid", 100}, {"image", "a.exe"}, {"trust", nullptr}},
+                        {{"pid", 200}, {"image", "b.exe"}, {"trust", unrecognized_trust()}}})}};
     }
     return Json{{"method", method}};
   }
@@ -147,8 +163,14 @@ TEST_F(ServerTest, ListsOnlyReadToolsEachWithAnInputSchema) {
     EXPECT_EQ(tool.at("annotations").at("readOnlyHint"), true);
   }
   EXPECT_EQ(names, (std::vector<std::string>{"health_snapshot", "metrics_latest", "metrics_history",
-                                             "top_processes", "list_volumes"}));
+                                             "top_processes", "list_volumes", "explain_process",
+                                             "disk_health", "list_alerts", "freeze_summary"}));
   EXPECT_EQ(tools[2].at("inputSchema").at("required"), Json::array({"metric"}));
+  EXPECT_EQ(tools[5].at("inputSchema").at("required"), Json::array({"pid"}));
+  for (const Json& tool : tools) {
+    const std::string description = tool.at("description").get<std::string>();
+    EXPECT_EQ(description.find("null until"), std::string::npos) << description;
+  }
 }
 
 TEST_F(ServerTest, ToolsCallTheirReadMethods) {
@@ -161,7 +183,16 @@ TEST_F(ServerTest, ToolsCallTheirReadMethods) {
            false));
   static_cast<void>(text(call_tool("metrics_history", {{"metric", "cpu.utility"}}), false));
 
-  ASSERT_EQ(calls().size(), 5U);
+  EXPECT_EQ(Json::parse(text(call_tool("explain_process", {{"pid", 4321}}), false)),
+            (Json{{"method", "processes.explain"}}));
+  EXPECT_EQ(Json::parse(text(call_tool("disk_health"), false)), (Json{{"method", "disks.health"}}));
+  EXPECT_EQ(Json::parse(text(call_tool("list_alerts"), false)), (Json{{"method", "alerts.list"}}));
+  EXPECT_EQ(Json::parse(text(call_tool("freeze_summary"), false)),
+            (Json{{"method", "input.summary"}}));
+
+  ASSERT_EQ(calls().size(), 9U);
+  EXPECT_EQ(calls()[5].params, (Json{{"pid", 4321}}));
+  EXPECT_EQ(calls()[6].params, Json::object());
   EXPECT_EQ(calls()[0].method, "metrics.latest");
   EXPECT_EQ(calls()[1].method, "volumes.list");
   EXPECT_EQ(calls()[2].method, "processes.top");
@@ -182,7 +213,16 @@ TEST_F(ServerTest, HealthSnapshotCombinesQualifyingTreesAndSystemSignals) {
   EXPECT_EQ(calls()[0].params, (Json{{"qualifying", true}, {"limit", 100}}));
   EXPECT_EQ(calls()[1].method, "metrics.latest");
 
-  EXPECT_EQ(snapshot.at("trees"), Json::array({{{"pid", 100}, {"trust", nullptr}}}));
+  EXPECT_EQ(snapshot.at("trees").size(), 2U);
+  EXPECT_EQ(snapshot.at("trees")[1].at("trust"), unrecognized_trust());
+  // The unrecognized trees, with their reasons; a tree without a trust signal is not flagged.
+  EXPECT_EQ(snapshot.at("unrecognized"),
+            Json::array({{{"pid", 200},
+                          {"image", "b.exe"},
+                          {"path", unrecognized_trust().at("path")},
+                          {"reasons", unrecognized_trust().at("reasons")}}}));
+  EXPECT_FALSE(snapshot.at("cpu").contains("processors"));
+  EXPECT_EQ(snapshot.at("cpu").at("utility"), 12.5);
   EXPECT_EQ(snapshot.at("filter").at("cpu_percent"), 5.0);
   EXPECT_EQ(snapshot.at("total_trees"), 3);
   EXPECT_EQ(snapshot.at("volumes").size(), 2U);
@@ -220,6 +260,12 @@ TEST_F(ServerTest, BadArgumentsAreToolErrorsAndCallNothing) {
        "out of range"},
       {Json{{"name", "metrics_history"}, {"arguments", Json::object()}},
        "missing required argument 'metric'"},
+      {Json{{"name", "explain_process"}, {"arguments", Json::object()}},
+       "missing required argument 'pid'"},
+      {Json{{"name", "explain_process"}, {"arguments", {{"pid", -1}}}}, "out of range"},
+      {Json{{"name", "explain_process"}, {"arguments", {{"pid", "C:\\x.exe"}}}},
+       "must be of type integer"},
+      {Json{{"name", "list_alerts"}, {"arguments", {{"since", 0}}}}, "unknown argument 'since'"},
   };
   for (const auto& [params, expected] : cases) {
     const Json response =
@@ -268,7 +314,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 5U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 9U);
 }
 
 }  // namespace

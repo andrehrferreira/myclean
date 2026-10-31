@@ -20,6 +20,7 @@
 #include "platform/ipc/pipe_server.hpp"
 #include "platform/ipc/security.hpp"
 #include "svc/fake_machine.hpp"
+#include "svc/phase1_fakes.hpp"
 #include "svc/service.hpp"
 #include "svc/svc_test_support.hpp"
 
@@ -211,6 +212,99 @@ TEST_F(CliTest, EveryReadCommandAnswersInBothForms) {
   EXPECT_EQ(volume.at("entity"), "C:");
 }
 
+constexpr std::string_view initialize =
+    R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18",)"
+    R"("capabilities":{},"clientInfo":{"name":"test","version":"1"}}})";
+
+// The CLI against a service with every phase-1 component over fakes (svc/phase1_fakes.hpp).
+class CliPhase1Test : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    Result<std::unique_ptr<svc::Service>> started =
+        svc::testing::start_phase1_service(fakes_, dir_.path(), pipe_, clock_);
+    ASSERT_TRUE(started.has_value()) << started.error().message;
+    service_ = std::move(*started);
+  }
+
+  [[nodiscard]] Outcome cli(std::vector<std::string> args, const std::string& input = {}) const {
+    args.insert(args.begin(), {"--pipe", pipe_token(pipe_)});
+    return run_cli(args, input);
+  }
+
+ private:
+  svc::testing::TempDir dir_;
+  fakes::FakeClock clock_{noon};
+  std::wstring pipe_ = svc::testing::unique_pipe_name();
+  svc::testing::Phase1Fakes fakes_;
+  std::unique_ptr<svc::Service> service_;
+};
+
+TEST_F(CliPhase1Test, NewReadCommandsAnswerInBothForms) {
+  ASSERT_TRUE(svc::testing::eventually(
+      [&] { return document(cli({"disks", "--json"})).at("drives").size() == 2; }));
+  for (std::vector<std::string> command : std::vector<std::vector<std::string>>{
+           {"explain", "101"}, {"disks"}, {"alerts"}, {"freezes"}, {"health"}}) {
+    const Outcome human = cli(command);
+    EXPECT_EQ(human.code, exit_ok) << command.front() << ": " << human.err;
+    EXPECT_FALSE(human.out.empty());
+    command.emplace_back("--json");
+    const Outcome json = cli(command);
+    EXPECT_EQ(json.code, exit_ok) << command.front() << ": " << json.err;
+    static_cast<void>(document(json));
+  }
+
+  const Json explained = document(cli({"explain", "101", "--json"}));
+  EXPECT_EQ(explained.at("tree").at("pid"), 100);
+  const std::string explain_text = cli({"explain", "101"}).out;
+  EXPECT_NE(explain_text.find("trust: signed by Microsoft Corporation"), std::string::npos)
+      << explain_text;
+  EXPECT_NE(explain_text.find("knowledge base: Microsoft PowerToys"), std::string::npos);
+
+  const std::string disks = cli({"disks"}).out;
+  EXPECT_NE(disks.find("Samsung SSD 980 PRO 2TB"), std::string::npos) << disks;
+  EXPECT_NE(disks.find("not readable over USB"), std::string::npos) << disks;
+  EXPECT_NE(cli({"freezes"}).out.find("No freeze over 250 ms"), std::string::npos);
+
+  const std::string health = cli({"health"}).out;
+  EXPECT_NE(health.find("UNRECOGNIZED (not-in-knowledge-base, unsigned, user-writable-path)"),
+            std::string::npos)
+      << health;
+  EXPECT_EQ(health.find("malicious"), std::string::npos);
+  EXPECT_EQ(health.find("dangerous"), std::string::npos);
+  const Json snapshot = document(cli({"health", "--json"}));
+  ASSERT_EQ(snapshot.at("unrecognized").size(), 1U);
+  EXPECT_EQ(snapshot.at("unrecognized")[0].at("pid"), 200);
+}
+
+TEST_F(CliPhase1Test, ExplainOfAMissingProcessFails) {
+  const Outcome gone = cli({"explain", "99999"});
+  EXPECT_EQ(gone.code, exit_unavailable);
+  EXPECT_NE(gone.err.find("process 99999 was not found"), std::string::npos) << gone.err;
+  const Outcome json = cli({"explain", "99999", "--json"});
+  EXPECT_EQ(json.code, exit_unavailable);
+  EXPECT_TRUE(document(json).contains("error"));
+}
+
+TEST_F(CliPhase1Test, McpExplainsAProcess) {
+  const std::string input =
+      std::string(initialize) + "\n" +
+      R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"explain_process","arguments":{"pid":200}}})" +
+      "\n" +
+      R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"explain_process","arguments":{"pid":99999}}})" +
+      "\n";
+  const std::vector<Json> answers = responses(cli({"mcp"}, input).out);
+  ASSERT_EQ(answers.size(), 3U);
+  EXPECT_EQ(answers[1].at("result").at("isError"), false);
+  const Json editor =
+      Json::parse(answers[1].at("result").at("content")[0].at("text").get<std::string>());
+  EXPECT_EQ(editor.at("trust").at("unrecognized"), true);
+  EXPECT_TRUE(editor.at("kb").is_null());
+  EXPECT_EQ(answers[2].at("result").at("isError"), true);
+  EXPECT_NE(answers[2].at("result").at("content")[0].at("text").get<std::string>().find(
+                "process 99999 was not found"),
+            std::string::npos);
+}
+
 TEST(CliStatusTest, ReadCommandsSayWhatNeedsTheService) {
   const Outcome human = run_cli({"--pipe", nobody(), "health"});
   EXPECT_EQ(human.code, exit_unavailable);
@@ -233,6 +327,10 @@ TEST(CliStatusTest, UsageErrorsExitThree) {
                                              {"--pipe", R"(C:\Windows)", "status"},
                                              {"processes", "--limit", "ten"},
                                              {"metrics", "query"},
+                                             {"explain"},
+                                             {"explain", "notepad"},
+                                             {"explain", "-4"},
+                                             {"disks", "extra"},
                                              {"metrics", "query", "cpu.utility", "--hours"}}) {
     const Outcome outcome = run_cli(args);
     EXPECT_EQ(outcome.code, exit_usage) << (args.empty() ? "(none)" : args.front());
@@ -240,10 +338,6 @@ TEST(CliStatusTest, UsageErrorsExitThree) {
     EXPECT_FALSE(outcome.err.empty());
   }
 }
-
-constexpr std::string_view initialize =
-    R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18",)"
-    R"("capabilities":{},"clientInfo":{"name":"test","version":"1"}}})";
 
 TEST_F(CliTest, McpAnswersFromTheService) {
   start();
