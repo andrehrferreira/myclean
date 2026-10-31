@@ -146,9 +146,9 @@ bool compress_ntfs(const fs::path& path) {
 
 bool compress_wof(const fs::path& path) {
   const wil::unique_hfile handle = open_for_write(path);
-  FILE_PROVIDER_EXTERNAL_INFO_V1 info{.Version = FILE_PROVIDER_CURRENT_VERSION,
-                                      .Algorithm = FILE_PROVIDER_COMPRESSION_XPRESS4K,
-                                      .Flags = 0};
+  // WOF_PROVIDER_FILE takes WOF_FILE_COMPRESSION_INFO_V1 {Algorithm, Flags};
+  // FILE_PROVIDER_EXTERNAL_INFO_V1 belongs to FSCTL_SET_EXTERNAL_BACKING.
+  WOF_FILE_COMPRESSION_INFO_V1 info{.Algorithm = FILE_PROVIDER_COMPRESSION_XPRESS4K, .Flags = 0};
   return handle &&
          SUCCEEDED(::WofSetFileDataLocation(handle.get(), WOF_PROVIDER_FILE, &info, sizeof(info)));
 }
