@@ -8,6 +8,8 @@ myclean_add_library(cli
     map_command.hpp
     packs_command.cpp
     packs_command.hpp
+    scan_all_command.cpp
+    scan_all_command.hpp
     text.cpp
     text.hpp
   DEPENDS
@@ -16,9 +18,18 @@ myclean_add_library(cli
     myclean::os
     myclean::packs
     myclean::platform_clean
+    myclean::platform_compress
+    myclean::platform_defrag
+    myclean::platform_disk
+    myclean::platform_disk_health
+    myclean::platform_fs
+    myclean::platform_git
     myclean::platform_ipc
+    myclean::platform_ntfs
     myclean::platform_packs
-    myclean::platform_scan)
+    myclean::platform_scan
+    myclean::platform_settings
+    myclean::scanall)
 target_compile_definitions(myclean_cli PRIVATE MYCLEAN_VERSION="${PROJECT_VERSION}")
 
 add_executable(myclean main.cpp)

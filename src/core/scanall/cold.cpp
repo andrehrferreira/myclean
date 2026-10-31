@@ -1,0 +1,115 @@
+#include "core/scanall/cold.hpp"
+
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cstddef>
+#include <filesystem>
+#include <format>
+#include <span>
+#include <string>
+#include <vector>
+
+#include "core/clean/patterns.hpp"
+#include "core/model/units.hpp"
+#include "core/placement/drives.hpp"
+#include "core/scanall/findings.hpp"
+#include "core/space/scanner.hpp"
+#include "core/space/text.hpp"
+
+namespace myclean::scanall {
+
+namespace {
+
+namespace fs = std::filesystem;
+
+constexpr std::array<placement::DriveClass, 3> ssd_classes = {
+    placement::DriveClass::nvme, placement::DriveClass::sata_ssd, placement::DriveClass::nvme_qlc};
+constexpr std::array<placement::DriveClass, 1> hdd_classes = {placement::DriveClass::hdd};
+
+bool used_inside(std::span<const fs::path> in_use, const fs::path& folder) {
+  return std::ranges::any_of(
+      in_use, [&folder](const fs::path& used) { return clean::within(used, folder); });
+}
+
+Finding cold_finding(const space::Folder& folder, WallTime newest, const DriveInfo& drive,
+                     std::span<const DriveInfo> drives) {
+  const Bytes size = folder.size_on_disk;
+  Finding finding{.group = ActionGroup::archive,
+                  .source = "cold",
+                  .drive = drive.root,
+                  .path = folder.path,
+                  .items = {Item{.path = folder.path, .size = size}},
+                  .bytes = size,
+                  .confidence = 0.7,
+                  .reason = std::format("nothing inside changed since {:%Y-%m-%d}; {} on {}",
+                                        std::chrono::floor<std::chrono::days>(newest),
+                                        size_text(size), placement::to_string(drive.drive_class))};
+  const DriveInfo* target = best_target(drives, folder.path, size, hdd_classes);
+  if (target == nullptr) {
+    finding.group = ActionGroup::manual_review;
+    finding.reason += "; no healthy HDD keeps 10 % free after taking it";
+    return finding;
+  }
+  const std::string letter = space::utf8(drive.root).substr(0, 1);
+  const fs::path destination = target->root / "Archive" / letter / folder.path.relative_path();
+  finding.plan =
+      Plan{.kind = PlanKind::move_folder,
+           .params = {{"source", space::utf8(folder.path)}, {"target", space::utf8(destination)}}};
+  return finding;
+}
+
+}  // namespace
+
+FolderTimes folder_times(const space::ScanResult& tree) {
+  const std::size_t count = tree.folders.size();
+  FolderTimes times{.newest = std::vector<WallTime>(count),
+                    .complete = std::vector<bool>(count, !tree.cancelled)};
+  for (std::size_t index = 0; index < count; ++index) {
+    const space::Folder& folder = tree.folders[index];
+    for (const space::FileItem& file : folder.files) {
+      times.newest[index] = std::max({times.newest[index], file.created, file.modified});
+    }
+    if (folder.error) {
+      times.complete[index] = false;
+    }
+  }
+  for (std::size_t index = count; index-- > 1;) {
+    const std::size_t parent = tree.folders[index].parent;
+    times.newest[parent] = std::max(times.newest[parent], times.newest[index]);
+    if (!times.complete[index]) {
+      times.complete[parent] = false;
+    }
+  }
+  return times;
+}
+
+std::vector<Finding> find_cold(const space::ScanResult& tree, const FolderTimes& times,
+                               const DriveInfo& drive, std::span<const DriveInfo> drives,
+                               std::span<const fs::path> in_use, WallTime now,
+                               const ColdOptions& options) {
+  std::vector<Finding> findings;
+  if (std::ranges::find(ssd_classes, drive.drive_class) == ssd_classes.end()) {
+    return findings;
+  }
+  const WallTime cutoff = now - std::chrono::duration_cast<WallTime::duration>(
+                                    std::chrono::months{options.min_age_months});
+  // Closed: the folder and everything below it are decided (proposed, excluded or too small).
+  std::vector<bool> closed(tree.folders.size(), false);
+  for (std::size_t index = 1; index < tree.folders.size(); ++index) {
+    const space::Folder& folder = tree.folders[index];
+    if (closed[folder.parent] || folder.size_on_disk < options.min_size ||
+        system_location(folder.path)) {
+      closed[index] = true;
+      continue;
+    }
+    if (times.complete[index] && times.newest[index] < cutoff &&
+        !used_inside(in_use, folder.path)) {
+      findings.push_back(cold_finding(folder, times.newest[index], drive, drives));
+      closed[index] = true;
+    }
+  }
+  return findings;
+}
+
+}  // namespace myclean::scanall

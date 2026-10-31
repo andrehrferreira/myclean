@@ -23,6 +23,7 @@
 
 #include "cli/map_command.hpp"
 #include "cli/packs_command.hpp"
+#include "cli/scan_all_command.hpp"
 #include "cli/text.hpp"
 #include "core/ipc/alerts.hpp"
 #include "core/ipc/disk_health.hpp"
@@ -337,6 +338,9 @@ mcp::Caller pipe_caller(std::wstring pipe, std::chrono::milliseconds timeout) {
 
 int run(std::span<const std::string> args, std::istream& in, std::ostream& out, std::ostream& err,
         const os::IClock& clock, std::chrono::milliseconds timeout) {
+  if (!args.empty() && args.front() == "scan-all") {
+    return scan_all_command(args.subspan(1), out, err);  // runs here, without the service
+  }
   if (!args.empty() && args.front() == "packs") {
     return packs_command(args.subspan(1), out, err);  // runs here, without the service
   }
