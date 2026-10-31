@@ -1,0 +1,474 @@
+{
+  "entries": [
+    {
+      "id": "windows.svchost",
+      "image": "svchost.exe",
+      "signer": "Microsoft Windows Publisher",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Service Host. Runs most Windows services; each copy hosts one or more of them, for example networking, Windows Update, audio or the clipboard history service.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.csrss",
+      "image": "csrss.exe",
+      "signer": "Microsoft Windows Publisher",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Client Server Runtime Process. A core part of Windows, one per session; Windows stops if it ends.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.lsass",
+      "image": "lsass.exe",
+      "signer": "Microsoft Windows Publisher",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Local Security Authority. Checks sign-ins and passwords and enforces the security rules of Windows.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.lsaiso",
+      "image": "LsaIso.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Credential Guard. Keeps sign-in secrets in a part of memory that is isolated from the rest of Windows.",
+      "category": "security",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.smss",
+      "image": "smss.exe",
+      "signer": "Microsoft Windows Publisher",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Session Manager. The first program Windows starts; it sets up the system and every sign-in session.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.services",
+      "image": "services.exe",
+      "signer": "Microsoft Windows Publisher",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Service Control Manager. Starts, stops and watches the Windows services.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.wininit",
+      "image": "wininit.exe",
+      "signer": "Microsoft Windows Publisher",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Windows Start-Up Application. Starts the service manager and the security authority when Windows boots.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.winlogon",
+      "image": "winlogon.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Windows Logon. Handles signing in and out, locking the screen and Ctrl+Alt+Del.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.dwm",
+      "image": "dwm.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Desktop Window Manager. Draws every window on the screen, with its shadows, transparency and animations.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.explorer",
+      "image": "explorer.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\explorer\\.exe$",
+      "description": "Windows Explorer. Shows the taskbar, the desktop and the File Explorer windows.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.sihost",
+      "image": "sihost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Shell Infrastructure Host. Works in the background for the Windows desktop, such as the Start menu and notifications.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.ctfmon",
+      "image": "ctfmon.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "CTF Loader. Provides text input to apps: keyboard layouts, input methods, handwriting and the touch keyboard.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.text-input-host",
+      "image": "TextInputHost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\SystemApps\\\\",
+      "description": "Windows Input Experience. Shows the touch keyboard, the emoji panel and the clipboard history panel (Windows key + V).",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.fontdrvhost",
+      "image": "fontdrvhost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Usermode Font Driver Host. Reads font files in a separate, restricted process, so a damaged font cannot harm Windows.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.audiodg",
+      "image": "audiodg.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Windows Audio Device Graph Isolation. Processes all sound, including the sound effects that audio drivers add.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.dashost",
+      "image": "dasHost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Device Association Framework Provider Host. Finds and pairs devices that connect over a network or wirelessly.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.taskhostw",
+      "image": "taskhostw.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Host Process for Windows Tasks. Runs scheduled tasks and other background jobs of Windows.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.runtime-broker",
+      "image": "RuntimeBroker.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Runtime Broker. Checks whether Store apps may use things such as the location, camera or microphone.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.dllhost",
+      "image": "dllhost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "COM Surrogate. Runs a component for another program in a separate process, for example to make thumbnails in File Explorer.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.conhost",
+      "image": "conhost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Console Window Host. The window behind every command-line program.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.background-task-host",
+      "image": "backgroundTaskHost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Background Task Host. Runs the background work of Store apps.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.application-frame-host",
+      "image": "ApplicationFrameHost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Application Frame Host. Draws the window frames of Store apps.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.start-menu",
+      "image": "StartMenuExperienceHost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\SystemApps\\\\",
+      "description": "Start Experience Host. The Windows Start menu.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.search-host",
+      "image": "SearchHost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\SystemApps\\\\",
+      "description": "Windows Search window. Shows the search box and results of the taskbar and Start menu.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.shell-experience-host",
+      "image": "ShellExperienceHost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\SystemApps\\\\",
+      "description": "Windows Shell Experience Host. Shows parts of the Windows interface, such as the notification and calendar panels.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.search-indexer",
+      "image": "SearchIndexer.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Windows Search indexer. Keeps an index of files, e-mail and other content so that searches are fast.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.search-protocol-host",
+      "image": "SearchProtocolHost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Windows Search helper. Reads the contents of files for the search index.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.wmi-provider-host",
+      "image": "WmiPrvSE.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\wbem\\\\[^\\\\]+$",
+      "description": "WMI Provider Host. Answers programs that ask Windows for system information (WMI). High use means some program asks a lot.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.wmi-unsecapp",
+      "image": "unsecapp.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\wbem\\\\[^\\\\]+$",
+      "description": "WMI callback receiver. Delivers the answers of system-information (WMI) queries back to the programs that asked.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.wmi-performance-adapter",
+      "image": "WmiApSrv.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\wbem\\\\[^\\\\]+$",
+      "description": "WMI Performance Adapter. Makes performance counters available to programs through WMI.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.wudfhost",
+      "image": "WUDFHost.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Windows Driver Foundation user-mode host. Runs device drivers that work outside the kernel, such as some USB, sensor and fingerprint drivers.",
+      "category": "driver",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.wlanext",
+      "image": "wlanext.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Wireless LAN extensibility framework. Runs the add-ons that Wi-Fi drivers bring to Windows.",
+      "category": "driver",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.spooler",
+      "image": "spoolsv.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Print Spooler. Sends documents to printers, including Microsoft Print to PDF.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.security-health-service",
+      "image": "SecurityHealthService.exe",
+      "signer": "Microsoft Windows Publisher",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Windows Security Health Service. Collects the protection status shown in the Windows Security app.",
+      "category": "security",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.security-health-systray",
+      "image": "SecurityHealthSystray.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Windows Security notification icon in the taskbar.",
+      "category": "security",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.smartscreen",
+      "image": "smartscreen.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Microsoft Defender SmartScreen. Warns before you open downloaded apps and files that Microsoft considers unsafe or unknown.",
+      "category": "security",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.cmd",
+      "image": "cmd.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\(System32|SysWOW64)\\\\[^\\\\]+$",
+      "description": "Windows Command Processor. Runs commands and batch files; programs and scripts start it as well.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.powershell",
+      "image": "powershell.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\(System32|SysWOW64)\\\\WindowsPowerShell\\\\v1\\.0\\\\[^\\\\]+$",
+      "description": "Windows PowerShell 5.1. A command line and scripting language built into Windows; programs and scripts start it as well.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.system-settings",
+      "image": "SystemSettings.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\ImmersiveControlPanel\\\\[^\\\\]+$",
+      "description": "The Windows Settings app.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.update-notifications",
+      "image": "MoNotificationUx.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\uus\\\\",
+      "description": "Windows Update notifications, such as reminders to restart.",
+      "category": "updater",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.touch-keyboard",
+      "image": "TabTip.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Program Files\\\\Common Files\\\\microsoft shared\\\\ink\\\\[^\\\\]+$",
+      "description": "Touch keyboard and handwriting panel.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.hyperv-compute",
+      "image": "vmcompute.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Hyper-V Host Compute Service. Runs lightweight virtual machines and containers, such as the one of WSL 2.",
+      "category": "virtualization",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.hyperv-management",
+      "image": "vmms.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Hyper-V Virtual Machine Management. Manages the virtual machines of this PC.",
+      "category": "virtualization",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.hyperv-worker",
+      "image": "vmwp.exe",
+      "signer": "Microsoft Windows Publisher",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Hyper-V virtual machine worker. One runs for each running virtual machine, for example the one of WSL 2.",
+      "category": "virtualization",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.wsl-launcher",
+      "image": "wsl.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\[^\\\\]+$",
+      "description": "Windows Subsystem for Linux command. Starts and manages Linux distributions on Windows.",
+      "category": "virtualization",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.cross-device-resume",
+      "image": "CrossDeviceResume.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\SystemApps\\\\",
+      "description": "Part of the Windows features that connect this PC with your phone and other devices.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    },
+    {
+      "id": "windows.oobe-broker",
+      "image": "UserOOBEBroker.exe",
+      "signer": "Microsoft Windows",
+      "path": "^[A-Z]:\\\\Windows\\\\System32\\\\oobe\\\\[^\\\\]+$",
+      "description": "User Out-of-Box Experience Broker. Part of Windows setup; it shows the prompts to finish setting up the device.",
+      "category": "system",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    }
+  ]
+}

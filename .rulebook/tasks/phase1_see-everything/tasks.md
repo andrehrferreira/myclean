@@ -10,12 +10,12 @@
 - [x] 1.9 T2: ETW Microsoft-Windows-Kernel-Process and Kernel-Network sessions via krabsetw; persist proc_start
 - [x] 1.10 T6: telemetry pipeline: per-collector lock-free ring, downsampler, history query API
 - [ ] 1.11 R3: myclean-tray shell: tray icon with state color + tooltip, toasts, single instance, quits on Local\MyClean.Tray.Quit (deploy contract C5)
-- [ ] 1.12 T7: alert engine: thresholds + change detection, rate limiting, snooze, tray badge
+- [x] 1.12 T7: alert engine: thresholds + change detection, rate limiting, snooze, tray badge
 - [ ] 1.13 H1: disk-health reader (NVMe health log + temperature, ATA SMART, USB fallback to reliability counters) every 10 min + daily snapshot
 - [ ] 1.14 H2: health history, delta alerts (any new media error / reallocated or pending sector), temperature thresholds, TBW endurance projection
 - [x] 1.15 I1: input watchdog in the tray: raw input + clipboard listener + SendMessageTimeout probes; incidents > 250 ms stored with owner, open-clipboard holder, viewer chain, foreground app, hung windows, suspects
 - [x] 1.16 I2: freeze view + mechanism classifier (delayed rendering, clipboard held open, viewer chain, slow keyboard hook, heavy payload)
-- [ ] 1.17 K1: trust signal (WinVerifyTrust incl. catalog, signer, user-writable path, KB match) + knowledge base v1 data
+- [x] 1.17 K1: trust signal (WinVerifyTrust incl. catalog, signer, user-writable path, KB match) + knowledge base v1 data
 - [x] 1.18 R5: myclean CLI with --json for every read feature, including `status --json` (deploy contract C6) and `health`
 - [ ] 1.19 R6: `myclean mcp` stdio server with read-only tools (health_snapshot, explain_process, storage/volume/disk queries)
 - [ ] 1.20 R4: dashboard: live charts for CPU, memory and each disk, per-drive health cards, volume bars with days-until-full, top process trees

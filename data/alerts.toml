@@ -1,0 +1,64 @@
+# Alert rules (format: src/core/alerts/config.hpp). Producers report readings by metric and
+# entity: volumes by mount point ("C:"); disk health facts by the stable drive key (model +
+# serial hash), so baselines never mix two drives when disk numbers change.
+
+# At most one toast per rule and entity within this many minutes.
+rate_limit_minutes = 5
+
+[[rule]]
+id = "volume.free-space-low"
+title = "Drive is almost full"
+metric = "volume.free_percent"
+severity = "warning"
+below = 10
+unit = "%"
+
+[[rule]]
+id = "volume.fill-up"
+title = "Drive will be full soon"
+metric = "volume.days_until_full"  # infinite when the volume is not filling
+severity = "warning"
+below = 14
+unit = "days"
+
+[[rule]]
+id = "disk.media-errors"
+title = "Drive reported new media errors"
+metric = "disk.media_errors"
+severity = "critical"
+change = "increase"
+
+[[rule]]
+id = "disk.reallocated-sectors"
+title = "Drive replaced damaged sectors"
+metric = "disk.reallocated_sectors"
+severity = "critical"
+change = "increase"
+
+[[rule]]
+id = "disk.pending-sectors"
+title = "Drive has sectors waiting to be replaced"
+metric = "disk.pending_sectors"
+severity = "critical"
+change = "increase"
+
+[[rule]]
+id = "disk.temperature"
+title = "Drive is hotter than its rated limit"
+metric = "disk.temperature_over_limit"  # degrees above the model's limit; only when one is known
+severity = "warning"
+above = 0
+
+[[rule]]
+id = "disk.health-degraded"
+title = "Drive health is degraded"
+metric = "disk.health_status"  # 0 good, 1 warning, 2 failing
+severity = "warning"
+above = 0.5
+
+[[rule]]
+id = "disk.health-failing"
+title = "Drive reports it is failing"
+metric = "disk.health_status"
+severity = "critical"
+above = 1.5
