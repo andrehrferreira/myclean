@@ -67,19 +67,27 @@ When relocation targets are proposed
 Then G: is not offered as a target
 And an approved relocation targeting G: is refused at apply time
 
-### Requirement: System Space Settings Are Approval-Only
-The system SHALL show the hibernation type, page-file placement and size, and shadow-storage size with the current value, the space it costs, a recommended value, the exact command it will run (`powercfg /h /type reduced`, WMI `Win32_PageFileSetting`, `vssadmin resize shadowstorage`) and its undo, and MUST change them only after an explicit owner approval, never automatically.
+### Requirement: System Space Settings Need Approval Unless the System Volume Is Critical
+The system SHALL show the hibernation type, page-file placement and size, and shadow-storage size with the current value, the space it costs, a recommended value, the exact command it will run (`powercfg /h /type reduced`, WMI `Win32_PageFileSetting`, `vssadmin resize shadowstorage`) and its undo, and MUST change them only after an explicit owner approval, with two exceptions decided by the owner on 2026-11-01: while the system volume has less than 10 % free, the scheduler SHALL itself set full hibernation to reduced, and SHALL move a page file that is system-managed or uncapped on the system volume to a system-managed page file on the best healthy volume with room, keeping a small fixed page file on the system volume; it MUST NOT shrink the total page-file capacity the machine has, and MUST NOT change shadow storage. Each such change is a plan of the scheduler, recorded and undoable like an approved one, and the owner is told when a restart is needed.
 
 #### Scenario: Hibernation entry
 Given `C:\hiberfil.sys` is 50.9 GB with full hibernation
 When the owner opens the Optimizations view
 Then the hibernation entry shows 50.9 GB, the recommended "reduced" type, the command `powercfg /h /type reduced` and how to undo it
 
-#### Scenario: Auto policy cannot change these settings
-Given the owner sets the placement feature's automation level to `auto`
+#### Scenario: Auto policy cannot change these settings while there is room
+Given the system volume has 25 % free and the owner sets the placement feature's automation level to `auto`
 When the scheduler runs
 Then the hibernation type, page file and shadow storage are not changed
 And any proposed change waits in the approval inbox
+
+#### Scenario: Critical system volume
+Given C: has 5 % free, full hibernation and a system-managed page file on C:, and D: is a healthy NVMe volume with room
+When the scheduler runs
+Then hibernation is set to reduced
+And the page files become a small fixed one on C: and a system-managed one on D:, effective after a restart
+And shadow storage is not changed
+And both changes are plans of the scheduler that the owner can undo
 
 #### Scenario: Page file undo
 Given the owner approved moving the page file from C: to D:
