@@ -29,7 +29,7 @@ Then that rule is rejected and reported
 And no target of that rule is ever selected
 
 ### Requirement: Developer Artifact Qualification
-The system SHALL find project roots by marker files under the configured workspace roots (default F: and W:) and SHALL propose an artifact folder only if all of the following hold: it matches the rule for that project type; inside a git repository `git check-ignore` reports it as ignored; no process has its current directory or an open file inside it; and the project has been inactive for at least the rule's inactive-days (default 14, 30 for `auto`-tier rules), where activity is the newest of the last commit and the newest source-file modification time.
+The system SHALL find project roots by marker files under the configured workspace roots (default D:, E:, F:, G: and W:) and SHALL propose an artifact folder only if all of the following hold: it matches the rule for that project type; inside a git repository `git check-ignore` reports it as ignored; no process has its current directory or an open file inside it; and the project has been inactive for at least the rule's inactive-days (default 14, 30 for `auto`-tier rules), where activity is the newest of the last commit and the newest source-file modification time. An `auto`-tier rule MUST wait at least 7 days, either for the project (inactive-days) or for the artifact itself (min-age-days, the newest write inside it). A Cargo project's target goes after 7 inactive days (what `cargo clean` removes; the next build compiles again), and the incremental crate folders no build wrote for 7 days go even while the project is active.
 
 #### Scenario: Ignored artifact of an inactive project
 Given `F:\app\package.json` exists, `F:\app\node_modules` is ignored by git, no process uses it, and the last commit and newest source change are 45 days old
@@ -50,6 +50,11 @@ Then `F:\game\target` is not proposed
 Given a project whose newest source file was modified 3 days ago
 When the developer-artifact scanner runs with the default 14-day threshold
 Then none of its artifact folders are proposed
+
+#### Scenario: Stale incremental cache of an active Cargo project
+Given `F:\engine\src\lib.rs` was modified yesterday, `F:\engine\target` is ignored by git and no process uses the project, and `target\debug\incremental` holds `engine-a` last written 12 days ago and `engine-b` written yesterday
+When the developer-artifact scanner runs
+Then only `F:\engine\target\debug\incremental\engine-a` is proposed, and `target` as a whole is not
 
 #### Scenario: Unreal Saved folder
 Given an Unreal project with `Saved\Logs`, `Saved\Crashes` and `Saved\Config`

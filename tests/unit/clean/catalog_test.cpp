@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -113,7 +114,7 @@ TEST(ShippedCatalog, BrowserAndElectronTargetsAreCachesOnly) {
 }
 
 // Cleaning spec, "Developer Artifact Qualification": every artifact rule requires git, no use
-// and inactivity, and auto-tier ones wait at least 30 days.
+// and inactivity; auto-tier ones wait at least 7 days, for the project or for the item itself.
 TEST(ShippedCatalog, ArtifactRulesRequireEveryQualification) {
   for (const CleaningRule& rule : shipped_rules()) {
     if (!rule.project_marker) {
@@ -122,7 +123,12 @@ TEST(ShippedCatalog, ArtifactRulesRequireEveryQualification) {
     EXPECT_TRUE(rule.require.git_ignored) << rule.id;
     EXPECT_TRUE(rule.require.not_in_use) << rule.id;
     ASSERT_TRUE(rule.require.inactive_days) << rule.id;
-    EXPECT_GE(*rule.require.inactive_days, rule.tier == Tier::automatic ? 30 : 14) << rule.id;
+    if (rule.tier == Tier::automatic) {
+      EXPECT_GE(std::max(*rule.require.inactive_days, rule.require.min_age_days.value_or(0)), 7)
+          << rule.id;
+    } else {
+      EXPECT_GE(*rule.require.inactive_days, 14) << rule.id;
+    }
     for (const std::string& target : rule.targets) {
       EXPECT_NE(target, "Saved") << rule.id;
       EXPECT_NE(target, ".venv") << rule.id;
@@ -130,13 +136,14 @@ TEST(ShippedCatalog, ArtifactRulesRequireEveryQualification) {
   }
 }
 
-TEST(ShippedWorkspaces, DefaultRootsAreFAndW) {
+TEST(ShippedWorkspaces, DefaultRootsAreTheWorkVolumes) {
   const std::filesystem::path file = std::filesystem::path{MYCLEAN_DATA_DIR} / "workspaces.toml";
   const Result<std::string> text = rules::DiskDataFiles{}.read(file);
   ASSERT_TRUE(text.has_value()) << text.error().message;
   const Result<Workspaces> workspaces = parse_workspace_file(*text, file);
   ASSERT_TRUE(workspaces.has_value()) << workspaces.error().message;
-  EXPECT_EQ(workspaces->roots, (std::vector<std::filesystem::path>{R"(F:\)", R"(W:\)"}));
+  EXPECT_EQ(workspaces->roots,
+            (std::vector<std::filesystem::path>{R"(D:\)", R"(E:\)", R"(F:\)", R"(G:\)", R"(W:\)"}));
   EXPECT_NE(std::ranges::find(workspaces->skip, L"node_modules"), workspaces->skip.end());
   EXPECT_NE(std::ranges::find(workspaces->skip, L".git"), workspaces->skip.end());
 }

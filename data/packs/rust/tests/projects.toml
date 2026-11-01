@@ -1,5 +1,6 @@
 # An inactive Cargo project in a workspace: its ignored target goes; sources and a project
-# outside git stay. The Cargo home as a whole is an area of its own.
+# outside git stay. An active project keeps target and loses only the incremental crate folders
+# no build wrote for 7 days. The Cargo home as a whole is an area of its own.
 
 [workspace]
 roots = ['F:\']
@@ -21,6 +22,46 @@ size = 8388608
 [[entry]]
 path = 'F:\code\tilemap\src\main.rs'
 [[entry]]
+path = 'F:\code\engine\.git'
+folder = true
+[[entry]]
+path = 'F:\code\engine\Cargo.toml'
+[[entry]]
+path = 'F:\code\engine\src\lib.rs'
+age_days = 1
+[[entry]]
+path = 'F:\code\engine\target'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\engine\target\debug\incremental\engine-1q2w3e'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\engine\target\debug\incremental\engine-1q2w3e\s-old-1\query-cache.bin'
+size = 67108864
+age_days = 12
+[[entry]]
+path = 'F:\code\engine\target\debug\incremental\engine-4r5t6y'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\engine\target\debug\incremental\engine-4r5t6y\s-new-1\query-cache.bin'
+size = 67108864
+age_days = 1
+[[entry]]
+path = 'F:\code\engine\target\llvm-cov-target\debug\incremental\engine-7u8i9o'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\engine\target\llvm-cov-target\debug\incremental\engine-7u8i9o\s-old-2\query-cache.bin'
+size = 67108864
+age_days = 9
+[[entry]]
+path = 'F:\code\engine\target\debug\deps\libengine.rlib'
+size = 8388608
+age_days = 30
+[[entry]]
 path = 'F:\crates\vendored\Cargo.toml'
 [[entry]]
 path = 'F:\crates\vendored\target\release\libvendored.rlib'
@@ -29,7 +70,16 @@ path = 'F:\crates\vendored\target\release\libvendored.rlib'
 kind     = "clean"
 case     = "target"
 match    = ['F:\code\tilemap\target']
-no_match = ['F:\code\tilemap\src', 'F:\code\tilemap\Cargo.lock', 'F:\crates\vendored\target']
+no_match = ['F:\code\tilemap\src', 'F:\code\tilemap\Cargo.lock', 'F:\crates\vendored\target',
+            'F:\code\engine\target']
+
+[[expect]]
+kind     = "clean"
+case     = "stale-incremental"
+match    = ['F:\code\engine\target\debug\incremental\engine-1q2w3e',
+            'F:\code\engine\target\llvm-cov-target\debug\incremental\engine-7u8i9o']
+no_match = ['F:\code\engine\target\debug\incremental\engine-4r5t6y',
+            'F:\code\engine\target\debug\deps', 'F:\code\engine\target']
 
 [[expect]]
 kind     = "attribution"

@@ -1,7 +1,7 @@
 # Where the developer-artifact scanner looks for projects (cleaning spec, "Developer Artifact
 # Qualification"). Format: src/core/clean/workspaces.hpp.
 
-roots     = ['F:\', 'W:\']
+roots     = ['D:\', 'E:\', 'F:\', 'G:\', 'W:\']
 # Folder names never entered, in any case: git data, installed packages and virtual
 # environments (never project roots of their own), and volume system folders.
 skip      = [".git", "node_modules", ".venv", "venv", '$RECYCLE.BIN', "System Volume Information",

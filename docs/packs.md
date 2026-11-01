@@ -326,7 +326,7 @@ the new ones.
 | `playwright` | clean: test browsers; attribution: browsers, MCP profiles (review) |
 | `python` | clean: caches and build output of inactive Python projects, pip and uv caches (their own commands); attribution: pip cache (relocate), uv, Python and Conda installs (uninstall); kb: python.exe |
 | `python-store` | clean: pip cache of Store Pythons; attribution: installs (uninstall), user packages (review) |
-| `rust` | clean: Cargo crate cache, sources and git checkouts, target of inactive Cargo projects; compress: toolchains (LZX); relocate: RUSTUP_HOME; attribution: Cargo home (relocate), ort's ONNX Runtime downloads (review) |
+| `rust` | clean: Cargo crate cache, sources and git checkouts, target of Cargo projects inactive 7 days, incremental caches no build wrote for 7 days (active projects too); compress: toolchains (LZX); relocate: RUSTUP_HOME; attribution: Cargo home (relocate), ort's ONNX Runtime downloads (review) |
 | `security-network` | attribution: Kaspersky data; kb: Kaspersky, OpenVPN, WireGuard, AnyDesk, ExitLag |
 | `unity` | clean: Library, Temp, Obj and Logs of inactive Unity projects (ask); attribution: editors (uninstall), package and Asset Store cache (review) |
 | `unreal` | clean: build output, derived data, logs and crashes of inactive Unreal projects (ask); attribution: engines (uninstall), shared DDC (relocate), per-user data and Vault cache (review) |

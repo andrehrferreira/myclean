@@ -18,7 +18,8 @@ require  = { min_age_days = 90, not_in_use = true }
 # pack.toml; analysis F-012). The scanner walks the roots of data/workspaces.toml; a folder
 # holding Cargo.toml is a project root. target is proposed only when the project is in a git
 # work tree, git ignores target and tracks nothing inside it, no process uses it or the project,
-# and the project is inactive for 30 days (newest of the last commit and every source file).
+# and the project is inactive for 7 days (newest of the last commit and every source file).
+# Removing it is what cargo clean does: nothing is lost, the next build compiles again.
 [[rule]]
 id       = "target"
 category = "dev-artifacts"
@@ -27,4 +28,20 @@ scope    = "user"
 strategy = "delete"
 project  = { marker = "Cargo.toml" }
 targets  = ["target"]
-require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+require  = { git_ignored = true, not_in_use = true, inactive_days = 7 }
+
+# Stale incremental caches, in active projects too (source: rustc_incremental::persist::fs, see
+# pack.toml). rustc keeps one folder per crate and build configuration under incremental and
+# only reuses and collects the folders of the configuration it builds now; a folder no build
+# wrote for 7 days belongs to a configuration or code that is gone. Removing one makes only
+# that crate's next incremental build start fresh. Observed: 89 GiB of such folders in two
+# active projects.
+[[rule]]
+id       = "stale-incremental"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "Cargo.toml" }
+targets  = ['target\*\incremental\*', 'target\*\*\incremental\*']
+require  = { git_ignored = true, not_in_use = true, inactive_days = 0, min_age_days = 7 }

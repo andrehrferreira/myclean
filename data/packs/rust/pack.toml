@@ -1,13 +1,15 @@
 id          = "rust"
-version     = "1.2.0"
+version     = "1.3.0"
 title       = "Rust (rustup and Cargo)"
-description = "rustup toolchains (compressible, movable with RUSTUP_HOME), Cargo's downloaded crates and git checkouts, which Cargo restores when needed, and the target folders of inactive Cargo projects."
+description = "rustup toolchains (compressible, movable with RUSTUP_HOME), Cargo's downloaded crates and git checkouts, which Cargo restores when needed, the target folders of inactive Cargo projects and stale incremental caches of active ones."
 sources     = [
   "https://rust-lang.github.io/rustup/installation/index.html#choosing-where-to-install (RUSTUP_HOME, default %USERPROFILE%\\.rustup; CARGO_HOME, default %USERPROFILE%\\.cargo)",
   "https://doc.rust-lang.org/cargo/guide/build-cache.html (a project's build output is in its target folder; cargo build recreates it)",
+  "https://doc.rust-lang.org/nightly/nightly-rustc/rustc_incremental/persist/fs/index.html (one crate directory per crate and configuration under incremental; rustc garbage-collects old session directories of the crate it compiles, and a missing directory only means a fresh incremental session)",
   "https://doc.rust-lang.org/cargo/guide/cargo-home.html (registry/cache holds .crate files, registry/src their unpacked sources, git/checkouts working copies of git dependencies; Cargo restores any part of the cache that is removed)",
   "observed on reference machine: %USERPROFILE%\\.rustup\\toolchains; %USERPROFILE%\\.cargo\\registry\\cache\\index.crates.io-1949cf8c6b5b557f; LZX saves 1.12 times what XPRESS 32K saves on a Rust toolchain (compress analyzer measurement); Cargo projects with target ignored by git (analysis F-012)",
   "observed on reference machine: %LOCALAPPDATA%/ort.pyke.io/dfbin/x86_64-pc-windows-msvc/<hash>/onnxruntime, the ONNX Runtime libraries the ort crate's build downloaded, four builds, 1.2 GiB",
+  "observed on reference machine: 701 GiB in 49 target folders on D:, E: and G:; two active projects held 89 GiB of incremental crate directories no build wrote for 7 days (target\\debug\\incremental, target\\llvm-cov-target\\debug\\incremental)",
 ]
 min_myclean = "0.1.0"
 
