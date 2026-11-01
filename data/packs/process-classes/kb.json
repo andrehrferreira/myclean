@@ -1,0 +1,28 @@
+{
+  "entries": [
+    {
+      "id": "myclean.service",
+      "image": "myclean-svc.exe",
+      "description": "MyClean service. Watches the PC, runs approved cleaning and governs resource use; runs as SYSTEM.",
+      "category": "system",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "myclean.tray",
+      "image": "myclean-tray.exe",
+      "description": "MyClean tray. Shows MyClean's notifications and dashboard and runs the owner's approved tasks.",
+      "category": "utility",
+      "needed_at_startup": true,
+      "safe_to_remove": false
+    },
+    {
+      "id": "myclean.cli",
+      "image": "myclean.exe",
+      "description": "MyClean command line. Read-only reports (map, scan-all, packs) and the MCP server for AI tools.",
+      "category": "utility",
+      "needed_at_startup": false,
+      "safe_to_remove": false
+    }
+  ]
+}

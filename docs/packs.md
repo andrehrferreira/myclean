@@ -208,7 +208,7 @@ MyClean's version).
 | `myclean map` | attribution areas | for the user running it |
 | `myclean packs list` / `validate` | everything | `list`: for the user running it |
 | Compression analyzer | `compress::AnalyzerOptions::targets` | the caller's registry |
-| Governor | `Registry::classes` | not loaded yet: no pack ships `classes.toml` |
+| Governor | `Registry::classes` | `core/governor` classifier (pack `process-classes`); not wired into the service yet |
 
 `myclean packs list [--json] [--data <dir>]` prints every pack folder with its version, origin,
 status, whether it applies here and its case counts, and why a pack was rejected.

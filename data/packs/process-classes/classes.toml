@@ -1,0 +1,156 @@
+# The governor's process classes (format: src/core/rules/schema.hpp, classes.toml). Entries are
+# ordered and the first matching one wins, so `system` comes first, then `test` (more specific
+# command lines of the same runtimes), then `build`. Every process no entry matches is `default`.
+# Games are found by the game detector, not here; `allow` is the owner's own list.
+
+# ---- system: never throttled, suspended or killed -------------------------------------------
+
+# Source: MyClean's own executables (src/svc, src/tray, src/cli). Listed first, so no later rule
+# (a test runner pattern, say) can ever act on the governor itself.
+[[match]]
+id = "myclean"
+class = "system"
+image = ["myclean-svc.exe", "myclean-tray.exe", "myclean.exe"]
+
+# Source: observed on reference machine: the kernel's pseudo-processes as the process table
+# names them ("System Idle Process" is PID 0, whose CPU share is the idle time).
+[[match]]
+id = "windows-kernel"
+class = "system"
+image = ["System Idle Process", "System", "Secure System", "Registry", "Memory Compression"]
+
+# Source: https://learn.microsoft.com/windows/win32/services/service-control-manager and the
+# Windows processes of the `windows` pack's kb.json (session manager, sign-in, services,
+# desktop window manager, shell and input hosts).
+[[match]]
+id = "windows-core"
+class = "system"
+image = [
+  "smss.exe", "csrss.exe", "wininit.exe", "winlogon.exe", "services.exe", "lsass.exe",
+  "LsaIso.exe", "svchost.exe", "fontdrvhost.exe", "dwm.exe", "explorer.exe", "sihost.exe",
+  "ctfmon.exe", "audiodg.exe", "conhost.exe", "taskhostw.exe", "RuntimeBroker.exe",
+  "StartMenuExperienceHost.exe", "ShellExperienceHost.exe", "SearchHost.exe",
+  "TextInputHost.exe", "dasHost.exe", "spoolsv.exe", "WUDFHost.exe",
+]
+
+# Source: https://learn.microsoft.com/defender-endpoint/microsoft-defender-antivirus-windows
+# (MsMpEng.exe is the antimalware service, NisSrv.exe its network inspection service).
+[[match]]
+id = "windows-security"
+class = "system"
+image = ["MsMpEng.exe", "NisSrv.exe", "SecurityHealthService.exe", "MpDefenderCoreService.exe"]
+
+# ---- test: test runners and test binaries ----------------------------------------------------
+
+# Source: https://jestjs.io/docs/cli, https://vitest.dev/guide/cli, https://mochajs.org/#command-line-usage,
+# https://playwright.dev/docs/test-cli (each runs under node.exe; Jest's workers are
+# jest-worker child processes).
+[[match]]
+id = "node-test-runners"
+class = "test"
+image = ["node.exe"]
+command_line = '\b(jest|vitest|mocha|_mocha|ava)\b|\bplaywright\b.*\btest\b'
+
+# Source: https://docs.pytest.org/en/stable/how-to/usage.html (`pytest` and `python -m pytest`).
+[[match]]
+id = "pytest"
+class = "test"
+image = ["python.exe", "python3.exe", "pythonw.exe", "pytest.exe"]
+command_line = '\bpytest\b'
+
+# Source: https://learn.microsoft.com/dotnet/core/tools/dotnet-test (`dotnet test` runs tests in
+# testhost processes through vstest).
+[[match]]
+id = "dotnet-test"
+class = "test"
+image = ["dotnet.exe"]
+command_line = '\btest\b|\bvstest\b|\btesthost\b'
+
+# Source: https://learn.microsoft.com/visualstudio/test/vstest-console-options and
+# https://cmake.org/cmake/help/latest/manual/ctest.1.html; `*_tests.exe` and `*_test.exe` are the
+# GoogleTest binaries CMake projects such as MyClean build (tests/unit, myclean_<module>_tests).
+[[match]]
+id = "test-binaries"
+class = "test"
+image = ["vstest.console.exe", "testhost*.exe", "ctest.exe", "*_tests.exe", "*_test.exe"]
+
+# Source: https://pkg.go.dev/cmd/go#hdr-Test_packages (`go test`).
+[[match]]
+id = "go-test"
+class = "test"
+image = ["go.exe"]
+command_line = '\btest\b'
+
+# ---- build: compilers, linkers and build drivers ---------------------------------------------
+
+# Source: https://learn.microsoft.com/cpp/build/reference/c-cpp-building-reference (cl, link,
+# lib, rc, mt, cvtres; mspdbsrv serves PDB writes for the whole build) and
+# https://learn.microsoft.com/visualstudio/msbuild/msbuild-command-line-reference.
+[[match]]
+id = "msvc"
+class = "build"
+image = [
+  "cl.exe", "link.exe", "lib.exe", "rc.exe", "mt.exe", "cvtres.exe", "mspdbsrv.exe",
+  "MSBuild.exe", "VBCSCompiler.exe", "csc.exe", "vbc.exe", "nmake.exe",
+]
+
+# Source: https://clang.llvm.org/docs/UsersManual.html#clang-cl and https://lld.llvm.org/.
+[[match]]
+id = "llvm"
+class = "build"
+image = ["clang.exe", "clang++.exe", "clang-cl.exe", "lld-link.exe", "ld.lld.exe"]
+
+# Source: https://ninja-build.org/manual.html, https://cmake.org/cmake/help/latest/manual/cmake.1.html,
+# https://www.gnu.org/software/make/manual/make.html and https://learn.microsoft.com/vcpkg/commands/install.
+[[match]]
+id = "build-drivers"
+class = "build"
+image = ["ninja.exe", "cmake.exe", "make.exe", "mingw32-make.exe", "vcpkg.exe", "sccache.exe"]
+
+# Source: https://doc.rust-lang.org/cargo/reference/build-scripts.html (cargo runs rustc and the
+# compiled build scripts, named build-script-build).
+[[match]]
+id = "rust"
+class = "build"
+image = ["cargo.exe", "rustc.exe", "build-script-build*.exe"]
+
+# Source: https://ziglang.org/learn/build-system/ and https://esbuild.github.io/getting-started/.
+[[match]]
+id = "native-builders"
+class = "build"
+image = ["zig.exe", "esbuild.exe"]
+
+# Source: https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies (`go build`,
+# `go install`).
+[[match]]
+id = "go-build"
+class = "build"
+image = ["go.exe"]
+command_line = '\b(build|install)\b'
+
+# Source: https://learn.microsoft.com/dotnet/core/tools/dotnet-build (`dotnet build`, `publish`,
+# `pack` and `msbuild` run MSBuild in the dotnet host).
+[[match]]
+id = "dotnet-build"
+class = "build"
+image = ["dotnet.exe"]
+command_line = '\b(build|publish|pack|msbuild)\b|MSBuild\.dll|VBCSCompiler|csc\.dll'
+
+# Source: https://vite.dev/guide/cli, https://webpack.js.org/api/cli/,
+# https://www.typescriptlang.org/docs/handbook/compiler-options.html, https://rollupjs.org/command-line-interface/,
+# https://nextjs.org/docs/app/api-reference/cli/next and https://turbo.build/repo/docs/reference/run
+# (each runs under node.exe).
+[[match]]
+id = "node-builders"
+class = "build"
+image = ["node.exe"]
+command_line = '\b(vite|webpack|tsc|rollup|esbuild|turbo)\b|\bnext\b.*\bbuild\b'
+
+# Source: https://docs.gradle.org/current/userguide/gradle_daemon.html (the daemon's main class
+# is org.gradle.launcher.daemon.bootstrap.GradleDaemon) and
+# https://maven.apache.org/configure.html (Maven starts through plexus-classworlds).
+[[match]]
+id = "jvm-builders"
+class = "build"
+image = ["java.exe"]
+command_line = 'org\.gradle\.|GradleDaemon|GradleWrapperMain|org\.codehaus\.plexus\.classworlds'

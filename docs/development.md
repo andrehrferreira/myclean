@@ -79,6 +79,8 @@ src/core/health/        disk health: NVMe log / SMART interpretation, assessment
 src/core/alerts/        alert rules (data/alerts.toml) and the engine: thresholds, changes,
                         rate limit, snooze, badge
 src/core/trust/         trust signal: signature, signer, path class, knowledge-base match
+src/core/governor/      governor logic: classes, policy (data/governor.toml), pressure, ladder,
+                        game mode, job placement, crash recovery (snapshot in, commands out)
 src/core/games/         game detection for the governor: launcher library roots, the owner's
                         GameConfigStore, fullscreen foreground with sustained GPU use
 src/core/input/         copy/paste freeze watchdog logic, mechanism classifier, incident store,

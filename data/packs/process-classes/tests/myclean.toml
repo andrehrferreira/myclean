@@ -1,0 +1,21 @@
+# MyClean's own processes, which the knowledge base of this pack describes. The class entries
+# themselves are checked by the governor's tests (tests/unit/governor/shipped_classes_test.cpp),
+# since pack fixtures have no class kind.
+
+[[expect]]
+kind     = "kb"
+case     = "myclean.service"
+match    = ['myclean-svc.exe']
+no_match = ['myclean-tray.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "myclean.tray"
+match    = ['myclean-tray.exe']
+no_match = ['myclean.exe']
+
+[[expect]]
+kind     = "kb"
+case     = "myclean.cli"
+match    = ['myclean.exe']
+no_match = ['myclean-svc.exe']

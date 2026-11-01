@@ -1,0 +1,118 @@
+#pragma once
+
+#include <chrono>
+#include <filesystem>
+#include <string_view>
+#include <vector>
+
+#include "core/model/result.hpp"
+#include "core/model/units.hpp"
+#include "core/rules/data_files.hpp"
+#include "core/rules/schema.hpp"
+
+// The governor's policy, loaded from data/governor.toml. Every key is optional and defaults to
+// the value of the governor spec; the shipped file states the defaults, with comments.
+//
+//   [pressure]                          # entering the pressure state (any one signal)
+//   cpu_percent            = 90         # total CPU above this ...
+//   cpu_seconds            = 15         # ... for this long
+//   available_gib          = 8          # available memory below this (a number: 7.5 is fine)
+//   commit_percent         = 90         # commit charge above this share of the commit limit
+//   hard_faults_per_second = 1000       # hard faults per second above this ...
+//   hard_faults_seconds    = 15         # ... for this long
+//
+//   [clear]                             # leaving it: every signal at its exit threshold ...
+//   cpu_percent            = 80         # at most
+//   available_gib          = 10         # at least
+//   commit_percent         = 85         # at most
+//   hard_faults_per_second = 500        # at most; default: half of [pressure]'s
+//   seconds                = 60         # ... for this long
+//
+//   [ladder]
+//   cooldown_seconds              = 10  # at least this long between two steps on one tree
+//   cap_cpu_percent               = 50  # step 3: the cap job's CPU hard cap
+//   cap_commit_headroom_percent   = 25  # step 3: commit cap = tree commit + this share ...
+//   cap_commit_min_headroom_mib   = 64  # ... but at least this much above it
+//   resume_blocks_suspend_minutes = 10  # after the owner's Resume, no new suspend this long
+//   kill                          = []  # classes whose suspended trees step 5 kills:
+//                                       # build, test, default
+//
+//   [game_mode]
+//   pressure_seconds  = 5               # replaces cpu_seconds and hard_faults_seconds
+//   cooldown_seconds  = 5               # replaces ladder.cooldown_seconds
+//   build_cpu_percent = 40              # CPU cap of every build job while a game runs
+//
+//   [jobs]
+//   notification_percent = 80           # commit notification limit, share of the commit cap
+//   rearm_percent        = 70           # re-armed once the job's commit is below this share
+//   [jobs.build]
+//   cpu_percent = 75                    # 1..100, CPU hard cap of a build tree job
+//   commit_gib  = 96                    # commit cap of a build tree (all its processes)
+//   [jobs.test]
+//   cpu_percent = 75
+//   commit_gib  = 64
+//
+//   [notifications]
+//   interval_minutes = 5                # at most one owner notification per tree this often
+//
+// Exit thresholds must not be stricter than the entry thresholds (a CPU exit above the entry,
+// say), and rearm_percent must be below notification_percent.
+namespace myclean::governor {
+
+struct PressurePolicy {
+  double cpu_enter_percent = 90.0;
+  std::chrono::seconds cpu_dwell{15};
+  Bytes available_enter{8ULL << 30U};
+  double commit_enter_percent = 90.0;
+  double hard_faults_enter = 1000.0;
+  std::chrono::seconds hard_faults_dwell{15};
+
+  double cpu_exit_percent = 80.0;
+  Bytes available_exit{10ULL << 30U};
+  double commit_exit_percent = 85.0;
+  double hard_faults_exit = 500.0;
+  std::chrono::seconds clear_after{60};
+
+  // Game mode's dwell for the CPU and hard-fault signals.
+  std::chrono::seconds game_dwell{5};
+};
+
+struct LadderPolicy {
+  std::chrono::seconds cooldown{10};
+  std::chrono::seconds game_cooldown{5};
+  int cap_cpu_percent = 50;
+  int cap_commit_headroom_percent = 25;
+  Bytes cap_commit_min_headroom{64ULL << 20U};
+  std::chrono::minutes resume_blocks_suspend{10};
+  std::vector<rules::ProcessClass> kill;  // empty: step 5 never kills
+  std::chrono::minutes notification_interval{5};
+};
+
+struct JobPolicy {
+  rules::JobCaps build{.cpu_percent = 75, .commit = Bytes{96ULL << 30U}};
+  rules::JobCaps test{.cpu_percent = 75, .commit = Bytes{64ULL << 30U}};
+  int game_build_cpu_percent = 40;
+  int notification_percent = 80;
+  int rearm_percent = 70;
+};
+
+struct GovernorPolicy {
+  PressurePolicy pressure;
+  LadderPolicy ladder;
+  JobPolicy jobs;
+};
+
+// Whether step 5 may kill a suspended tree whose root is of `process_class`.
+[[nodiscard]] bool kill_enabled(const LadderPolicy& policy, rules::ProcessClass process_class);
+
+// Validates the whole file: the policy, or one Errc::invalid_data error naming the file and the
+// field ("<file>: field 'clear.cpu_percent' must not be above pressure.cpu_percent"), so that
+// the caller keeps its previous policy. `file` is used only in messages.
+[[nodiscard]] Result<GovernorPolicy> parse_policy_file(std::string_view text,
+                                                       const std::filesystem::path& file);
+
+// <data_dir>/governor.toml
+[[nodiscard]] Result<GovernorPolicy> load_policy(const rules::IDataFiles& files,
+                                                 const std::filesystem::path& data_dir);
+
+}  // namespace myclean::governor

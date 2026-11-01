@@ -1,0 +1,22 @@
+id          = "process-classes"
+version     = "1.0.0"
+title       = "Process classes"
+description = "The resource governor's process classes: Windows and MyClean processes it never touches (system), test runners (test) and compilers, linkers and build drivers (build), plus what MyClean's own processes are."
+sources     = [
+  "https://learn.microsoft.com/cpp/build/reference/c-cpp-building-reference (cl, link, lib, rc, mt, cvtres, mspdbsrv)",
+  "https://learn.microsoft.com/visualstudio/msbuild/msbuild-command-line-reference",
+  "https://clang.llvm.org/docs/UsersManual.html#clang-cl",
+  "https://ninja-build.org/manual.html",
+  "https://cmake.org/cmake/help/latest/manual/ctest.1.html",
+  "https://doc.rust-lang.org/cargo/reference/build-scripts.html (build-script-build)",
+  "https://pkg.go.dev/cmd/go (go build, go test)",
+  "https://learn.microsoft.com/dotnet/core/tools/dotnet-test",
+  "https://jestjs.io/docs/cli",
+  "https://vitest.dev/guide/cli",
+  "https://docs.pytest.org/en/stable/how-to/usage.html",
+  "https://docs.gradle.org/current/userguide/gradle_daemon.html (GradleDaemon main class)",
+  "https://learn.microsoft.com/defender-endpoint/microsoft-defender-antivirus-windows (MsMpEng.exe, NisSrv.exe)",
+  "observed on reference machine: the process table's pseudo-processes (System Idle Process, System, Secure System, Registry, Memory Compression) and the Windows processes listed in the windows pack's kb.json",
+  "MyClean's own executables: myclean-svc.exe (src/svc), myclean-tray.exe (src/tray), myclean.exe (src/cli)",
+]
+min_myclean = "0.1.0"
