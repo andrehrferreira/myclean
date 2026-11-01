@@ -42,8 +42,10 @@
 #include "core/health/drive_specs.hpp"
 #include "core/health/reading.hpp"
 #include "core/index/indexed_volume.hpp"
+#include "core/ipc/disk_health.hpp"
 #include "core/map/attribution.hpp"
 #include "core/map/disk_map.hpp"
+#include "core/mcp/client.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/clock.hpp"
@@ -55,6 +57,7 @@
 #include "core/rules/schema.hpp"
 #include "core/safety/deny_list.hpp"
 #include "core/scanall/cold.hpp"
+#include "core/scanall/drive_health.hpp"
 #include "core/scanall/duplicates.hpp"
 #include "core/scanall/findings.hpp"
 #include "core/scanall/placement.hpp"
@@ -71,6 +74,7 @@
 #include "platform/disk_health/win32_disk_health.hpp"
 #include "platform/fs/protected_locations.hpp"
 #include "platform/git/git_cli.hpp"
+#include "platform/ipc/pipe_server.hpp"
 #include "platform/ntfs/win32_ntfs_volume.hpp"
 #include "platform/scan/directory_reader.hpp"
 #include "platform/scan/file_content.hpp"
@@ -87,10 +91,12 @@ using scanall::Finding;
 constexpr Bytes min_finding{std::uint64_t{64} << 20U};
 constexpr Bytes min_compress_folder{std::uint64_t{1} << 30U};
 constexpr std::size_t max_compress_folders = 6;
+constexpr std::chrono::milliseconds service_timeout{5000};
 
 constexpr std::string_view usage_text =
     "usage: myclean scan-all [--drives C:,D:,...] [--budget-minutes <n>] [--data <dir>] [--json]\n"
-    "  every fixed volume (or the ones listed), each tree stopped after <n> minutes (10)\n";
+    "  every fixed volume (or the ones listed), each tree stopped after <n> minutes (10);\n"
+    "  data may be proposed to move to any fixed volume, listed or not\n";
 
 struct Request {
   std::vector<std::wstring> drives;  // roots ("C:\"); empty: every fixed volume
@@ -257,33 +263,20 @@ health::HealthView read_health(const fs::path& data_dir, WallTime now,
   return view;
 }
 
-int severity(health::Status status) {
-  switch (status) {
-    case health::Status::good:
-      return 0;
-    case health::Status::unknown:
-      return 1;
-    case health::Status::warning:
-      return 2;
-    case health::Status::critical:
-      break;
-  }
-  return 3;
-}
-
-health::Status drive_health(const drives::DriveState& state, const health::HealthView& view) {
-  health::Status worst = state.disks.empty() ? health::Status::unknown : health::Status::good;
-  for (const std::uint32_t disk : state.disks) {
-    const auto found = std::ranges::find(view.drives, disk, [](const health::DriveHealth& drive) {
-      return drive.reading.disk_number;
-    });
-    const health::Status status =
-        found == view.drives.end() ? health::Status::unknown : found->assessment.status;
-    if (severity(status) > severity(worst)) {
-      worst = status;
-    }
-  }
-  return worst;
+// The disk health of the MyClean service (it runs as SYSTEM and reads every disk's SMART data
+// or NVMe log); without it, what this process reads itself.
+health::HealthView disk_health(const fs::path& data_dir, WallTime now,
+                               std::vector<std::string>& notes) {
+  const mcp::Reply reply = pipe_caller(std::wstring(platform::default_pipe_name), service_timeout)(
+      ipc::disks_health_method, nlohmann::json::object());
+  const Result<nlohmann::json> service =
+      reply ? Result<nlohmann::json>(*reply) : fail(Errc::io_error, reply.error().message);
+  std::vector<std::string> local_notes;
+  scanall::ChosenHealth chosen =
+      scanall::choose_health(service, [&] { return read_health(data_dir, now, local_notes); });
+  notes.push_back(std::move(chosen.note));
+  std::ranges::move(local_notes, std::back_inserter(notes));
+  return std::move(chosen.view);
 }
 
 // A fixed volume with a drive letter, and one of `wanted` when that is not empty.
@@ -296,22 +289,9 @@ bool selected(const telemetry::VolumeStatus& volume, std::span<const std::wstrin
   });
 }
 
-std::vector<DriveInfo> make_drives(std::span<const drives::DriveState> states,
-                                   const health::HealthView& view,
-                                   const clean::IEnvironment& environment) {
-  const std::wstring system =
-      placement::drive_root(fs::path{environment.variable(L"SystemDrive").value_or(L"C:") + L"\\"});
-  std::vector<DriveInfo> drives;
-  for (const drives::DriveState& state : states) {
-    drives.push_back(DriveInfo{.root = state.root,
-                               .drive_class = state.drive_class,
-                               .health = drive_health(state, view),
-                               .health_note = state.health_note,
-                               .size = state.size,
-                               .free = state.free,
-                               .system = placement::drive_root(state.root) == system});
-  }
-  return drives;
+// True when `root` is one of `wanted`, or `wanted` is empty.
+bool wanted_root(const fs::path& root, std::span<const std::wstring> wanted) {
+  return wanted.empty() || std::ranges::find(wanted, placement::drive_root(root)) != wanted.end();
 }
 
 // Everything the per-drive analyses use. Every pointer outlives the run.
@@ -323,7 +303,8 @@ struct Run {
   const os::IClock* clock = nullptr;
   std::vector<fs::path> in_use;  // folders of running processes
   WallTime now;
-  std::vector<DriveInfo> drives;
+  std::vector<DriveInfo> drives;   // the volumes scanned
+  std::vector<DriveInfo> targets;  // every fixed volume: where findings may move data to
   std::vector<Finding> findings;
   std::vector<space::ScanResult> trees;
   std::ostream* err = nullptr;
@@ -501,14 +482,14 @@ void analyze_drive(Run& run, std::size_t index, const scanall::DuplicateOptions&
   const std::optional<map::DiskMap> map = map_drive(run, *tree, drive);
   if (map) {
     append(run.findings,
-           scanall::map_findings(*map, drive, run.knowledge->rules, run.drives, min_finding));
+           scanall::map_findings(*map, drive, run.knowledge->rules, run.targets, min_finding));
   }
   const scanall::FolderTimes times = scanall::folder_times(*tree);
   if (drive.complete) {
-    append(run.findings, scanall::find_cold(*tree, times, drive, run.drives, run.in_use, run.now));
+    append(run.findings, scanall::find_cold(*tree, times, drive, run.targets, run.in_use, run.now));
   }
   append(run.findings, scanall::advise_placement(*tree, times, map ? &*map : nullptr, drive,
-                                                 run.drives, run.now));
+                                                 run.targets, run.now));
   estimate_compression(run, *tree, map ? &*map : nullptr, drive);
   // Only files that can be duplicates stay in memory for the search across drives.
   for (space::Folder& folder : tree->folders) {
@@ -727,9 +708,9 @@ int scan_all_command(std::span<const std::string> args, std::ostream& out, std::
     err << "myclean: scan-all: " << volumes.error().message << '\n';
     return exit_unavailable;
   }
-  std::erase_if(*volumes, [&request](const telemetry::VolumeStatus& volume) {
-    return !selected(volume, request->drives);
-  });
+  // Every fixed volume: the ones not scanned are still targets of archive and relocate findings.
+  std::erase_if(*volumes,
+                [](const telemetry::VolumeStatus& volume) { return !selected(volume, {}); });
   err << "disk health\n";
   Run run{.request = &*request,
           .knowledge = &knowledge,
@@ -739,11 +720,18 @@ int scan_all_command(std::span<const std::string> args, std::ostream& out, std::
           .in_use = platform::Win32Usage{}.process_folders(),
           .now = clock.now(),
           .err = &err};
-  const health::HealthView view = read_health(data_dir, run.now, notes);
+  const health::HealthView view = disk_health(data_dir, run.now, notes);
   const platform::Win32SeekPenalty seek;
   const platform::Win32TrimSupport trim;
-  const std::vector<drives::DriveState> states = drives::drive_states(*volumes, &view, seek, trim);
-  run.drives = make_drives(states, view, environment);
+  std::vector<drives::DriveState> states = drives::drive_states(*volumes, &view, seek, trim);
+  run.targets = scanall::drive_infos(
+      states, view, fs::path{environment.variable(L"SystemDrive").value_or(L"C:") + L"\\"});
+  std::erase_if(states, [&request](const drives::DriveState& state) {
+    return !wanted_root(state.root, request->drives);
+  });
+  std::ranges::copy_if(
+      run.targets, std::back_inserter(run.drives),
+      [&request](const DriveInfo& drive) { return wanted_root(drive.root, request->drives); });
   if (run.drives.empty()) {
     err << "myclean: scan-all: no fixed volume with a drive letter matches\n";
     return exit_usage;

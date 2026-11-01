@@ -1,6 +1,7 @@
 myclean_add_test(scanall
   SOURCES
     analyzers_test.cpp
+    drive_health_test.cpp
     duplicates_test.cpp
     report_test.cpp
     scanall_fakes.hpp

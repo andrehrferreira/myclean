@@ -198,7 +198,7 @@ rolls back automatically. See [docs/deploy.md](docs/deploy.md).
 ```powershell
 myclean map C:                  # where C:'s space went, and how to get it back
 myclean scan-all                # one report for every fixed drive
-myclean scan-all --drives C:,D: --budget-minutes 5 --json
+myclean scan-all --drives C:,D: --budget-minutes 5 --json   # scans C: and D:, may move data to any drive
 myclean packs list              # loaded knowledge packs
 myclean packs validate <path>   # run a pack's fixtures
 ```

@@ -3,13 +3,26 @@
 ## ADDED Requirements
 
 ### Requirement: Machine-Wide Read-Only Scan
-The system SHALL provide `myclean scan-all [--drives C:,D:,...] [--budget-minutes N] [--data <dir>] [--json]`, which runs in the CLI process without the service, in Windows background mode (PROCESS_MODE_BACKGROUND_BEGIN first, then BELOW_NORMAL_PRIORITY_CLASS), over every fixed volume with a drive letter or the ones listed. For each volume it MUST build the folder tree from the NTFS index when elevated and otherwise with scanner v1 stopped after N minutes (default 10), then run the disk map, the cleaning rules and developer artifacts, the compression analyzer on the largest program, game and toolchain folders and the packs' compression targets, the drive maintenance analysis, the cold-data finder, the placement advisor and the cross-drive duplicate finder. It MUST NOT delete, move, compress, defragment or change anything, follow a link or open a cloud file; it reports what each finding's action would do. Progress SHALL go to standard error. A drive whose health is not good MUST still be scanned and reported.
+The system SHALL provide `myclean scan-all [--drives C:,D:,...] [--budget-minutes N] [--data <dir>] [--json]`, which runs in the CLI process and does not need the service, in Windows background mode (PROCESS_MODE_BACKGROUND_BEGIN first, then BELOW_NORMAL_PRIORITY_CLASS), over every fixed volume with a drive letter or the ones listed. For each volume it MUST build the folder tree from the NTFS index when elevated and otherwise with scanner v1 stopped after N minutes (default 10), then run the disk map, the cleaning rules and developer artifacts, the compression analyzer on the largest program, game and toolchain folders and the packs' compression targets, the drive maintenance analysis, the cold-data finder, the placement advisor and the cross-drive duplicate finder. It MUST NOT delete, move, compress, defragment or change anything, follow a link or open a cloud file; it reports what each finding's action would do. Progress SHALL go to standard error. A drive whose health is not good MUST still be scanned and reported. The targets of archive and relocate findings SHALL be chosen among every fixed volume with a drive letter, listed or not. Each disk's health SHALL come from the MyClean service's `disks.health` method when the service answers with the reading of at least one disk (it runs as SYSTEM and reads every disk's SMART data or NVMe log), and otherwise from what the CLI process reads itself; a report note SHALL say which, and in the second case why and which disks are then of unknown health.
 
 #### Scenario: Partial tree on a large HDD
 Given K: holds several TB in more files than scanner v1 lists in 8 minutes
 When `myclean scan-all --budget-minutes 8` runs
 Then K:'s tree stops after 8 minutes and K: is marked partial with a note
 And its cold data is not judged while its other findings cover what was listed
+
+#### Scenario: Targets outside the listed drives
+Given C:\Users\Public\Documents\ZBrushData2025 (18 GiB) on an NVMe C:, unchanged since 2025-07
+And K: and L: are good HDDs with 5.0 and 5.8 TB free
+When `myclean scan-all --drives C:` runs
+Then only C: is scanned and reported
+And the folder is an archive finding with target L:\Archive\C\Users\Public\Documents\ZBrushData2025
+
+#### Scenario: Service unreachable
+Given the MyClean service is not running and this process cannot read the HDDs' SMART data
+When `myclean scan-all` runs
+Then the report notes that disk health was read by this process, not the service, and names the HDDs of unknown health
+And no archive or relocate finding targets them
 
 #### Scenario: Bad arguments
 Given the command line `myclean scan-all --budget-minutes 0`

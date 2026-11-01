@@ -5,6 +5,8 @@ myclean_add_library(scanall
   SOURCES
     cold.cpp
     cold.hpp
+    drive_health.cpp
+    drive_health.hpp
     duplicates.cpp
     duplicates.hpp
     findings.cpp
@@ -20,6 +22,7 @@ myclean_add_library(scanall
     myclean::compress
     myclean::drives
     myclean::health
+    myclean::ipc
     myclean::map
     myclean::placement
     myclean::rules
