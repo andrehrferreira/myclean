@@ -1,0 +1,8 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "corsair-icue"
+paths    = ['%ProgramData%\Corsair\CUE5']
+category = "apps"
+label    = "Corsair iCUE lighting effects and game integrations"
+reclaim  = { kind = "uninstall", note = "Goes with Corsair iCUE." }

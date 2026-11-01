@@ -1,5 +1,5 @@
 id          = "python-store"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "Python from the Microsoft Store"
 description = "Store installs of Python: the install with its user packages (for review) and pip's download cache, which the Store package keeps inside its own folder (cleaned)."
 sources     = [

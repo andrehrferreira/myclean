@@ -59,3 +59,8 @@ kind     = "attribution"
 case     = "cargo-registry"
 match    = ['C:\Users\owner\.cargo\registry', 'C:\Users\owner\.cargo\git']
 no_match = ['C:\Users\owner\.cargo\bin']
+
+[[expect]]
+kind     = "attribution"
+case     = "ort-binaries"
+match    = ['C:\Users\owner\AppData\Local\ort.pyke.io']

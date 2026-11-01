@@ -67,3 +67,38 @@ no_match = ['C:\Users\owner\AppData\Roaming\discord']
 kind     = "attribution"
 case     = "teams-cache"
 match    = ['C:\Users\owner\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\WV2Profile_tfw\GPUCache']
+
+# electron-updater caches (reference machine: ledger-live-desktop-updater, accurig-updater,
+# @trezorsuite-desktop-updater, ...): the downloads go, a folder of another layout stays.
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ledger-live-desktop-updater\installer.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ledger-live-desktop-updater\pending\ledger-live-desktop-4.24.1-win-x64.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ledger-live-desktop-updater\pending\update-info.json'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\@trezorsuite-desktop-updater\installer.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\accurig-updater\installer.exe'
+age_days = 3
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ledger-live-desktop-updater\settings.json'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Programs\ledger-live-desktop\Ledger Live.exe'
+
+[[expect]]
+kind     = "clean"
+case     = "updater-downloads"
+match    = ['C:\Users\owner\AppData\Local\ledger-live-desktop-updater\installer.exe',
+            'C:\Users\owner\AppData\Local\ledger-live-desktop-updater\pending',
+            'C:\Users\owner\AppData\Local\@trezorsuite-desktop-updater\installer.exe']
+no_match = ['C:\Users\owner\AppData\Local\accurig-updater\installer.exe',
+            'C:\Users\owner\AppData\Local\ledger-live-desktop-updater\settings.json',
+            'C:\Users\owner\AppData\Local\ledger-live-desktop-updater',
+            'C:\Users\owner\AppData\Local\Programs\ledger-live-desktop\Ledger Live.exe']
+
+[[expect]]
+kind     = "attribution"
+case     = "updater-downloads"
+match    = ['C:\Users\owner\AppData\Local\ledger-live-desktop-updater', 'C:\Users\owner\AppData\Local\@trezorsuite-desktop-updater']
+no_match = ['C:\Users\owner\AppData\Local\Programs']

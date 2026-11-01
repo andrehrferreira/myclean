@@ -1,7 +1,7 @@
 id          = "ai-tools"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "AI assistants and local models"
-description = "Sessions and generated images of AI coding assistants and downloaded local models: the owner's work, listed for review, archiving or moving; never cleaned. Also what the assistants' processes are."
+description = "Sessions and generated images of AI coding assistants, downloaded local models, other local AI apps and agent memory: the owner's work, listed for review, archiving or moving; never cleaned. Also what the assistants' processes are."
 sources     = [
   "https://github.com/ollama/ollama/blob/main/docs/faq.md (models in %USERPROFILE%\\.ollama\\models; OLLAMA_MODELS moves them; `ollama rm`)",
   "https://huggingface.co/docs/huggingface_hub/guides/manage-cache (~/.cache/huggingface/hub, HF_HOME; `huggingface-cli delete-cache`)",
@@ -9,6 +9,7 @@ sources     = [
   "https://docs.anthropic.com/en/docs/claude-code/settings (cleanupPeriodDays: Claude Code removes local chat transcripts older than it, 30 days by default)",
   "observed on reference machine: %USERPROFILE%\\.codex\\sessions, archived_sessions and generated_images; %USERPROFILE%\\.claude\\projects; %USERPROFILE%\\.elyriu-local-ai\\models (Hugging Face layout)",
   "observed on reference machine: claude.exe and codex.exe, their image paths and signers",
+  "observed on reference machine: Nexa Hyperlink in %APPDATA%/nexa.ai (2.1 GiB), the Cortex memory store in %USERPROFILE%/.cortex (2.5 GiB), Claude Code versions in %USERPROFILE%/.local/share/claude/versions",
 ]
 min_myclean = "0.1.0"
 
@@ -17,4 +18,5 @@ any = [{ path_exists = '%USERPROFILE%\.codex' }, { path_exists = '%USERPROFILE%\
        { path_exists = '%USERPROFILE%\.ollama' }, { path_exists = '%OLLAMA_MODELS%' },
        { path_exists = '%USERPROFILE%\.lmstudio' }, { path_exists = '%USERPROFILE%\.cache\lm-studio' },
        { path_exists = '%USERPROFILE%\.cache\huggingface' }, { path_exists = '%HF_HOME%' },
-       { path_exists = '%USERPROFILE%\.elyriu-local-ai' }]
+       { path_exists = '%USERPROFILE%\.elyriu-local-ai' },
+       { path_exists = '%APPDATA%\nexa.ai' }, { path_exists = '%USERPROFILE%\.cortex' }]

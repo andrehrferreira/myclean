@@ -94,6 +94,28 @@ TEST(CompressFolder, PreviewsOnlyTheFilesTheRulesAllow) {
   EXPECT_EQ(preview->total_size(), Bytes{3 * mib});
 }
 
+TEST(CompressFolder, NeverPreviewsTheFilesOfAWslDistribution) {
+  const std::filesystem::path package =
+      R"(C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc)";
+  const std::filesystem::path state = package / "LocalState";
+  FakeReader reader;
+  reader.folders[package] = {{.name = "LocalState", .directory = true, .identity = identity_of(8)}};
+  reader.folders[state] = {entry("ext4.vhdx", 1),
+                           {.name = "rootfs", .directory = true, .identity = identity_of(9)},
+                           entry("settings.dat", 2)};
+  reader.folders[state / "rootfs"] = {
+      {.name = "usr", .directory = true, .identity = identity_of(10)}};
+  reader.folders[state / "rootfs" / "usr"] = {entry("libc.so.6", 3)};
+  FakeWof wof;
+  const fakes::FakeClock clock{start};
+  CompressFolder action{reader, wof, clock, package, Algorithm::xpress8k, {}};
+
+  const Result<Preview> preview = action.preview();
+
+  ASSERT_TRUE(preview) << preview.error().message;
+  EXPECT_EQ(paths(*preview), (std::vector<std::filesystem::path>{state / "settings.dat"}));
+}
+
 TEST(CompressFolder, RefusesLznt1) {
   const FakeReader reader;
   FakeWof wof;

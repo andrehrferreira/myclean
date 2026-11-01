@@ -34,11 +34,12 @@ TEST(ShippedCatalog, EveryCategoryHasCleanCases) {
   }
 }
 
-// Cleaning spec, "Shader caches default to ask".
-TEST(ShippedCatalog, ShaderCachesAreAsk) {
+// Cleaning spec, "Shader caches are auto".
+TEST(ShippedCatalog, ShaderCachesAreAuto) {
   for (const CleaningRule& rule : shipped_rules()) {
     if (rule.category == "gpu-shader-caches") {
-      EXPECT_EQ(rule.tier, Tier::ask) << rule.id;
+      EXPECT_EQ(rule.tier, Tier::automatic) << rule.id;
+      EXPECT_TRUE(rule.require.not_in_use) << rule.id;
     }
   }
   const CleaningRule& nvidia = shipped_rule("gpu/nvidia-dxcache");
@@ -46,14 +47,16 @@ TEST(ShippedCatalog, ShaderCachesAreAsk) {
 }
 
 // Analysis F-013 and the cleaning spec: global package caches use their tool's command, under
-// the owner's token, and wait for approval.
-TEST(ShippedCatalog, PackageManagersAreNativeUserAsk) {
+// the owner's token, and run on schedule (the tool downloads what it misses); Docker's prune,
+// which also removes stopped containers, waits for approval.
+TEST(ShippedCatalog, PackageManagersAreNativeUserAuto) {
   for (const CleaningRule& rule : shipped_rules()) {
     if (rule.strategy == Strategy::native && rule.category == "package-managers") {
       EXPECT_EQ(rule.scope, ExecutionContext::user) << rule.id;
-      EXPECT_EQ(rule.tier, Tier::ask) << rule.id;
+      EXPECT_EQ(rule.tier, Tier::automatic) << rule.id;
     }
   }
+  EXPECT_EQ(shipped_rule("wsl-docker/docker-prune").tier, Tier::ask);
   EXPECT_EQ(shipped_rule("node/pnpm-store").command, "pnpm store prune");
   EXPECT_EQ(shipped_rule("windows/component-store").command,
             "DISM /Online /Cleanup-Image /StartComponentCleanup");
@@ -61,14 +64,18 @@ TEST(ShippedCatalog, PackageManagersAreNativeUserAsk) {
 
 // docs/spikes/X3-cleanup-handlers.md: `handler` names a VolumeCaches key; handlers that look
 // at the owner's profile run in the tray (scope user), the others in the service; DownloadsFolder
-// (the owner's Downloads) and "User file versions" (File History) are never offered; no handler
-// runs without approval.
+// (the owner's Downloads) and "User file versions" (File History) are never offered; only the
+// handlers that remove nothing but caches and setup leftovers run without approval (cleaning
+// spec, "Handlers of regenerable data are auto").
 TEST(ShippedCatalog, HandlersHaveTheirScopeAndForbiddenOnesAreAbsent) {
   const std::set<std::string, std::less<>> user_handlers = {
       "Temporary Files",           "Thumbnail Cache",
       "Internet Cache Files",      "D3D Shader Cache",
       "Downloaded Program Files",  "Offline Pages Files",
       "Active Setup Temp Folders", "Recycle Bin"};
+  const std::set<std::string, std::less<>> auto_handlers = {
+      "Thumbnail Cache", "Internet Cache Files", "Delivery Optimization Files",
+      "Temporary Setup Files", "Upgrade Discarded Files"};
   int handlers = 0;
   for (const CleaningRule& rule : shipped_rules()) {
     if (rule.strategy != Strategy::handler) {
@@ -80,9 +87,12 @@ TEST(ShippedCatalog, HandlersHaveTheirScopeAndForbiddenOnesAreAbsent) {
     EXPECT_EQ(rule.scope, user_handlers.contains(rule.handler) ? ExecutionContext::user
                                                                : ExecutionContext::service)
         << rule.id;
-    EXPECT_EQ(rule.tier, Tier::ask) << rule.id;
+    EXPECT_EQ(rule.tier, auto_handlers.contains(rule.handler) ? Tier::automatic : Tier::ask)
+        << rule.id;
   }
   EXPECT_GT(handlers, 0);
+  EXPECT_EQ(shipped_rule("windows/recycle-bin").tier, Tier::ask);
+  EXPECT_EQ(shipped_rule("windows/memory-dumps").tier, Tier::ask);
   EXPECT_EQ(shipped_rule("windows/update-cleanup").handler, "Update Cleanup");
 }
 

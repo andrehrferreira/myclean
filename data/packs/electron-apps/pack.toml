@@ -1,13 +1,17 @@
 id          = "electron-apps"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "Electron and WebView2 apps"
-description = "Chromium's HTTP, code and GPU caches and crash reports of Discord, Slack and Teams (cleaned), and what their processes are."
+description = "Chromium's HTTP, code and GPU caches and crash reports of Discord, Slack and Teams, and the update downloads Electron apps' auto-updater leaves behind (cleaned), and what their processes are."
 sources     = [
   "observed on reference machine: %APPDATA%\\discord, %APPDATA%\\Slack and %APPDATA%\\Microsoft\\Teams hold Cache, Code Cache, GPUCache and Crashpad beside Local Storage and IndexedDB; new Teams keeps its WebView2 profiles in %LOCALAPPDATA%\\Packages\\MSTeams_8wekyb3d8bbwe\\LocalCache\\Microsoft\\MSTeams\\EBWebView",
+  "https://github.com/electron-userland/electron-builder/blob/master/packages/electron-updater/src/AppUpdater.ts (the update cache is <app cache dir>\\<updaterCacheDirName from app-update.yml>; the installed version's installer kept there is the old file of the next differential download)",
+  "https://github.com/electron-userland/electron-builder/blob/master/packages/electron-updater/src/DownloadedUpdateHelper.ts (downloads go to <cache>\\pending with update-info.json; a missing or mismatching file is downloaded again)",
+  "observed on reference machine: 12 %LOCALAPPDATA%\\<app>-updater folders (ledger-live-desktop, accurig, lm-studio, lens, binance, @trezorsuite-desktop, unityhub, ...) holding installer.exe and pending\\<setup>.exe, 3.9 GiB, most of them months or years old",
   "observed on reference machine: Discord.exe and ms-teams.exe, their image paths and signers",
 ]
 min_myclean = "0.1.0"
 
 [applies_when]
 any = [{ path_exists = '%APPDATA%\discord' }, { path_exists = '%APPDATA%\Slack' },
-       { path_exists = '%APPDATA%\Microsoft\Teams' }, { path_exists = '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe' }]
+       { path_exists = '%APPDATA%\Microsoft\Teams' }, { path_exists = '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe' },
+       { path_exists = '%LOCALAPPDATA%\*-updater' }]

@@ -23,3 +23,15 @@ paths    = ['%LOCALAPPDATA%\Packages\*\LocalState\rootfs', '%LOCALAPPDATA%\Packa
 category = "vm-disks"
 label    = "WSL 1 Linux distribution file systems"
 reclaim  = { kind = "relocate", ref = "distro-files", note = "WSL 1: `wsl --export`, then `wsl --import` on another drive." }
+
+# WSL 1 never empties /tmp (no systemd-tmpfiles at start); test runs that leave their temporary
+# folders behind pile up there (observed on reference machine: 39,000 `.tmpXXXXXX` folders of
+# a test suite, 94 GiB, almost all a year old). Linux files must be changed from Linux only,
+# never through this folder (learn.microsoft.com/windows/wsl/filesystems), so the clean rule
+# runs `find` inside each distribution.
+[[area]]
+id       = "distro-tmp"
+paths    = ['%LOCALAPPDATA%\Packages\*\LocalState\rootfs\tmp', '%LOCALAPPDATA%\Packages\*\rootfs\tmp']
+category = "app-caches"
+label    = "Temporary files inside a WSL 1 distribution (/tmp)"
+reclaim  = { kind = "clean-rule", ref = "tmp-prune", note = "WSL 1 never empties /tmp. MyClean deletes the entries older than 7 days from inside Linux (`wsl -d <distro> -u root --exec find /tmp -mindepth 1 -maxdepth 1 -mtime +7 ! -name .*-unix -exec rm -rf {} +`), never from Windows." }

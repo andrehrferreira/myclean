@@ -6,8 +6,25 @@
 
 [[rule]]
 id       = "docker-prune"
-category = "package-managers"
+category = "containers"
 tier     = "ask"
 scope    = "user"
 strategy = "native"
 command  = "docker system prune"
+
+# WSL never empties /tmp in a WSL 1 distribution (no systemd-tmpfiles at start), so test runs
+# that leave their temporary folders behind pile up there (observed on reference machine:
+# 39,000 `.tmpXXXXXX` test folders, 94 GiB in Ubuntu-24.04's /tmp). Linux files are changed
+# from Linux only, never through the distribution's folder from Windows
+# (https://learn.microsoft.com/windows/wsl/filesystems): the tray runs `find` as root inside
+# each distribution (Docker Desktop's left out) and deletes the entries of /tmp older than 7
+# days, keeping the X11/ICE/font socket folders. The targets are only measured, to offer the rule
+# where a WSL 1 /tmp holds something; a WSL 2 /tmp lies inside ext4.vhdx and is not measured.
+[[rule]]
+id       = "tmp-prune"
+category = "wsl"
+tier     = "auto"
+scope    = "user"
+strategy = "native"
+command  = "wsl tmp prune"
+targets  = ['%LOCALAPPDATA%\Packages\*\LocalState\rootfs\tmp', '%LOCALAPPDATA%\Packages\*\rootfs\tmp']

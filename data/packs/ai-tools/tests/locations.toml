@@ -63,3 +63,18 @@ kind     = "attribution"
 case     = "model-tool-homes"
 match    = ['C:\Users\owner\.ollama', 'C:\Users\owner\.lmstudio', 'C:\Users\owner\.elyriu-local-ai']
 no_match = ['C:\Users\owner\.cache\huggingface', 'C:\Users\owner\.ollama\models']
+
+[[expect]]
+kind     = "attribution"
+case     = "nexa-hyperlink"
+match    = ['C:\Users\owner\AppData\Roaming\nexa.ai']
+
+[[expect]]
+kind     = "attribution"
+case     = "cortex-memory"
+match    = ['C:\Users\owner\.cortex']
+
+[[expect]]
+kind     = "attribution"
+case     = "claude-code-versions"
+match    = ['C:\Users\owner\.local\share\claude\versions']

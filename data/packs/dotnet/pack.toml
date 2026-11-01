@@ -1,5 +1,5 @@
 id          = "dotnet"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = ".NET and NuGet"
 description = "Build output (bin, obj) of inactive .NET solutions and projects (cleaned), and NuGet's global packages and caches (cleared with `dotnet nuget locals`, or moved to another drive)."
 sources     = [

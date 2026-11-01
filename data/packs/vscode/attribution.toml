@@ -41,3 +41,18 @@ paths    = ['%USERPROFILE%\.vscode', '%USERPROFILE%\.cursor']
 category = "dev-toolchains"
 label    = "Code editor extensions"
 reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "webview-resource-cache"
+paths    = ['%APPDATA%\Code\WebStorage\*\CacheStorage']
+category = "app-caches"
+label    = "VS Code webview resource cache"
+reclaim  = { kind = "clean-rule", ref = "webview-resource-cache", note = "Copies of local files webviews showed; VS Code reads them from disk again." }
+
+# Cursor, a VS Code fork: the same layout in %APPDATA%\Cursor (observed on reference machine).
+[[area]]
+id       = "cursor-data"
+paths    = ['%APPDATA%\Cursor']
+category = "dev-caches"
+label    = "Cursor editor data (local history, workspace storage, caches)"
+reclaim  = { kind = "manual-review", note = "Its History folder is your local file history; uninstalling Cursor leaves this folder behind." }

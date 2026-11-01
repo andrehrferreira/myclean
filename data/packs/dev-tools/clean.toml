@@ -1,0 +1,13 @@
+# Downloaded databases of developer tools (sources: pack.toml).
+
+# Trivy's Java index database, java-db\trivy-java.db in Trivy's cache folder (%LOCALAPPDATA%\trivy
+# by default, %LOCALAPPDATA% itself on the reference machine, beside fanal). Trivy fetches its
+# databases again as needed; metadata.json beside it is left, so Trivy sees it must download.
+[[rule]]
+id       = "trivy-java-db"
+category = "dev-caches"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\java-db\trivy-java.db', '%LOCALAPPDATA%\trivy\java-db\trivy-java.db']
+require  = { min_age_days = 7, not_in_use = true }

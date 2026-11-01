@@ -1,5 +1,5 @@
 id          = "python"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "Python, pip, uv and Conda"
 description = "Caches and build output of inactive Python projects (cleaned), pip's and uv's caches (pruned with each tool's own command), Python and Conda installations (uninstall), and what python.exe is. Store Pythons are in the python-store pack."
 sources     = [

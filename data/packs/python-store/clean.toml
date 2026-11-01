@@ -6,7 +6,7 @@
 [[rule]]
 id       = "pip-cache"
 category = "dev-caches"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%LOCALAPPDATA%\Packages\PythonSoftwareFoundation.Python.*\LocalCache\Local\pip\cache\*']

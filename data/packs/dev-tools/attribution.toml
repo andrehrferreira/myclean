@@ -23,3 +23,10 @@ paths    = ['%ProgramFiles(x86)%\Windows Kits', '%ProgramFiles%\dotnet', '%Progr
 category = "dev-toolchains"
 label    = "SDKs and toolchains (Windows SDK, .NET, CUDA, LLVM, Go, Android Studio)"
 reclaim  = { kind = "uninstall", note = "Uninstall SDK versions you no longer build with." }
+
+[[area]]
+id       = "trivy-java-db"
+paths    = ['%LOCALAPPDATA%\java-db', '%LOCALAPPDATA%\trivy\java-db']
+category = "dev-caches"
+label    = "Trivy's Java vulnerability database"
+reclaim  = { kind = "clean-rule", ref = "trivy-java-db", note = "Trivy downloads it again when it scans Java files." }

@@ -1,10 +1,12 @@
 id          = "games"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "Games and game launchers"
-description = "Steam's and the Epic Games launcher's web and download caches (cleaned), where the games of each launcher are (uninstall), and what Steam's processes are."
+description = "Steam's and the Epic Games launcher's web and download caches and the logs, crash reports and shader byte-code caches of Unreal Engine games (cleaned), where the games of each launcher and the Epic launcher's data are (uninstall), and what Steam's processes are."
 sources     = [
   "observed on reference machine: Steam in %ProgramFiles(x86)%\\Steam with appcache\\httpcache, depotcache and steamapps; Epic Games launcher web caches in %LOCALAPPDATA%\\EpicGamesLauncher\\Saved\\webcache*; game folders of the other launchers (analysis F-016)",
   "observed on reference machine: steam.exe, steamwebhelper.exe and steamservice.exe, their image paths and signers",
+  "observed on reference machine: the Epic Games Launcher's machine-wide data (manifests, ContentCache) in %ProgramData%/Epic/EpicGamesLauncher/Data, 1.6 GiB",
+  "observed on reference machine: Unreal Engine games keep %LOCALAPPDATA%/<project>/Saved with Logs, Crashes, Config, SaveGames and D3DDriverByteCodeBlob_*.ushaderprecache (b1, Wardogs, TL, SCUM, ABInfinite: 0.7 GiB of logs, 0.5 GiB of crash reports, 1.5 GiB of shader byte code)",
 ]
 min_myclean = "0.1.0"
 

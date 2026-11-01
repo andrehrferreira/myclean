@@ -5,4 +5,61 @@ id       = "autodesk-installers"
 paths    = ['?:\Autodesk']
 category = "app-caches"
 label    = "Installer files left behind by Autodesk setup programs"
-reclaim  = { kind = "manual-review", note = "Not needed once the program is installed; no cleaning rule covers them yet." }
+reclaim  = { kind = "clean-rule", ref = "autodesk-installers", note = "Programs run without them; a Repair needs the installer again (downloadable from the Autodesk account)." }
+
+[[area]]
+id       = "reallusion-downloads"
+paths    = ['%LOCALAPPDATA%\Reallusion\RLDownloads']
+category = "app-caches"
+label    = "Installers Reallusion Hub downloaded"
+reclaim  = { kind = "clean-rule", ref = "reallusion-downloads" }
+
+[[area]]
+id       = "reallusion-data"
+paths    = ['%LOCALAPPDATA%\Reallusion', '%ProgramData%\Reallusion']
+category = "apps"
+label    = "Reallusion apps' data and content manager cache (Character Creator, iClone, AccuRIG)"
+reclaim  = { kind = "uninstall", note = "Goes with the Reallusion apps." }
+
+# Content libraries and the owner's work: only the owner decides.
+[[area]]
+id       = "reallusion-content"
+paths    = ['%PUBLIC%\Documents\Reallusion']
+category = "user-documents"
+label    = "Reallusion content library (Character Creator and iClone templates)"
+reclaim  = { kind = "manual-review", note = "Content installed through Reallusion Hub; uninstall packs you do not use there, or keep them on another drive." }
+
+[[area]]
+id       = "zbrush-data"
+paths    = ['%PUBLIC%\Documents\ZBrushData*']
+category = "user-documents"
+label    = "ZBrush shared data (brushes, plugins' data, QuickSave)"
+reclaim  = { kind = "manual-review" }
+
+[[area]]
+id       = "zbrush-quicksave"
+paths    = ['%PUBLIC%\Documents\ZBrushData*\QuickSave']
+category = "user-documents"
+label    = "ZBrush QuickSave files (automatic saves of your sculpts)"
+reclaim  = { kind = "manual-review", note = "Your work's automatic saves: move the ones worth keeping to another drive and delete the rest." }
+
+[[area]]
+id       = "marvelous-designer-assets"
+paths    = ['%PUBLIC%\Documents\MarvelousDesigner']
+category = "user-documents"
+label    = "Marvelous Designer asset library"
+reclaim  = { kind = "manual-review", note = "Goes with Marvelous Designer; move your own garments to another drive first." }
+
+[[area]]
+id       = "gaea-autosave"
+paths    = ['%APPDATA%\QuadSpinner\Gaea\Autosave']
+category = "user-documents"
+label    = "Gaea autosaves of your terrains"
+reclaim  = { kind = "manual-review", note = "Your work's automatic saves; delete the ones you no longer need." }
+
+[[area]]
+id       = "artengine"
+paths    = ['%APPDATA%\.artomatix']
+category = "apps"
+label    = "Unity ArtEngine (discontinued) and its installed versions"
+reclaim  = { kind = "uninstall", note = "Settings > Apps uninstalls ArtEngine; each folder in Versions is one installed version." }

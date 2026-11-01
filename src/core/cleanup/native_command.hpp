@@ -15,8 +15,9 @@ namespace myclean::cleanup {
 
 // How a tool's locate command reports its cache.
 enum class CacheReport {
-  paths,   // absolute paths, one per line, optionally after "<label>: "
-  docker,  // `docker system df` lines "<type>=<reclaimable> (<percent>)"
+  paths,    // absolute paths, one per line, optionally after "<label>: "
+  docker,   // `docker system df` lines "<type>=<reclaimable> (<percent>)"
+  wsl_tmp,  // `wsl -l -q`: one WSL distribution per line; prune runs inside each one
 };
 
 // A package manager's own prune command, as allowed for rules with strategy "native"
@@ -42,18 +43,24 @@ class NativeCommand final : public Action {
  public:
   static constexpr std::chrono::milliseconds locate_timeout{std::chrono::minutes(2)};
   static constexpr std::chrono::milliseconds prune_timeout{std::chrono::minutes(30)};
+  // A WSL /tmp can hold tens of thousands of folders and ~100 GB (seen on the reference
+  // machine), which `du` and `rm` inside WSL 1 take far longer over than a package cache.
+  static constexpr std::chrono::milliseconds wsl_measure_timeout{std::chrono::minutes(20)};
+  static constexpr std::chrono::milliseconds wsl_prune_timeout{std::chrono::hours(4)};
 
   NativeCommand(ICommandRunner& runner, const os::IFileSystem& file_system, std::string command,
                 Tier tier, std::stop_token stop = {});
 
   [[nodiscard]] ActionInfo describe() const override;
   // Asks the tool read-only where its cache is: one item per cache folder with its size on
-  // disk (docker: one per reclaimable type, "docker:<type>"). Fails with refused when the
-  // command is not allowed or the runner has no user context, and with io_error when the tool
-  // fails.
+  // disk (docker: one per reclaimable type, "docker:<type>"; wsl: one per distribution but
+  // Docker Desktop's, "wsl:<distribution>:/tmp", sized by `du` inside it, a distribution whose
+  // `du` fails left out unless all fail). Fails with refused when the command is not allowed or
+  // the runner has no user context, and with io_error when the tool fails.
   [[nodiscard]] Result<Preview> preview() override;
-  // Runs the prune command once, unless the preview is empty. A non-zero exit code fails with
-  // io_error and the tool's first error line. Undo lists the preview items (data: the path);
+  // Runs the prune command once, unless the preview is empty (wsl: once inside each previewed
+  // distribution, all of them even when one fails). A non-zero exit code fails with io_error
+  // and the tool's first error line. Undo lists the preview items (data: the path);
   // not_reversible is "regenerates".
   [[nodiscard]] Result<Undo> apply(const Preview& preview) override;
   // Metric "cache_bytes": the applied preview's total against a new preview.
@@ -65,6 +72,8 @@ class NativeCommand final : public Action {
   [[nodiscard]] Result<const NativeTool*> allowed_tool() const;
   [[nodiscard]] Result<CommandOutput> run(const NativeTool& tool, std::string_view arguments,
                                           std::chrono::milliseconds timeout) const;
+  [[nodiscard]] Result<Preview> wsl_preview(const NativeTool& tool, std::string_view listed) const;
+  [[nodiscard]] Result<void> wsl_prune(const NativeTool& tool, const Preview& preview) const;
 
   ICommandRunner* runner_;
   const os::IFileSystem* file_system_;

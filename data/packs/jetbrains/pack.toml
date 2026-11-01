@@ -1,7 +1,7 @@
 id          = "jetbrains"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "JetBrains IDEs"
-description = "The indexes and caches of JetBrains IDEs and the local folders of IDE versions no longer run (cleaned, asking first); settings, plugins and the IDEs themselves are listed for review or uninstall."
+description = "The indexes and caches of JetBrains IDEs (cleaned) and the local folders of IDE versions no longer run (cleaned, asking first); settings, plugins and the IDEs themselves are listed for review or uninstall."
 sources     = [
   "https://www.jetbrains.com/help/idea/directories-used-by-the-ide-to-store-settings-caches-plugins-and-logs.html (configuration in %APPDATA%\\JetBrains\\<product><version>, caches and logs in %LOCALAPPDATA%\\JetBrains\\<product><version>)",
   "observed on reference machine: %LOCALAPPDATA%\\JetBrains\\<product><version>\\caches; local folders of older versions such as IntelliJIdea2023.1; Toolbox in %LOCALAPPDATA%\\JetBrains\\Toolbox (analysis F-013, F-016)",

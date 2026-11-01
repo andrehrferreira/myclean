@@ -35,3 +35,19 @@ paths    = ['?:\NVIDIA', '?:\AMD', '%ProgramData%\NVIDIA Corporation\Downloader'
 category = "app-caches"
 label    = "Graphics driver installer files"
 reclaim  = { kind = "manual-review", note = "Left behind by driver installs; not needed once the driver is installed." }
+
+[[area]]
+id       = "nvidia-app-downloads"
+paths    = ['%ProgramData%\NVIDIA Corporation\NVIDIA App\UpdateFramework\ota-artifacts']
+category = "app-caches"
+label    = "Drivers and updates the NVIDIA app downloaded"
+reclaim  = { kind = "clean-rule", ref = "nvidia-app-downloads", note = "Downloads older than two weeks are deleted by themselves; the app downloads a driver again to reinstall it." }
+
+# AI models NVIDIA Broadcast (nvbcast*) and the driver's DLSS updates (dlss*) download
+# (observed on reference machine: C:\ProgramData\NVIDIA\NGX\models, 4.6 GiB).
+[[area]]
+id       = "ngx-models"
+paths    = ['%ProgramData%\NVIDIA\NGX\models']
+category = "apps"
+label    = "NVIDIA AI models (NVIDIA Broadcast effects, DLSS updates)"
+reclaim  = { kind = "uninstall", note = "Uninstalling NVIDIA Broadcast removes its models; the DLSS files belong to the driver." }

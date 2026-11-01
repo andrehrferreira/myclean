@@ -12,4 +12,11 @@ id       = "cache"
 paths    = ['%LOCALAPPDATA%\UzPainter\cache']
 category = "app-caches"
 label    = "UzPainter cache"
-reclaim  = { kind = "manual-review", note = "A cache; no cleaning rule covers it yet." }
+reclaim  = { kind = "clean-rule", ref = "cache", note = "Entries untouched for two weeks are offered." }
+
+[[area]]
+id       = "verification-pytest-temp"
+paths    = ['%LOCALAPPDATA%\UzPainter\verification\*\pytest-temp']
+category = "build-artifacts"
+label    = "UzPainter verification runs' test files (pytest temporary folder)"
+reclaim  = { kind = "clean-rule", ref = "verification-pytest-temp", note = "pytest empties it at the start of the next run anyway." }

@@ -19,3 +19,21 @@ case     = "sdks"
 match    = ['C:\Program Files (x86)\Windows Kits', 'C:\Program Files\dotnet', 'C:\Program Files\NVIDIA GPU Computing Toolkit',
             'C:\Program Files\LLVM', 'C:\Program Files\Go', 'C:\Program Files\Android']
 no_match = ['C:\Program Files\Git']
+
+# Trivy's Java database (reference machine): the database goes, its metadata stays.
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\java-db\trivy-java.db'
+age_days = 13
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\java-db\metadata.json'
+
+[[expect]]
+kind     = "clean"
+case     = "trivy-java-db"
+match    = ['C:\Users\owner\AppData\Local\java-db\trivy-java.db']
+no_match = ['C:\Users\owner\AppData\Local\java-db\metadata.json', 'C:\Users\owner\AppData\Local\java-db']
+
+[[expect]]
+kind     = "attribution"
+case     = "trivy-java-db"
+match    = ['C:\Users\owner\AppData\Local\java-db']

@@ -1,7 +1,7 @@
 id          = "node"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "Node.js, npm, pnpm and Yarn"
-description = "Build output and node_modules of inactive JavaScript projects (cleaned), the npm, pnpm and Yarn caches (pruned with each tool's own command), globally installed packages and other JavaScript runtime caches (for review), and what node.exe is."
+description = "Build output and node_modules of inactive JavaScript projects (cleaned), the npm, pnpm and Yarn caches (pruned with each tool's own command), old Electron downloads and Bun cache entries (cleaned, asking first), globally installed packages and other JavaScript runtime caches (for review), and what node.exe is."
 sources     = [
   "https://docs.npmjs.com/cli/configuring-npm/folders (the cache in %LocalAppData%\\npm-cache, global packages in %AppData%\\npm)",
   "https://docs.npmjs.com/cli/commands/npm-cache (`npm cache verify` garbage-collects unneeded data and checks the rest)",

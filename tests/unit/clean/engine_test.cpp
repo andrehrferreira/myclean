@@ -114,15 +114,15 @@ TEST_F(RuleEngineTest, RunningBrowserLeavesItsCacheAlone) {
   EXPECT_EQ(dropped_at(evaluation, chrome / "Default" / "Cache")->reason, "in_use");
 }
 
-// Cleaning spec, "Shader caches default to ask".
-TEST_F(RuleEngineTest, ShaderCacheItemsAreAsk) {
+// Cleaning spec, "Shader caches are auto".
+TEST_F(RuleEngineTest, ShaderCacheItemsAreAuto) {
   const fs::path dx_cache = R"(C:\Users\owner\AppData\Local\NVIDIA\DXCache)";
   tree().add_file(dx_cache / "shader.bin", 3_MiB, days_ago(10));
 
   const Evaluation evaluation = evaluate(shipped_rule("gpu/nvidia-dxcache"));
 
   ASSERT_EQ(evaluation.candidates.size(), 1U);
-  EXPECT_EQ(evaluation.candidates.front().tier, Tier::ask);
+  EXPECT_EQ(evaluation.candidates.front().tier, Tier::automatic);
   EXPECT_EQ(evaluation.candidates.front().path, dx_cache / "shader.bin");
 }
 

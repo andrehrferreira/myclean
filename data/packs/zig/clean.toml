@@ -6,7 +6,7 @@
 [[rule]]
 id       = "global-cache"
 category = "dev-caches"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%LOCALAPPDATA%\zig\o\*', '%LOCALAPPDATA%\zig\h\*', '%LOCALAPPDATA%\zig\z\*',

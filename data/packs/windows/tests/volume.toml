@@ -105,3 +105,9 @@ match    = ['C:\Users\owner\Pictures', 'C:\Users\owner\Videos', 'C:\Users\owner\
 kind     = "attribution"
 case     = "downloads"
 match    = ['C:\Users\owner\Downloads']
+
+[[expect]]
+kind     = "attribution"
+case     = "myclean-quarantine"
+match    = ['C:\.myclean-quarantine', 'D:\.myclean-quarantine']
+no_match = ['C:\.myclean-quarantine\1']

@@ -65,3 +65,27 @@ paths    = ['%USERPROFILE%\.ollama', '%USERPROFILE%\.lmstudio', '%USERPROFILE%\.
 category = "dev-caches"
 label    = "Downloaded AI models and their tools' data (Ollama, LM Studio, local AI apps)"
 reclaim  = { kind = "manual-review", note = "Delete models you no longer use with the tool itself (`ollama rm`, LM Studio > My Models)." }
+
+# More local AI apps and agent tools (observed on reference machine): Nexa's Hyperlink (a local
+# AI search app with its engine and indexes, 2.1 GiB), the Cortex memory plugin's store (2.5
+# GiB) and Claude Code's installed versions in ~\.local\share\claude\versions.
+[[area]]
+id       = "nexa-hyperlink"
+paths    = ['%APPDATA%\nexa.ai']
+category = "apps"
+label    = "Nexa Hyperlink (local AI app): engine, models and indexes"
+reclaim  = { kind = "manual-review", note = "Uninstalling the app leaves this folder behind; delete it then." }
+
+[[area]]
+id       = "cortex-memory"
+paths    = ['%USERPROFILE%\.cortex']
+category = "apps"
+label    = "Cortex agent memory (local records and their archive)"
+reclaim  = { kind = "manual-review", note = "Your agents' recorded memory; archive or delete it from Cortex itself." }
+
+[[area]]
+id       = "claude-code-versions"
+paths    = ['%USERPROFILE%\.local\share\claude\versions']
+category = "dev-toolchains"
+label    = "Claude Code installed versions"
+reclaim  = { kind = "manual-review", note = "Claude Code's updater keeps recent versions; an old one not running may be deleted." }

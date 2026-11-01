@@ -29,8 +29,15 @@ label    = "Yarn cache"
 reclaim  = { kind = "clean-rule", ref = "yarn-cache" }
 
 [[area]]
-id       = "js-runtime-caches"
-paths    = ['%USERPROFILE%\.bun\install\cache', '%LOCALAPPDATA%\electron\Cache']
+id       = "electron-download-cache"
+paths    = ['%LOCALAPPDATA%\electron\Cache']
 category = "dev-caches"
-label    = "Bun package cache and Electron download cache"
-reclaim  = { kind = "manual-review", note = "Regenerates (`bun pm cache rm`); no cleaning rule covers them yet." }
+label    = "Electron download cache"
+reclaim  = { kind = "clean-rule", ref = "electron-download-cache", note = "Downloads untouched for 30 days go; npm downloads Electron again when a project installs it." }
+
+[[area]]
+id       = "bun-cache"
+paths    = ['%USERPROFILE%\.bun\install\cache']
+category = "dev-caches"
+label    = "Bun package cache"
+reclaim  = { kind = "clean-rule", ref = "bun-cache", note = "Packages untouched for 30 days go; Bun downloads them again when needed." }

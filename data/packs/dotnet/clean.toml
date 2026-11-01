@@ -44,7 +44,7 @@ require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
 [[rule]]
 id       = "nuget-locals"
 category = "package-managers"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "native"
 command  = "dotnet nuget locals all --clear"

@@ -12,7 +12,7 @@ id       = "packages"
 paths    = ['%ProgramData%\Microsoft\VisualStudio\Packages']
 category = "dev-caches"
 label    = "Visual Studio installer download cache"
-reclaim  = { kind = "manual-review", note = "Visual Studio Installer > More > Settings: turn off 'Keep download cache after the installation', which removes it." }
+reclaim  = { kind = "clean-rule", ref = "package-payloads", note = "Payloads older than 30 days are deleted by themselves; the installer downloads what a repair or change needs. Turning off 'Keep download cache after the installation' (Visual Studio Installer > More > Settings) stops it from growing again." }
 
 [[area]]
 id       = "user"

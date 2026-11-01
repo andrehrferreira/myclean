@@ -304,37 +304,37 @@ the new ones.
 
 | Pack | Cases |
 |---|---|
-| `adobe` | attribution (review): app data and caches, media cache; kb: Creative Cloud and Acrobat processes |
-| `ai-tools` | attribution (review): Codex sessions and images, Claude Code transcripts, assistant homes, Ollama, LM Studio, Hugging Face and local AI models; relocate: OLLAMA_MODELS, HF_HOME; kb: Claude Code, Codex. Never cleaned |
+| `adobe` | attribution (review): app data and caches, media cache; Camera Raw profiles and models (uninstall); kb: Creative Cloud and Acrobat processes |
+| `ai-tools` | attribution (review): Codex sessions and images, Claude Code transcripts, assistant homes, Ollama, LM Studio, Hugging Face and local AI models, Nexa Hyperlink, Cortex memory, Claude Code versions; relocate: OLLAMA_MODELS, HF_HOME; kb: Claude Code, Codex. Never cleaned |
 | `android` | clean: SDK manager leftovers, tool caches; attribution: SDK, user home, system images and emulator devices (review); kb: emulator processes |
 | `asus` | kb: Armoury Crate, Aura, ASUS services, A-Volute (Nahimic, Sonic Studio) |
 | `browsers` | clean: HTTP, code and GPU caches of Chrome, Edge, Brave, Firefox; attribution: profiles and service worker caches (review); kb: Edge, WebView2 |
 | `chrome` | clean: per-profile WebGPU (Dawn) caches; attribution: on-device AI model (review); kb: chrome.exe |
 | `cpp` | clean: build output of inactive vcxproj and CMake projects |
-| `creative-apps` | attribution: Autodesk installer leftovers (review); kb: Autodesk, FlexNet, Maxon, Reallusion processes |
-| `dev-tools` | attribution (review/uninstall): source projects, SDKs and toolchains, ~/.cache; kb: Git |
-| `device-software` | kb: Realtek, Intel, Epson, TC-Helicon, Apple Bonjour |
+| `creative-apps` | clean: Reallusion Hub downloads, Autodesk installer leftovers (ask); attribution: Reallusion, ZBrush, Marvelous Designer and Gaea content and autosaves (review), ArtEngine (uninstall); kb: Autodesk, FlexNet, Maxon, Reallusion processes |
+| `dev-tools` | clean: Trivy's Java database; attribution (review/uninstall): source projects, SDKs and toolchains, ~/.cache; kb: Git |
+| `device-software` | attribution: Corsair iCUE data (uninstall); kb: Realtek, Intel, Epson, TC-Helicon, Apple Bonjour |
 | `dotnet` | clean: bin/obj of inactive .sln, .slnx and .csproj code bases, NuGet locals (`dotnet nuget locals`); attribution: NuGet packages (relocate) and caches |
-| `electron-apps` | clean: caches and crash reports of Discord, Slack, Teams classic and new Teams; attribution; kb: Discord, Teams |
+| `electron-apps` | clean: caches and crash reports of Discord, Slack, Teams classic and new Teams, electron-updater downloads (`%LOCALAPPDATA%\*-updater`); attribution; kb: Discord, Teams |
 | `flutter` | clean: .dart_tool and build of inactive Flutter projects |
-| `games` | clean: Steam web and download caches, Epic launcher web cache; attribution: Steam, Epic and other launchers' games (uninstall); kb: Steam |
+| `games` | clean: Steam web and download caches, Epic launcher web cache, Unreal games' logs, crash reports and shader byte code; attribution: Steam, Epic and other launchers' games, Epic launcher data (uninstall); kb: Steam |
 | `go` | clean: build and module caches (`go clean`); attribution: build and module caches (relocate) |
-| `gpu` | clean: NVIDIA, AMD and DirectX shader caches (ask); attribution: driver installer leftovers (review); kb: AMD and NVIDIA driver processes |
+| `gpu` | clean: NVIDIA, AMD and DirectX shader caches, driver packages the NVIDIA app downloaded; attribution: driver installer leftovers (review), NVIDIA AI models (uninstall); kb: AMD and NVIDIA driver processes |
 | `java-gradle` | clean: build output of inactive Gradle and Maven projects, unused Gradle versions; attribution: Gradle home (relocate), Maven repository (review); kb: Temurin java.exe |
 | `jetbrains` | clean: IDE caches, local folders of old IDE versions; attribution: settings (review), IDEs (uninstall) |
-| `node` | clean: node_modules and build output of inactive JavaScript projects, npm/pnpm/Yarn caches (their own prune commands); attribution: npm cache (relocate), global packages, Bun and Electron caches (review); kb: node.exe |
+| `node` | clean: node_modules and build output of inactive JavaScript projects, npm/pnpm/Yarn caches (their own prune commands), old Electron downloads and Bun cache entries; attribution: npm cache (relocate), global packages (review); kb: node.exe |
 | `playwright` | clean: test browsers; attribution: browsers, MCP profiles (review) |
 | `python` | clean: caches and build output of inactive Python projects, pip and uv caches (their own commands); attribution: pip cache (relocate), uv, Python and Conda installs (uninstall); kb: python.exe |
 | `python-store` | clean: pip cache of Store Pythons; attribution: installs (uninstall), user packages (review) |
-| `rust` | clean: Cargo crate cache, sources and git checkouts, target of inactive Cargo projects; compress: toolchains (LZX); relocate: RUSTUP_HOME; attribution: Cargo home (relocate) |
-| `security-network` | kb: Kaspersky, OpenVPN, WireGuard, AnyDesk, ExitLag |
+| `rust` | clean: Cargo crate cache, sources and git checkouts, target of inactive Cargo projects; compress: toolchains (LZX); relocate: RUSTUP_HOME; attribution: Cargo home (relocate), ort's ONNX Runtime downloads (review) |
+| `security-network` | attribution: Kaspersky data; kb: Kaspersky, OpenVPN, WireGuard, AnyDesk, ExitLag |
 | `unity` | clean: Library, Temp, Obj and Logs of inactive Unity projects (ask); attribution: editors (uninstall), package and Asset Store cache (review) |
 | `unreal` | clean: build output, derived data, logs and crashes of inactive Unreal projects (ask); attribution: engines (uninstall), shared DDC (relocate), per-user data and Vault cache (review) |
-| `uzpainter` | attribution (review): app data, cache |
+| `uzpainter` | clean: verification runs' pytest temporary folders, cache (ask); attribution (review): app data |
 | `vcpkg` | clean: build trees, packages and downloads of the usual roots and of clones in the workspaces, binary cache archives; attribution (installed libraries: uninstall; roots: review) |
-| `visual-studio` | clean: component (MEF) cache, .vs state of inactive solutions; attribution: installations (uninstall), installer cache and per-user data (review); kb: vctip |
-| `vscode` | clean: old version data, extension packages, stale workspace storage, Chromium caches; attribution: web storage and extensions (review); kb: Code, Copilot runtime |
-| `windows` | clean: temp folders, crash dumps, error reports, icon cache, the Windows cleanup handlers, DISM component cleanup; attribution: system files and folders, programs, the owner's folders; kb: Windows, PowerToys, OneDrive and other Microsoft processes |
+| `visual-studio` | clean: component (MEF) cache, the installer's package payloads, .vs state of inactive solutions; attribution: installations (uninstall), per-user data (review); kb: vctip |
+| `vscode` | clean: old version data, extension packages, stale workspace storage, Chromium caches, webview resource cache (ask); attribution: web storage, extensions and Cursor data (review); kb: Code, Copilot runtime |
+| `windows` | clean: temp folders, crash dumps, error reports, icon cache, PowerToys update installers, the Windows cleanup handlers, DISM component cleanup; attribution: system files and folders, programs, the owner's folders, MyClean's quarantine; kb: Windows, PowerToys, OneDrive and other Microsoft processes |
 | `windows-setup-logs` | clean: the Setup Log Files and Windows Upgrade Log Files handlers; attribution: Panther (the upgrade-log handler), setup logs |
-| `wsl-docker` | relocate: WSL 2 distributions (`wsl --manage --move`), WSL 1 distributions (`wsl-import`); clean: `docker system prune`; attribution: distribution disks, WSL 1 file systems, Docker Desktop disk; kb: WSL and Docker processes |
+| `wsl-docker` | relocate: WSL 2 distributions (`wsl --manage --move`), WSL 1 distributions (`wsl-import`); clean: `docker system prune`, `wsl tmp prune` (entries of a WSL 1 distribution's /tmp older than 7 days, deleted from inside Linux); attribution: distribution disks, WSL 1 file systems and their /tmp, Docker Desktop disk; kb: WSL and Docker processes |
 | `zig` | clean: global cache entries; attribution |

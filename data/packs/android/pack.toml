@@ -1,5 +1,5 @@
 id          = "android"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "Android SDK and emulator"
 description = "Android SDK system images and emulator devices (for review), and the SDK manager's leftover downloads and the tools' caches (cleaned); the SDK and the Android user home as a whole (for review), and what the emulator's processes are."
 sources     = [

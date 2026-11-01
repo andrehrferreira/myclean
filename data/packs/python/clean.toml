@@ -49,7 +49,7 @@ require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
 [[rule]]
 id       = "pip-cache"
 category = "package-managers"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "native"
 command  = "pip cache purge"
@@ -58,7 +58,7 @@ targets  = ['%LOCALAPPDATA%\pip\cache']
 [[rule]]
 id       = "uv-cache"
 category = "package-managers"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "native"
 command  = "uv cache prune"

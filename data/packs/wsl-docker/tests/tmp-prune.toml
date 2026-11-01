@@ -1,0 +1,25 @@
+# The /tmp of two WSL 1 distributions (a Store one with LocalState, and one with rootfs in its
+# package folder), beside a WSL 2 disk: the native prune measures each /tmp, nothing else.
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\rootfs\tmp\.tmpA1b2C3\target\debug\deps\app.rlib'
+size = 1048576
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\rootfs\usr\lib\libc.so.6'
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Packages\TheDebianProject.DebianGNULinux_76v4gfsz19hv4\rootfs\tmp\.tmpZz9xQ1\out.bin'
+
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu22.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx'
+
+[[expect]]
+kind     = "clean"
+case     = "tmp-prune"
+match    = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\rootfs\tmp',
+            'C:\Users\owner\AppData\Local\Packages\TheDebianProject.DebianGNULinux_76v4gfsz19hv4\rootfs\tmp']
+no_match = ['C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\rootfs',
+            'C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\rootfs\tmp\.tmpA1b2C3',
+            'C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\rootfs\usr',
+            'C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu22.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx']

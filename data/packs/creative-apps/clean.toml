@@ -1,0 +1,27 @@
+# Installer leftovers of 3D apps (sources: pack.toml). Installed programs, content libraries,
+# QuickSaves and autosaves are never targets.
+
+# Reallusion Hub saves each installer it downloads in RLDownloads and keeps it (observed on
+# reference machine: ActorCore AccuRIG and Reallusion Hub setups, 0.7 GiB). An installer a
+# month old has run; Reallusion Hub downloads it again to reinstall.
+[[rule]]
+id       = "reallusion-downloads"
+category = "installers"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\Reallusion\RLDownloads\*.exe']
+require  = { min_age_days = 30, not_in_use = true }
+
+# Autodesk setup unpacks its installers into <system drive>\Autodesk (WI: the web installer's
+# files) and leaves them. Programs run without them, but a Repair from Settings > Apps and,
+# for some products, updates look for them (Autodesk community answers, see pack.toml), so this
+# waits for approval; the installer can be downloaded again from the Autodesk account.
+[[rule]]
+id       = "autodesk-installers"
+category = "installers"
+tier     = "ask"
+scope    = "system"
+strategy = "delete"
+targets  = ['%SystemDrive%\Autodesk\*']
+require  = { min_age_days = 30, not_in_use = true }

@@ -6,7 +6,7 @@
 [[rule]]
 id       = "sdk-temp"
 category = "dev-caches"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%LOCALAPPDATA%\Android\Sdk\.temp\*', '%ANDROID_HOME%\.temp\*']
@@ -17,7 +17,7 @@ require  = { min_age_days = 2, not_in_use = true }
 [[rule]]
 id       = "user-cache"
 category = "dev-caches"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%USERPROFILE%\.android\cache\*', '%USERPROFILE%\.android\build-cache\*']

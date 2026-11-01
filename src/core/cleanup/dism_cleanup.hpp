@@ -49,7 +49,8 @@ inline constexpr std::string_view component_cleanup_command =
 // /ResetBase. Not reversible. The runner must outlive the action.
 class DismCleanup final : public Action {
  public:
-  static constexpr std::chrono::milliseconds analyze_timeout{std::chrono::minutes(30)};
+  // The analysis took over 30 minutes on the reference machine while builds kept it busy.
+  static constexpr std::chrono::milliseconds analyze_timeout{std::chrono::minutes(90)};
   // Ending dism.exe does not stop the servicing it started, so the limit is generous.
   static constexpr std::chrono::milliseconds cleanup_timeout{std::chrono::hours(3)};
 

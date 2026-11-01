@@ -20,3 +20,12 @@ paths    = ['%USERPROFILE%\.cargo']
 category = "dev-caches"
 label    = "Cargo registry, git checkouts and installed tools"
 reclaim  = { kind = "relocate", ref = "cargo" }
+
+# ONNX Runtime libraries the `ort` crate's build script downloads, one folder per target and
+# build hash (observed on reference machine: four builds, 1.2 GiB).
+[[area]]
+id       = "ort-binaries"
+paths    = ['%LOCALAPPDATA%\ort.pyke.io']
+category = "dev-caches"
+label    = "ONNX Runtime libraries downloaded by Rust builds (ort crate)"
+reclaim  = { kind = "manual-review", note = "Downloaded again by a build that needs them; keep the newest folder if you build offline." }

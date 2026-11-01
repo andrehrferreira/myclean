@@ -1,0 +1,8 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "kaspersky-data"
+paths    = ['%ProgramData%\Kaspersky Lab']
+category = "apps"
+label    = "Kaspersky antivirus databases, backups and data"
+reclaim  = { kind = "none", note = "The antivirus manages its own databases; it goes with Kaspersky." }

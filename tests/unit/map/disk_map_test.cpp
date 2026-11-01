@@ -312,7 +312,7 @@ TEST(ShippedAttribution, ExplainsTheLargePlacesOfAWorkstation) {
       {LR"(AppData\Local\UzPainter)", "uzpainter/app-data", Category::apps,
        ReclaimKind::manual_review},
       {LR"(AppData\Local\UzPainter\cache)", "uzpainter/cache", Category::app_caches,
-       ReclaimKind::manual_review},
+       ReclaimKind::clean_rule},
       {LR"(.codex)", "ai-tools/assistant-homes", Category::apps, ReclaimKind::manual_review},
       {LR"(.codex\sessions)", "ai-tools/codex-sessions", Category::apps,
        ReclaimKind::manual_review},

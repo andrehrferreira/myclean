@@ -10,3 +10,45 @@ kind     = "attribution"
 case     = "cache"
 match    = ['C:\Users\owner\AppData\Local\UzPainter\cache']
 no_match = ['C:\Users\owner\AppData\Local\UzPainter']
+
+[[expect]]
+kind     = "attribution"
+case     = "verification-pytest-temp"
+match    = ['C:\Users\owner\AppData\Local\UzPainter\verification\ef618d436ee5\pytest-temp']
+no_match = ['C:\Users\owner\AppData\Local\UzPainter\verification\ef618d436ee5']
+
+# A verification run of the reference machine: its test files go, its logs and report stay;
+# old cache entries are offered, the work store never.
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\UzPainter\verification\ef618d436ee5\pytest-temp\baking-project-build0\scene.blend'
+age_days = 9
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\UzPainter\verification\ef618d436ee5\report.json'
+age_days = 9
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\UzPainter\verification\0a1b2c3d4e5f\pytest-temp\blend0\scene.blend'
+age_days = 1
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\UzPainter\cache\eval\04033d81dc4917081f3dc7c967f7f8a3e680c20116f949783956950717ac33ee\result.bin'
+age_days = 19
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\UzPainter\cache\eval\251e7a1155d31811b8842aa2eed38c10f083f30f071eca2e694dd6c887e2821e\result.bin'
+age_days = 3
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\UzPainter\oracle-work\envelopes\painter-12.2.0\run.json'
+
+[[expect]]
+kind     = "clean"
+case     = "verification-pytest-temp"
+match    = ['C:\Users\owner\AppData\Local\UzPainter\verification\ef618d436ee5\pytest-temp']
+no_match = ['C:\Users\owner\AppData\Local\UzPainter\verification\0a1b2c3d4e5f\pytest-temp',
+            'C:\Users\owner\AppData\Local\UzPainter\verification\ef618d436ee5\report.json',
+            'C:\Users\owner\AppData\Local\UzPainter\oracle-work']
+
+[[expect]]
+kind     = "clean"
+case     = "cache"
+match    = ['C:\Users\owner\AppData\Local\UzPainter\cache\eval\04033d81dc4917081f3dc7c967f7f8a3e680c20116f949783956950717ac33ee']
+no_match = ['C:\Users\owner\AppData\Local\UzPainter\cache\eval\251e7a1155d31811b8842aa2eed38c10f083f30f071eca2e694dd6c887e2821e',
+            'C:\Users\owner\AppData\Local\UzPainter\cache\eval',
+            'C:\Users\owner\AppData\Local\UzPainter\oracle-work\envelopes\painter-12.2.0\run.json']

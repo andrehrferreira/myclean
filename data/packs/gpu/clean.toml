@@ -1,11 +1,11 @@
-# GPU shader caches (sources: pack.toml). They regenerate at the cost of one-time stutter in
-# games, so they are "ask" (cleaning spec, "Shader caches default to ask"). Files a running game
-# holds are skipped.
+# GPU shader caches (sources: pack.toml). The driver rebuilds them at the cost of a one-time
+# stutter in games and nothing else, so they are "auto" (cleaning spec, "Shader caches are
+# auto"). Files a running game holds are skipped.
 
 [[rule]]
 id       = "nvidia-dxcache"
 category = "gpu-shader-caches"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%LOCALAPPDATA%\NVIDIA\DXCache\*',
@@ -15,7 +15,7 @@ require  = { not_in_use = true }
 [[rule]]
 id       = "nvidia-glcache"
 category = "gpu-shader-caches"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%LOCALAPPDATA%\NVIDIA\GLCache\*',
@@ -25,7 +25,7 @@ require  = { not_in_use = true }
 [[rule]]
 id       = "d3dscache"
 category = "gpu-shader-caches"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%LOCALAPPDATA%\D3DSCache\*']
@@ -34,9 +34,26 @@ require  = { not_in_use = true }
 [[rule]]
 id       = "amd-cache"
 category = "gpu-shader-caches"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%LOCALAPPDATA%\AMD\DxCache\*', '%LOCALAPPDATA%\AMD\DxcCache\*',
             '%LOCALAPPDATA%\AMD\VkCache\*']
 require  = { not_in_use = true }
+
+# The NVIDIA app downloads each driver (grd) and its own updates (nvapp) into
+# UpdateFramework\ota-artifacts\<kind>\<hash> and unpacks them into post-processing\<hash>, and
+# keeps both after installing (observed on reference machine: the 617.14 driver installer and
+# its unpacked copy, 3.7 GiB, beside the installed driver 32.0.16.1714 = 617.14). Only driver
+# packages are targets: a driver package two weeks old has been installed (Express or Custom
+# install runs right after the download) or superseded, and the app downloads a driver again to
+# reinstall it. The app's own update (nvapp: 11.0.9.565 downloaded while 11.0.9.251 runs) may be
+# waiting to install, and the status and registry folders are the app's state: never targets.
+[[rule]]
+id       = "nvidia-app-downloads"
+category = "gpu-installers"
+tier     = "auto"
+scope    = "system"
+strategy = "delete"
+targets  = ['%ProgramData%\NVIDIA Corporation\NVIDIA App\UpdateFramework\ota-artifacts\grd\*']
+require  = { min_age_days = 14, not_in_use = true }

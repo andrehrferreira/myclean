@@ -25,7 +25,7 @@ require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
 [[rule]]
 id       = "pnpm-store"
 category = "package-managers"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "native"
 command  = "pnpm store prune"
@@ -35,7 +35,7 @@ targets  = ['%LOCALAPPDATA%\pnpm\store']
 [[rule]]
 id       = "npm-cache"
 category = "package-managers"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "native"
 command  = "npm cache verify"
@@ -44,8 +44,31 @@ targets  = ['%LOCALAPPDATA%\npm-cache']
 [[rule]]
 id       = "yarn-cache"
 category = "package-managers"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "native"
 command  = "yarn cache clean"
 targets  = ['%LOCALAPPDATA%\Yarn\Cache']
+
+# Electron's download cache: @electron/get keeps every Electron zip it downloads for npm
+# installs, one folder per download, and fetches a missing one again (sources: pack.toml).
+[[rule]]
+id       = "electron-download-cache"
+category = "package-managers"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\electron\Cache\*']
+require  = { min_age_days = 30, not_in_use = true }
+
+# Bun's global cache, one folder per package version; Bun downloads a missing one again
+# (`bun pm cache rm` removes it whole; Bun is not one of the commands MyClean runs, so old
+# entries are deleted). Projects that Bun linked from the cache keep their own copies.
+[[rule]]
+id       = "bun-cache"
+category = "package-managers"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%USERPROFILE%\.bun\install\cache\*']
+require  = { min_age_days = 30, not_in_use = true }

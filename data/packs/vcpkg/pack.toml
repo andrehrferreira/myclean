@@ -1,5 +1,5 @@
 id          = "vcpkg"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "vcpkg"
 description = "vcpkg's build trees, package staging, downloads and binary cache, which it rebuilds; never its installed libraries or its ports. The vcpkg roots are listed for review."
 sources     = [

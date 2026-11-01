@@ -93,6 +93,39 @@ match    = ['C:\Users\owner\AppData\Local\Yarn']
 
 [[expect]]
 kind     = "attribution"
-case     = "js-runtime-caches"
-match    = ['C:\Users\owner\.bun\install\cache', 'C:\Users\owner\AppData\Local\electron\Cache']
+case     = "electron-download-cache"
+match    = ['C:\Users\owner\AppData\Local\electron\Cache']
+
+[[expect]]
+kind     = "attribution"
+case     = "bun-cache"
+match    = ['C:\Users\owner\.bun\install\cache']
 no_match = ['C:\Users\owner\.bun\bin']
+
+# Electron's download cache (reference machine: zips and checksum-named folders) and Bun's
+# cache: old downloads go, a recent one and Bun itself stay.
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\electron\Cache\electron-v38.1.2-win32-x64.zip'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\electron\Cache\f4cdda5d255167668155a7287d73720b8778a09f5b047ffad57c620032ebe69a\electron-v41.0.0-win32-x64.zip'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\electron\Cache\92de7e0b9013f8f82044966bbe9739d493dc12c36e2bfa6dec36b69c73b451e6\electron-v40.1.0-win32-x64.zip'
+age_days = 5
+[[entry]]
+path = 'C:\Users\owner\.bun\install\cache\react@19.1.0@@@1\package.json'
+[[entry]]
+path = 'C:\Users\owner\.bun\bin\bun.exe'
+
+[[expect]]
+kind     = "clean"
+case     = "electron-download-cache"
+match    = ['C:\Users\owner\AppData\Local\electron\Cache\electron-v38.1.2-win32-x64.zip',
+            'C:\Users\owner\AppData\Local\electron\Cache\f4cdda5d255167668155a7287d73720b8778a09f5b047ffad57c620032ebe69a']
+no_match = ['C:\Users\owner\AppData\Local\electron\Cache',
+            'C:\Users\owner\AppData\Local\electron\Cache\92de7e0b9013f8f82044966bbe9739d493dc12c36e2bfa6dec36b69c73b451e6']
+
+[[expect]]
+kind     = "clean"
+case     = "bun-cache"
+match    = ['C:\Users\owner\.bun\install\cache\react@19.1.0@@@1']
+no_match = ['C:\Users\owner\.bun\install\cache', 'C:\Users\owner\.bun\bin', 'C:\Users\owner\.bun\bin\bun.exe']

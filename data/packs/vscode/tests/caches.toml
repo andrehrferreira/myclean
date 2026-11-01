@@ -55,3 +55,35 @@ kind     = "attribution"
 case     = "editor-extensions"
 match    = ['C:\Users\owner\.vscode', 'C:\Users\owner\.cursor']
 no_match = ['C:\Users\owner\AppData\Roaming\Code']
+
+# Webview storage buckets (reference machine): their Cache API folder goes, IndexedDB and the
+# bucket database stay.
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\WebStorage\4\CacheStorage\240ce103-c33d-4c69-8b6b-cf1f06936cab\01d9f093b2a8e617_0'
+age_days = 3
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\WebStorage\4\CacheStorage\index.txt'
+age_days = 3
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\WebStorage\9\IndexedDB\vscode-webview_0.indexeddb.leveldb\000003.log'
+[[entry]]
+path = 'C:\Users\owner\AppData\Roaming\Code\WebStorage\QuotaManager'
+
+[[expect]]
+kind     = "clean"
+case     = "webview-resource-cache"
+match    = ['C:\Users\owner\AppData\Roaming\Code\WebStorage\4\CacheStorage']
+no_match = ['C:\Users\owner\AppData\Roaming\Code\WebStorage\9\IndexedDB',
+            'C:\Users\owner\AppData\Roaming\Code\WebStorage\QuotaManager',
+            'C:\Users\owner\AppData\Roaming\Code\WebStorage\4']
+
+[[expect]]
+kind     = "attribution"
+case     = "webview-resource-cache"
+match    = ['C:\Users\owner\AppData\Roaming\Code\WebStorage\4\CacheStorage']
+no_match = ['C:\Users\owner\AppData\Roaming\Code\WebStorage\4']
+
+[[expect]]
+kind     = "attribution"
+case     = "cursor-data"
+match    = ['C:\Users\owner\AppData\Roaming\Cursor']

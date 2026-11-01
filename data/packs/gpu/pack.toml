@@ -1,8 +1,10 @@
 id          = "gpu"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "Graphics drivers"
-description = "The shader caches of the NVIDIA and AMD drivers and of DirectX (cleaned, asking first), graphics driver installer leftovers (for review), and what the AMD and NVIDIA driver processes are."
+description = "The shader caches of the NVIDIA and AMD drivers and of DirectX (cleaned, asking first), the drivers and updates the NVIDIA app downloaded (cleaned), other graphics driver installer leftovers (for review), NVIDIA's AI models (uninstall), and what the AMD and NVIDIA driver processes are."
 sources     = [
+  "observed on reference machine: %ProgramData%\\NVIDIA Corporation\\NVIDIA App\\UpdateFramework\\ota-artifacts holds grd\\<hash>\\617.14-desktop-win10-win11-64bit-international-dch-whql-g.exe and its unpacked copy in grd\\post-processing\\<hash> (3.7 GiB) while driver 32.0.16.1714 (617.14) is installed, and nvapp\\<hash> with the NVIDIA app 11.0.9.565 installer (0.9 GiB); status, registry and plugins hold the app's state",
+  "observed on reference machine: %ProgramData%\\NVIDIA\\NGX\\models holds NVIDIA Broadcast (nvbcast*) and DLSS models, 4.6 GiB",
   "observed on reference machine: NVIDIA shader caches in %LOCALAPPDATA%\\NVIDIA\\DXCache and GLCache and in LocalLow\\NVIDIA\\PerDriverVersion; DirectX's in %LOCALAPPDATA%\\D3DSCache; AMD's in %LOCALAPPDATA%\\AMD\\DxCache, DxcCache and VkCache; driver installers in C:\\NVIDIA, C:\\AMD and the NVIDIA app's download folders (analysis F-016)",
   "observed on reference machine: the AMD and NVIDIA driver processes, their image paths (DriverStore) and signers",
 ]

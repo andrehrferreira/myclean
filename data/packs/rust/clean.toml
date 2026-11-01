@@ -6,7 +6,7 @@
 [[rule]]
 id       = "registry-cache"
 category = "dev-caches"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%USERPROFILE%\.cargo\registry\cache\*\*', '%USERPROFILE%\.cargo\registry\src\*\*',

@@ -1,0 +1,6 @@
+# The machine-wide data folder of the reference machine.
+
+[[expect]]
+kind     = "attribution"
+case     = "kaspersky-data"
+match    = ['C:\ProgramData\Kaspersky Lab']

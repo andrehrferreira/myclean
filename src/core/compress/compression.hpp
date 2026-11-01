@@ -35,19 +35,20 @@ enum class Algorithm { xpress4k, xpress8k, xpress16k, lzx, lznt1 };
 // Why a file is left uncompressed.
 enum class Exclusion {
   none,
-  link,            // a reparse point: never followed
-  placeholder,     // a cloud file: its content may not be local
-  extra_link,      // a further hard link of a file already counted
-  small,           // not larger than one cluster: nothing to save
-  compressed,      // already smaller on disk than its size: WOF, NTFS-compressed or sparse
-  media,           // a format that is compressed already (pictures, audio, video, archives)
-  disk_image,      // a virtual disk (VHD, VHDX, VMDK, VDI, QCOW2)
-  database,        // databases, their journals and logs: written in place
-  system_file,     // drivers and the paging, swap and hibernation files
-  recent,          // modified within the recent window: likely written again
-  windows,         // under %WINDIR%: CompactOS covers it
-  incompressible,  // of an extension the samples showed does not compress
-  pack_excluded,   // named by the `exclude` of a knowledge pack's compression target
+  link,              // a reparse point: never followed
+  placeholder,       // a cloud file: its content may not be local
+  extra_link,        // a further hard link of a file already counted
+  small,             // not larger than one cluster: nothing to save
+  compressed,        // already smaller on disk than its size: WOF, NTFS-compressed or sparse
+  media,             // a format that is compressed already (pictures, audio, video, archives)
+  disk_image,        // a virtual disk (VHD, VHDX, VMDK, VDI, QCOW2), a WSL 2 ext4.vhdx too
+  database,          // databases, their journals and logs: written in place
+  system_file,       // drivers and the paging, swap and hibernation files
+  recent,            // modified within the recent window: likely written again
+  windows,           // under %WINDIR%: CompactOS covers it
+  wsl_distribution,  // in a WSL 1 distribution's rootfs: Linux files are changed from Linux only
+  incompressible,    // of an extension the samples showed does not compress
+  pack_excluded,     // named by the `exclude` of a knowledge pack's compression target
 };
 
 [[nodiscard]] std::string_view to_string(Exclusion exclusion);

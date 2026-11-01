@@ -2,11 +2,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
+#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
+#include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -31,7 +34,7 @@ namespace {
 namespace fs = std::filesystem;
 
 // The commands of F-013, with the flags that keep them from asking for input.
-constexpr std::array<NativeTool, 8> tools{{
+constexpr std::array<NativeTool, 9> tools{{
     {.command = "pnpm store prune",
      .program = "pnpm",
      .prune = "store prune",
@@ -59,9 +62,24 @@ constexpr std::array<NativeTool, 8> tools{{
      .prune = "system prune --force",
      .locate = "system df --format {{.Type}}={{.Reclaimable}}",
      .report = CacheReport::docker},
+    // WSL 1 never empties /tmp. Runs as root inside each distribution with --exec, so no shell
+    // reads the find expression: the entries of /tmp older than 7 days, the X11/ICE/font socket
+    // folders (".X11-unix" and the like) kept. "-d <distribution>" goes in front.
+    {.command = "wsl tmp prune",
+     .program = "wsl",
+     .prune = "-u root --exec find /tmp -mindepth 1 -maxdepth 1 -mtime +7 ! -name .*-unix -exec "
+              "rm -rf {} +",
+     .locate = "-l -q",
+     .report = CacheReport::wsl_tmp},
 }};
 
 constexpr std::uint64_t docker_unit = 1000;  // docker prints decimal units ("1.2GB", "512kB")
+
+// What /tmp takes on disk inside a distribution, in KiB (POSIX du, busybox's too).
+constexpr std::string_view wsl_tmp_size = "-u root --exec du -sk /tmp";
+constexpr std::string_view wsl_item_prefix = "wsl:";
+constexpr std::string_view wsl_item_suffix = ":/tmp";
+constexpr std::uint64_t kib = 1024;
 
 // Each distinct absolute path in `out`, taken from a whole line or from after "<label>: ".
 std::vector<fs::path> cache_paths(std::string_view out) {
@@ -98,6 +116,74 @@ Result<std::vector<PlanItem>> docker_items(std::string_view out) {
     }
   }
   return items;
+}
+
+// True for a name WSL accepts for a distribution: ASCII letters, digits, '.', '_' and '-'.
+bool distribution_name(std::string_view name) {
+  return !name.empty() && std::ranges::all_of(name, [](char character) {
+    const auto byte = static_cast<unsigned char>(character);
+    return byte < 0x80 &&
+           (std::isalnum(byte) != 0 || character == '.' || character == '_' || character == '-');
+  });
+}
+
+bool docker_desktop(std::string_view name) {
+  std::string lower(name);
+  std::ranges::transform(lower, lower.begin(), [](char character) {
+    return static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+  });
+  return lower == "docker-desktop" || lower == "docker-desktop-data";
+}
+
+// The distributions `wsl -l -q` lists, but Docker Desktop's own. wsl.exe writes UTF-16LE, which
+// the runner hands on unchanged (ASCII in UTF-16LE is valid UTF-8), or, after a byte order mark,
+// as the OEM code page left it: the mark turns into non-ASCII bytes and the rest stays. A code
+// unit beyond ASCII spoils its line, so each line is a name WSL accepts or is skipped: no name
+// is ever guessed.
+std::vector<std::string> wsl_distributions(std::string_view out) {
+  std::string text;
+  if (out.find('\0') == std::string_view::npos) {
+    text = out;  // already UTF-8 (WSL_UTF8=1)
+  } else {
+    std::size_t at = 0;
+    while (at < out.size() && static_cast<unsigned char>(out[at]) >= 0x80) {
+      ++at;  // the byte order mark
+    }
+    for (; at + 1 < out.size(); at += 2) {
+      const auto low = static_cast<unsigned char>(out[at]);
+      text.push_back(out[at + 1] == '\0' && low < 0x80 ? static_cast<char>(low) : '?');
+    }
+  }
+  std::vector<std::string> names;
+  for (std::string_view line : lines(text)) {
+    if (line.starts_with('*')) {
+      line = trim(line.substr(1));  // the default distribution's mark in `wsl -l -v`
+    }
+    if (distribution_name(line) && !docker_desktop(line) &&
+        std::ranges::find(names, line) == names.end()) {
+      names.emplace_back(line);
+    }
+  }
+  return names;
+}
+
+// The distribution of a preview item "wsl:<distribution>:/tmp"; nothing for any other item.
+std::optional<std::string> distribution_of(const PlanItem& item) {
+  const std::string text = safety::to_utf8(item.path);
+  if (!text.starts_with(wsl_item_prefix) || !text.ends_with(wsl_item_suffix)) {
+    return std::nullopt;
+  }
+  std::string name = text.substr(wsl_item_prefix.size(),
+                                 text.size() - wsl_item_prefix.size() - wsl_item_suffix.size());
+  if (!distribution_name(name)) {
+    return std::nullopt;
+  }
+  return name;
+}
+
+// `arguments` run inside the distribution `name`.
+std::string in_distribution(std::string_view name, std::string_view arguments) {
+  return "-d " + std::string(name) + " " + std::string(arguments);
 }
 
 }  // namespace
@@ -179,6 +265,9 @@ Result<Preview> NativeCommand::preview() {
     preview.items = *std::move(items);
     return preview;
   }
+  if ((*tool)->report == CacheReport::wsl_tmp) {
+    return wsl_preview(**tool, output->out);
+  }
   const std::vector<fs::path> folders = cache_paths(output->out);
   if (folders.empty()) {
     return fail(Errc::invalid_data,
@@ -204,7 +293,12 @@ Result<Undo> NativeCommand::apply(const Preview& preview) {
   if (preview.items.empty()) {
     return undo;
   }
-  if (const Result<CommandOutput> output = run(**tool, (*tool)->prune, prune_timeout); !output) {
+  if ((*tool)->report == CacheReport::wsl_tmp) {
+    if (const Result<void> pruned = wsl_prune(**tool, preview); !pruned) {
+      return tl::unexpected(pruned.error());
+    }
+  } else if (const Result<CommandOutput> output = run(**tool, (*tool)->prune, prune_timeout);
+             !output) {
     return tl::unexpected(output.error());
   }
   before_ = preview.total_size();
@@ -212,6 +306,57 @@ Result<Undo> NativeCommand::apply(const Preview& preview) {
     undo.items.push_back({.item = item.id, .data = safety::to_utf8(item.path)});
   }
   return undo;
+}
+
+Result<Preview> NativeCommand::wsl_preview(const NativeTool& tool, std::string_view listed) const {
+  Preview preview;
+  std::optional<Error> first_error;
+  for (const std::string& name : wsl_distributions(listed)) {
+    const Result<CommandOutput> output =
+        run(tool, in_distribution(name, wsl_tmp_size), wsl_measure_timeout);
+    if (!output) {
+      first_error = first_error.value_or(output.error());
+      continue;
+    }
+    const std::vector<std::string_view> said = lines(output->out);
+    const std::string_view size =
+        said.empty() ? std::string_view{} : said.front().substr(0, said.front().find('\t'));
+    std::uint64_t size_kib = 0;
+    const char* const end = std::to_address(size.end());
+    if (size.empty() || std::from_chars(std::to_address(size.begin()), end, size_kib).ptr != end) {
+      first_error = first_error.value_or(
+          Error{.code = Errc::invalid_data,
+                .message = std::format("unexpected du output in {}: {}", name,
+                                       said.empty() ? std::string_view{} : said.front())});
+      continue;
+    }
+    preview.items.push_back(PlanItem{
+        .path = from_utf8(std::string(wsl_item_prefix) + name + std::string(wsl_item_suffix)),
+        .size = Bytes{size_kib * kib}});
+  }
+  if (preview.items.empty() && first_error) {
+    return tl::unexpected(*first_error);
+  }
+  return preview;
+}
+
+Result<void> NativeCommand::wsl_prune(const NativeTool& tool, const Preview& preview) const {
+  std::optional<Error> first_error;
+  for (const PlanItem& item : preview.items) {
+    const std::optional<std::string> name = distribution_of(item);
+    if (!name) {
+      continue;
+    }
+    if (const Result<CommandOutput> output =
+            run(tool, in_distribution(*name, tool.prune), wsl_prune_timeout);
+        !output) {
+      first_error = first_error.value_or(output.error());
+    }
+  }
+  if (first_error) {
+    return tl::unexpected(*first_error);
+  }
+  return {};
 }
 
 Result<Verification> NativeCommand::verify(const Undo& /*undo*/) {

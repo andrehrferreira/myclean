@@ -1,9 +1,11 @@
 id          = "creative-apps"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "3D and video apps (Autodesk, Maxon, Reallusion)"
-description = "Installer files Autodesk setup leaves behind (for review), and what the licensing and helper processes of Autodesk, FlexNet, Maxon and Reallusion apps are."
+description = "Installers Reallusion Hub downloaded (cleaned) and those Autodesk setup leaves behind (cleaned, asking first); the content libraries, QuickSaves and autosaves of ZBrush, Reallusion, Marvelous Designer and Gaea (for review); ArtEngine (uninstall); and what the licensing and helper processes of Autodesk, FlexNet, Maxon and Reallusion apps are."
 sources     = [
-  "observed on reference machine: C:\\Autodesk holds the unpacked installers of Autodesk products after setup",
+  "observed on reference machine: C:\\Autodesk holds the unpacked installers of Autodesk products after setup (C:\\Autodesk\\WI, 3.2 GiB)",
+  "https://forums.autodesk.com/t5/installation-licensing-forum/ok-to-delete-c-autodesk-wi-folder-after-install/td-p/6038150 (community answers: programs run without C:\\Autodesk; Repair and some updates look for the installer files there)",
+  "observed on reference machine: %LOCALAPPDATA%\\Reallusion\\RLDownloads keeps the setups Reallusion Hub downloaded (ActorCore_AccRIG.exe, Reallusion_HUB_*.exe); %PUBLIC%\\Documents\\Reallusion\\Reallusion Templates (15 GiB); %PUBLIC%\\Documents\\ZBrushData2025\\QuickSave (17.6 GiB of QuickSave files); %PUBLIC%\\Documents\\MarvelousDesigner\\Assets; %APPDATA%\\QuadSpinner\\Gaea\\Autosave; %APPDATA%\\.artomatix\\Versions\\ArtEngine\\2022.7.2",
   "observed on reference machine: the Autodesk, FlexNet licensing, Maxon (Red Giant) and Reallusion processes, their image paths and signers",
 ]
 min_myclean = "0.1.0"
@@ -11,4 +13,6 @@ min_myclean = "0.1.0"
 [applies_when]
 any = [{ path_exists = '%SystemDrive%\Autodesk' }, { path_exists = '%ProgramFiles%\Autodesk' },
        { app_installed = '^Autodesk' }, { app_installed = '^Maxon' }, { app_installed = '^Red Giant' },
-       { app_installed = '^Reallusion' }]
+       { app_installed = '^Reallusion' }, { path_exists = '%LOCALAPPDATA%\Reallusion' },
+       { path_exists = '%PUBLIC%\Documents\ZBrushData*' }, { path_exists = '%PUBLIC%\Documents\MarvelousDesigner' },
+       { path_exists = '%APPDATA%\QuadSpinner' }, { path_exists = '%APPDATA%\.artomatix' }]

@@ -42,7 +42,7 @@ require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
 [[rule]]
 id       = "gradle-versions"
 category = "package-managers"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%GRADLE_USER_HOME%\caches\?.*', '%GRADLE_USER_HOME%\caches\??.*',

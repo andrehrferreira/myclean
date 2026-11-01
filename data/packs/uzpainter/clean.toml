@@ -1,0 +1,25 @@
+# UzPainter's regenerable folders (sources: pack.toml). The work, inbox, verification reports
+# and parity stores are never targets.
+
+# Each verification run gives pytest a base temporary folder, pytest-temp, which pytest itself
+# clears blindly at the start of the next run (pytest documentation, --basetemp): what is left
+# is the last run's test files. A run a week old is finished.
+[[rule]]
+id       = "verification-pytest-temp"
+category = "dev-caches"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\UzPainter\verification\*\pytest-temp']
+require  = { min_age_days = 7, not_in_use = true }
+
+# The app's cache (eval and lighting results by content hash). A cache, but what rebuilding it
+# costs is the app's own business, so this waits for approval.
+[[rule]]
+id       = "cache"
+category = "app-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\UzPainter\cache\*\*']
+require  = { min_age_days = 14, not_in_use = true }

@@ -1,8 +1,10 @@
 id          = "vscode"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "Visual Studio Code"
-description = "VS Code's leftovers of older versions, downloaded extension packages, the storage of workspaces no longer opened and its Chromium caches; extension web storage and installed extensions are listed for review. Also what VS Code's and Copilot's processes are."
+description = "VS Code's leftovers of older versions, downloaded extension packages, the storage of workspaces no longer opened, its Chromium caches and its webviews' resource cache; extension web storage, installed extensions and Cursor's data are listed for review. Also what VS Code's and Copilot's processes are."
 sources     = [
+  "https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/webview/browser/pre/service-worker.js (the webview service worker caches the local resources it serves in vscode-resource-cache-<version>)",
+  "observed on reference machine: %APPDATA%\\Code\\WebStorage\\<bucket>\\CacheStorage holds only the caches vscode-resource-cache-4, -5 and -6 of two vscode-webview:// origins (10.5 GiB); IndexedDB beside them; QuotaManager in WebStorage; %APPDATA%\\Cursor with User\\History and User\\workspaceStorage",
   "https://code.visualstudio.com/api/references/vscode-api#ExtensionContext (storageUri: per-workspace extension storage, in User\\workspaceStorage)",
   "observed on reference machine: %APPDATA%\\Code holds CachedData (one folder per VS Code version), CachedExtensionVSIXs (the .vsix of installed extensions, downloaded again on update), User\\workspaceStorage (157 workspaces) and WebStorage; Cache, Code Cache, GPUCache and Crashpad beside Local Storage; extensions in %USERPROFILE%\\.vscode and %USERPROFILE%\\.cursor (analysis F-013, F-016)",
   "observed on reference machine: Code.exe and copilot-runtime.exe, their image paths and signers",
@@ -11,4 +13,5 @@ min_myclean = "0.1.0"
 
 [applies_when]
 any = [{ path_exists = '%APPDATA%\Code' }, { path_exists = '%USERPROFILE%\.vscode' },
-       { path_exists = '%USERPROFILE%\.cursor' }, { app_installed = '^Microsoft Visual Studio Code' }]
+       { path_exists = '%USERPROFILE%\.cursor' }, { path_exists = '%APPDATA%\Cursor' },
+       { app_installed = '^Microsoft Visual Studio Code' }]

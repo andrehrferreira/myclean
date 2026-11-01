@@ -78,3 +78,30 @@ kind     = "attribution"
 case     = "mef-cache"
 match    = ['C:\Users\owner\AppData\Local\Microsoft\VisualStudio\17.0_8a3c1f2e\ComponentModelCache']
 no_match = ['C:\Users\owner\AppData\Local\Microsoft\VisualStudio\17.0_8a3c1f2e']
+
+# The installer's package cache (reference machine): payload folders go, the installer's own
+# state and a payload a running setup just wrote stay.
+[[entry]]
+path = 'C:\ProgramData\Microsoft\VisualStudio\Packages\Microsoft.VisualStudio.VC.Llvm.Clang,version=17.14.36203.27,productarch=neutral\payload.vsix'
+[[entry]]
+path = 'C:\ProgramData\Microsoft\VisualStudio\Packages\AndroidNDK_R23C,version=23.3,chip=x64\_package.json'
+[[entry]]
+path = 'C:\ProgramData\Microsoft\VisualStudio\Packages\Microsoft.NetCore.Toolset.9.0.311,version=17.14.36928.8,machinearch=x64\payload.msi'
+age_days = 1
+[[entry]]
+path = 'C:\ProgramData\Microsoft\VisualStudio\Packages\_Instances\3bd6c0c1\state.json'
+[[entry]]
+path = 'C:\ProgramData\Microsoft\VisualStudio\Packages\_Channels\4CB340F5\catalog.json'
+[[entry]]
+path = 'C:\ProgramData\Microsoft\VisualStudio\Packages\_bootstrapper\vs_setup_bootstrapper.exe'
+
+[[expect]]
+kind     = "clean"
+case     = "package-payloads"
+match    = ['C:\ProgramData\Microsoft\VisualStudio\Packages\Microsoft.VisualStudio.VC.Llvm.Clang,version=17.14.36203.27,productarch=neutral',
+            'C:\ProgramData\Microsoft\VisualStudio\Packages\AndroidNDK_R23C,version=23.3,chip=x64']
+no_match = ['C:\ProgramData\Microsoft\VisualStudio\Packages\Microsoft.NetCore.Toolset.9.0.311,version=17.14.36928.8,machinearch=x64',
+            'C:\ProgramData\Microsoft\VisualStudio\Packages\_Instances',
+            'C:\ProgramData\Microsoft\VisualStudio\Packages\_Channels',
+            'C:\ProgramData\Microsoft\VisualStudio\Packages\_bootstrapper',
+            'C:\ProgramData\Microsoft\VisualStudio\Packages']

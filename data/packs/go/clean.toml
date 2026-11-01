@@ -6,7 +6,7 @@
 [[rule]]
 id       = "cache"
 category = "package-managers"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "native"
 command  = "go clean -cache -modcache"

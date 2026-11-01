@@ -1,5 +1,5 @@
 id          = "java-gradle"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "Java, Gradle and Maven"
 description = "Build output of inactive Gradle and Maven projects and Gradle's unused cache and wrapper versions (cleaned), the Gradle home and Maven's local repository (move or review), and what the Temurin java.exe is."
 sources     = [

@@ -29,6 +29,7 @@ class FakeRunner final : public ICommandRunner {
       key += " " + argument;
     }
     calls.push_back(key);
+    arguments.push_back(command.arguments);
     timeouts.push_back(command.timeout);
     if (on_run) {
       on_run(key);
@@ -51,6 +52,7 @@ class FakeRunner final : public ICommandRunner {
   std::map<std::string, Result<CommandOutput>> answers;
   std::function<void(const std::string&)> on_run;
   std::vector<std::string> calls;
+  std::vector<std::vector<std::string>> arguments;  // of each call, as passed
   std::vector<std::chrono::milliseconds> timeouts;
 };
 

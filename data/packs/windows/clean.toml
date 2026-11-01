@@ -58,11 +58,23 @@ strategy = "delete"
 targets  = ['%WINDIR%\LiveKernelReports\*']
 require  = { min_age_days = 7, not_in_use = true }
 
+# PowerToys downloads each update's installer into Updates and never removes it (observed on
+# reference machine: six powertoyssetup-<version>-x64.exe, 0.99.0 to 0.102.3001). An installer
+# two weeks old is installed or superseded; PowerToys downloads the next one itself.
+[[rule]]
+id       = "powertoys-updates"
+category = "windows"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\Microsoft\PowerToys\Updates\*.exe']
+require  = { min_age_days = 14, not_in_use = true }
+
 # Explorer keeps these open while it runs, so they are selected only when it does not.
 [[rule]]
 id       = "icon-cache"
 category = "windows"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%LOCALAPPDATA%\Microsoft\Windows\Explorer\iconcache_*.db']
@@ -71,7 +83,7 @@ require  = { not_in_use = true }
 [[rule]]
 id       = "thumbnail-cache"
 category = "windows"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "handler"
 handler  = "Thumbnail Cache"
@@ -80,7 +92,7 @@ handler  = "Thumbnail Cache"
 [[rule]]
 id       = "internet-cache"
 category = "windows"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "handler"
 handler  = "Internet Cache Files"
@@ -120,7 +132,7 @@ handler  = "Update Cleanup"
 [[rule]]
 id       = "delivery-optimization"
 category = "windows"
-tier     = "ask"
+tier     = "auto"
 scope    = "system"
 strategy = "handler"
 handler  = "Delivery Optimization Files"
@@ -128,7 +140,7 @@ handler  = "Delivery Optimization Files"
 [[rule]]
 id       = "temporary-setup-files"
 category = "windows"
-tier     = "ask"
+tier     = "auto"
 scope    = "system"
 strategy = "handler"
 handler  = "Temporary Setup Files"
@@ -136,7 +148,7 @@ handler  = "Temporary Setup Files"
 [[rule]]
 id       = "upgrade-discarded-files"
 category = "windows"
-tier     = "ask"
+tier     = "auto"
 scope    = "system"
 strategy = "handler"
 handler  = "Upgrade Discarded Files"

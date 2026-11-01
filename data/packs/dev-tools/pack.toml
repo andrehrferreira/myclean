@@ -1,9 +1,11 @@
 id          = "dev-tools"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "Developer folders and SDKs"
-description = "Where source code projects, SDKs and toolchains and the shared developer cache folder (~/.cache) are (for review or uninstall), and what Git's processes are."
+description = "Where source code projects, SDKs and toolchains and the shared developer cache folder (~/.cache) are (for review or uninstall), Trivy's downloaded Java database (cleaned), and what Git's processes are."
 sources     = [
   "observed on reference machine: projects in %USERPROFILE%\\source\\repos, Documents\\GitHub, Projects and dev; SDKs and toolchains in Windows Kits, dotnet, NVIDIA GPU Computing Toolkit, LLVM, Go and Android under Program Files; tool caches in %USERPROFILE%\\.cache (analysis F-012, F-013)",
+  "https://trivy.dev/latest/docs/configuration/db/ (Trivy's databases, the Java DB among them, are fetched and maintained automatically as needed)",
+  "observed on reference machine: %LOCALAPPDATA%\\java-db\\trivy-java.db (1.5 GiB) and metadata.json, beside Trivy's fanal cache in %LOCALAPPDATA%\\fanal",
   "observed on reference machine: bash.exe and git.exe of Git for Windows, their image paths and signers",
 ]
 min_myclean = "0.1.0"
@@ -14,4 +16,5 @@ any = [{ path_exists = '%USERPROFILE%\.cache' }, { path_exists = '%USERPROFILE%\
        { path_exists = '%USERPROFILE%\dev' }, { path_exists = '%ProgramFiles(x86)%\Windows Kits' },
        { path_exists = '%ProgramFiles%\dotnet' }, { path_exists = '%ProgramFiles%\NVIDIA GPU Computing Toolkit' },
        { path_exists = '%ProgramFiles%\LLVM' }, { path_exists = '%ProgramFiles%\Go' },
-       { path_exists = '%ProgramFiles%\Android' }, { path_exists = '%ProgramFiles%\Git' }]
+       { path_exists = '%ProgramFiles%\Android' }, { path_exists = '%ProgramFiles%\Git' },
+       { path_exists = '%LOCALAPPDATA%\java-db' }, { path_exists = '%LOCALAPPDATA%\trivy' }]

@@ -15,7 +15,7 @@ require  = { not_in_use = true }
 [[rule]]
 id       = "steam-depotcache"
 category = "game-launchers"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%ProgramFiles(x86)%\Steam\depotcache\*']
@@ -28,4 +28,28 @@ tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*']
+require  = { not_in_use = true }
+
+# Games built with Unreal Engine keep their per-user data in %LOCALAPPDATA%\<project>\Saved
+# (observed on reference machine: b1, Wardogs, TL, SCUM, ABInfinite, ...). Logs and Crashes are
+# diagnostics the game writes again on every run; Config and SaveGames (settings and saves) are
+# never targets.
+[[rule]]
+id       = "unreal-game-logs"
+category = "game-launchers"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\*\Saved\Logs\*', '%LOCALAPPDATA%\*\Saved\Crashes\*']
+require  = { min_age_days = 7, not_in_use = true }
+
+# The driver's shader byte-code cache an Unreal game keeps beside them
+# (D3DDriverByteCodeBlob_*.ushaderprecache); the game rebuilds it, with some stutter at first.
+[[rule]]
+id       = "unreal-game-shader-precache"
+category = "gpu-shader-caches"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\*\Saved\*.ushaderprecache']
 require  = { not_in_use = true }

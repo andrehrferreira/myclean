@@ -58,7 +58,7 @@ id       = "update-downloads"
 paths    = ['%WINDIR%\SoftwareDistribution']
 category = "windows-servicing"
 label    = "Windows Update downloads and history"
-reclaim  = { kind = "manual-review", note = "Windows removes downloads after updates install; a large folder usually means a stuck update." }
+reclaim  = { kind = "manual-review", note = "Usually an update downloaded and waiting for a restart: Settings > Windows Update > Restart now installs it, and Windows then removes the download. A large folder with nothing pending means a stuck update." }
 
 [[area]]
 id       = "driver-store"
@@ -180,7 +180,7 @@ id       = "powertoys-updates"
 paths    = ['%LOCALAPPDATA%\Microsoft\PowerToys\Updates']
 category = "app-caches"
 label    = "PowerToys update installers left behind"
-reclaim  = { kind = "manual-review", note = "Not needed once the program is installed; no cleaning rule covers them yet." }
+reclaim  = { kind = "clean-rule", ref = "powertoys-updates", note = "Installers older than two weeks are deleted by themselves." }
 
 [[area]]
 id       = "local-low"
@@ -262,3 +262,14 @@ paths    = ['%USERPROFILE%\Downloads']
 category = "downloads"
 label    = "Your downloads"
 reclaim  = { kind = "manual-review", note = "Old installers and archives are usually safe to delete after a look." }
+
+# ---- MyClean's own ----------------------------------------------------------------------------
+
+# What an approved plan quarantined, in <volume>\.myclean-quarantine\<run>\<item>\<name>: kept 7
+# days for a restore, then purged by the service (docs/development.md).
+[[area]]
+id       = "myclean-quarantine"
+paths    = ['?:\.myclean-quarantine']
+category = "app-caches"
+label    = "MyClean quarantine (cleaned items kept 7 days for a restore)"
+reclaim  = { kind = "manual-review", note = "Purged by itself 7 days after each cleaning; the tray's quarantine page restores a run or deletes it now." }

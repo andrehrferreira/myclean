@@ -15,7 +15,7 @@ require  = { min_age_days = 30, not_in_use = true }
 [[rule]]
 id       = "vsix-cache"
 category = "ides"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%APPDATA%\Code\CachedExtensionVSIXs\*']
@@ -43,3 +43,18 @@ strategy = "delete"
 targets  = ['%APPDATA%\Code\Cache', '%APPDATA%\Code\Code Cache', '%APPDATA%\Code\GPUCache',
             '%APPDATA%\Code\Crashpad']
 require  = { not_in_use = true }
+
+# The Cache API storage of webviews: VS Code's webview service worker keeps copies of the local
+# files a webview loads in caches named vscode-resource-cache-<n>, one storage bucket
+# (WebStorage\<n>) per webview origin, and reads them from disk again when they are missing
+# (observed on reference machine: 10.5 GiB in two buckets, only vscode-resource-cache-4..6).
+# IndexedDB and the bucket database (QuotaManager) are never targets. A webview could also keep
+# its own caches there, so this waits for approval.
+[[rule]]
+id       = "webview-resource-cache"
+category = "ides"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%APPDATA%\Code\WebStorage\*\CacheStorage']
+require  = { min_age_days = 2, not_in_use = true }

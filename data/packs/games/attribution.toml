@@ -50,3 +50,19 @@ paths    = ['?:\XboxGames', '?:\Riot Games', '%ProgramFiles%\EA Games', '%Progra
 category = "games"
 label    = "Games from other launchers"
 reclaim  = { kind = "uninstall", note = "Uninstall games you no longer play in their launcher." }
+
+# The Epic Games Launcher's machine-wide data: download manifests and a content cache (observed
+# on reference machine: C:\ProgramData\Epic\EpicGamesLauncher\Data\ContentCache, 1.2 GiB).
+[[area]]
+id       = "epic-launcher-data"
+paths    = ['%ProgramData%\Epic\EpicGamesLauncher']
+category = "games"
+label    = "Epic Games Launcher data (manifests, content cache)"
+reclaim  = { kind = "uninstall", note = "Goes with the Epic Games Launcher." }
+
+[[area]]
+id       = "unreal-game-logs"
+paths    = ['%LOCALAPPDATA%\*\Saved\Logs', '%LOCALAPPDATA%\*\Saved\Crashes']
+category = "app-caches"
+label    = "Logs and crash reports of Unreal Engine games"
+reclaim  = { kind = "clean-rule", ref = "unreal-game-logs" }

@@ -79,5 +79,36 @@ TEST(Exclusion, JudgesOneFile) {
   EXPECT_EQ(exclusion(folder, file("a.dll", 5000), rules, now), Exclusion::small);
 }
 
+TEST(Exclusion, LeavesWslDistributionsAlone) {
+  const auto in = [](const std::string& path) {
+    const space::FileItem file{.name = "libc.so.6",
+                               .size = Bytes{8192},
+                               .size_on_disk = Bytes{8192},
+                               .modified = now - std::chrono::days{90}};
+    return exclusion(space::Folder{.path = path}, file, Rules{}, now);
+  };
+  const std::string packages = R"(C:\Users\owner\AppData\Local\Packages\)";
+  const std::string ubuntu = packages + R"(CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc)";
+  EXPECT_EQ(in(ubuntu + R"(\LocalState\rootfs)"), Exclusion::wsl_distribution);
+  EXPECT_EQ(in(ubuntu + R"(\LocalState\ROOTFS\usr\lib\x86_64-linux-gnu)"),
+            Exclusion::wsl_distribution);
+  EXPECT_EQ(in(packages + R"(TheDebianProject.DebianGNULinux_76v4gfsz19hv4\rootfs\tmp)"),
+            Exclusion::wsl_distribution);
+  EXPECT_EQ(in(R"(D:\Apps\Some.App\LocalState\rootfs\data)"), Exclusion::wsl_distribution);
+  EXPECT_EQ(in(ubuntu + R"(\LocalState)"), Exclusion::none);
+  EXPECT_EQ(in(ubuntu + R"(\LocalState\cache\rootfs)"), Exclusion::none);
+  EXPECT_EQ(in(packages + R"(Some.App_8wekyb3d8bbwe\data\rootfs)"), Exclusion::none);
+  EXPECT_EQ(in(R"(D:\Builds\rootfs)"), Exclusion::none);
+  EXPECT_EQ(to_string(Exclusion::wsl_distribution), "wsl_distribution");
+
+  // A WSL 2 distribution's disk is a disk image wherever it lies.
+  const space::FileItem disk{.name = "ext4.vhdx",
+                             .size = Bytes{8192},
+                             .size_on_disk = Bytes{8192},
+                             .modified = now - std::chrono::days{90}};
+  EXPECT_EQ(exclusion(space::Folder{.path = ubuntu + R"(\LocalState)"}, disk, Rules{}, now),
+            Exclusion::disk_image);
+}
+
 }  // namespace
 }  // namespace myclean::compress

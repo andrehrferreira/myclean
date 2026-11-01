@@ -22,7 +22,8 @@ constexpr auto algorithm_names =
     std::to_array<std::string_view>({"xpress4k", "xpress8k", "xpress16k", "lzx", "lznt1"});
 constexpr auto exclusion_names = std::to_array<std::string_view>(
     {"none", "link", "placeholder", "extra_link", "small", "compressed", "media", "disk_image",
-     "database", "system_file", "recent", "windows", "incompressible", "pack_excluded"});
+     "database", "system_file", "recent", "windows", "wsl_distribution", "incompressible",
+     "pack_excluded"});
 constexpr auto category_names =
     std::to_array<std::string_view>({"toolchain", "engine", "game", "program", "other"});
 
@@ -109,6 +110,29 @@ bool excluded_by_name(const std::filesystem::path& path, const Rules& rules) {
           std::filesystem::path{std::u8string(pattern.begin(), pattern.end())}.native());
     });
   });
+}
+
+// True when `folder` is in the file system of a WSL 1 distribution: a rootfs folder directly in
+// a LocalState folder, or directly in a package folder (%LOCALAPPDATA%\Packages\<package>), as
+// the reference machine shows (data/packs/wsl-docker). Compressing it from Windows would change
+// Linux files from Windows (learn.microsoft.com/windows/wsl/filesystems).
+bool in_wsl_distribution(const std::filesystem::path& folder) {
+  constexpr std::string_view packages = R"(\packages\)";
+  constexpr std::string_view rootfs = R"(\rootfs\)";
+  const std::string text = marked(folder);
+  if (text.find(R"(\localstate\rootfs\)") != std::string::npos) {
+    return true;
+  }
+  for (std::size_t at = text.find(packages); at != std::string::npos;
+       at = text.find(packages, at + 1)) {
+    const std::size_t package = at + packages.size();
+    const std::size_t end = text.find('\\', package);
+    if (end != std::string::npos && end > package &&
+        text.compare(end, rootfs.size(), rootfs) == 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -198,6 +222,9 @@ Exclusion exclusion(const space::Folder& folder, const space::FileItem& file, co
   }
   if (!rules.windows.empty() && is_within(folder.path, rules.windows)) {
     return Exclusion::windows;
+  }
+  if (in_wsl_distribution(folder.path)) {
+    return Exclusion::wsl_distribution;
   }
   if (std::ranges::find(rules.incompressible, extension) != rules.incompressible.end()) {
     return Exclusion::incompressible;

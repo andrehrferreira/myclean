@@ -31,3 +31,10 @@ paths    = ['%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\
 category = "app-caches"
 label    = "Teams cache"
 reclaim  = { kind = "clean-rule", ref = "teams" }
+
+[[area]]
+id       = "updater-downloads"
+paths    = ['%LOCALAPPDATA%\*-updater']
+category = "app-caches"
+label    = "Downloaded app updates (Electron apps' auto-updater)"
+reclaim  = { kind = "clean-rule", ref = "updater-downloads", note = "The app downloads its next update in full instead of as a difference." }

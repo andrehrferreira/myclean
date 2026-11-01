@@ -11,3 +11,8 @@ kind     = "attribution"
 case     = "media-cache"
 match    = ['C:\Users\owner\AppData\Roaming\Adobe\Common\Media Cache Files', 'C:\Users\owner\AppData\Roaming\Adobe\Common\Media Cache']
 no_match = ['C:\Users\owner\AppData\Roaming\Adobe\Common\Peak Files']
+
+[[expect]]
+kind     = "attribution"
+case     = "camera-raw"
+match    = ['C:\ProgramData\Adobe\CameraRaw']

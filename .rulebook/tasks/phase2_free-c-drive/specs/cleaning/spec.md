@@ -16,10 +16,11 @@ When the browser rule is evaluated without an explicit opt-in
 Then only the HTTP cache, code cache and GPU cache are selected
 And cookies, history, passwords and sessions are never selected
 
-#### Scenario: Shader caches default to ask
+#### Scenario: Shader caches are auto
 Given the built-in rule for `%LOCALAPPDATA%\NVIDIA\DXCache`
 When the catalog is loaded
-Then the rule's tier is `ask`
+Then the rule's tier is `auto` (the driver rebuilds a shader cache; the cost is a one-time stutter, never lost work)
+And a cache a running game holds open is skipped
 
 #### Scenario: Invalid rule rejected
 Given a rule file containing a rule with an unknown strategy value
@@ -56,7 +57,7 @@ When the developer-artifact scanner runs
 Then only `Saved\Logs` and `Saved\Crashes` can be proposed and `Saved` as a whole is never proposed
 
 ### Requirement: Native Prune Commands Under the User Token
-The system SHALL clean a global package cache with its tool's own command when one exists (`pnpm store prune`, `npm cache verify`, `yarn cache clean`, `pip cache purge`, `uv cache prune`, `dotnet nuget locals all --clear`, `go clean -cache -modcache`, `docker system prune`) and MUST run such commands in the tray process with the owner's user token, never as SYSTEM.
+The system SHALL clean a global package cache with its tool's own command when one exists (`pnpm store prune`, `npm cache verify`, `yarn cache clean`, `pip cache purge`, `uv cache prune`, `dotnet nuget locals all --clear`, `go clean -cache -modcache`, `docker system prune`) and MUST run such commands in the tray process with the owner's user token, never as SYSTEM. A package manager's own prune command only removes what the tool downloads or rebuilds again, so its rule is tier `auto`; `docker system prune`, which also removes stopped containers that may hold the owner's state, stays `ask`.
 
 #### Scenario: pnpm store pruned natively
 Given the pnpm store rule is approved for a run
@@ -84,6 +85,12 @@ When an approved plan runs that item
 Then the service calls the handler's Purge
 And no file under `C:\Windows\SoftwareDistribution` is deleted by MyClean's own delete path
 
+#### Scenario: Handlers of regenerable data are auto
+Given the handlers Thumbnail Cache, Internet Cache Files, Delivery Optimization Files, Temporary Setup Files and Upgrade Discarded Files, which remove only caches and setup leftovers
+When the catalog is loaded
+Then their rules are tier `auto`
+And every other handler (crash dumps, error reports, update and driver rollback, previous installations, reset images, logs, the Recycle Bin) stays `ask`
+
 #### Scenario: Handler unavailable headless
 Given a handler that the X3 spike found cannot run without UI
 When the catalog is loaded
@@ -93,10 +100,10 @@ Then that handler is not offered as a cleaning item
 The system SHALL assign every cleaning item a tier: `auto` items run on schedule without a prompt, `ask` items are scanned on schedule and wait in the approval inbox, and `report` items are only shown and never acted on by MyClean; the owner MAY promote or demote any rule.
 
 #### Scenario: Ask item waits
-Given a scheduled scan finds 3 GB of shader caches with tier `ask`
+Given a scheduled scan finds 3 GB of JetBrains old-version folders with tier `ask`
 When the scan completes
 Then a plan in state `awaiting_approval` appears in the approval inbox
-And no shader-cache file is removed until the owner approves
+And no file of those folders is removed until the owner approves
 
 #### Scenario: Report item never acted on
 Given a duplicate-file group with tier `report`

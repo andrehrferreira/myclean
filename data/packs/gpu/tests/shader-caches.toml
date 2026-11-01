@@ -61,3 +61,40 @@ case     = "driver-installers"
 match    = ['C:\NVIDIA', 'C:\AMD', 'C:\ProgramData\NVIDIA Corporation\Downloader',
             'C:\Program Files\NVIDIA Corporation\Installer2']
 no_match = ['C:\Program Files\NVIDIA Corporation\NvContainer']
+
+# The NVIDIA app's downloads (reference machine): the old driver package and its unpacked copy
+# go; the app's own update, however old, and the app's state stay.
+[[entry]]
+path = 'C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\ota-artifacts\grd\dc5ffd3eee1002c4977b00b0f6ffd21c\617.14-desktop-win10-win11-64bit-international-dch-whql-g.exe'
+age_days = 30
+[[entry]]
+path = 'C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\ota-artifacts\grd\post-processing\dc5ffd3eee1002c4977b00b0f6ffd21c\setup.exe'
+age_days = 30
+[[entry]]
+path = 'C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\ota-artifacts\nvapp\14ac30af580144f7ee3c1181c1854189\NvidiaAppSetupInt_x86_11.0.9.565_OFFICIAL_ADF1C5.exe'
+age_days = 30
+[[entry]]
+path = 'C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\status\grd'
+[[entry]]
+path = 'C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\registry\registry.json'
+
+[[expect]]
+kind     = "clean"
+case     = "nvidia-app-downloads"
+match    = ['C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\ota-artifacts\grd\dc5ffd3eee1002c4977b00b0f6ffd21c',
+            'C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\ota-artifacts\grd\post-processing']
+no_match = ['C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\ota-artifacts\nvapp\14ac30af580144f7ee3c1181c1854189',
+            'C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\ota-artifacts\grd',
+            'C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\status\grd',
+            'C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\registry\registry.json']
+
+[[expect]]
+kind     = "attribution"
+case     = "nvidia-app-downloads"
+match    = ['C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework\ota-artifacts']
+no_match = ['C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework']
+
+[[expect]]
+kind     = "attribution"
+case     = "ngx-models"
+match    = ['C:\ProgramData\NVIDIA\NGX\models']

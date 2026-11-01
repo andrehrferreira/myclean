@@ -1,7 +1,9 @@
 #include "core/cleanup/native_command.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -38,7 +40,7 @@ TEST(NativeTools, OnlyTheAllowListedCommandsAreKnown) {
   for (const char* command :
        {"pnpm store prune", "npm cache verify", "yarn cache clean", "pip cache purge",
         "uv cache prune", "dotnet nuget locals all --clear", "go clean -cache -modcache",
-        "docker system prune"}) {
+        "docker system prune", "wsl tmp prune"}) {
     EXPECT_NE(find_native_tool(command), nullptr) << command;
   }
   EXPECT_NE(find_native_tool("  pnpm   store prune "), nullptr);
@@ -210,6 +212,149 @@ TEST_F(NativeCommandTest, DockerReportsReclaimableBytesWithoutVolumes) {
 
   ASSERT_TRUE(prune.apply(*preview));
   EXPECT_EQ(runner().calls.back(), "docker system prune --force");
+}
+
+// `text` as wsl.exe writes it: UTF-16LE, each ASCII character followed by a NUL byte.
+std::string utf16(std::string_view text) {
+  std::string wide;
+  for (const char character : text) {
+    wide += character;
+    wide += '\0';
+  }
+  return wide;
+}
+
+constexpr const char* wsl_list = "wsl -l -q";
+constexpr const char* ubuntu_du = "wsl -d Ubuntu-24.04 -u root --exec du -sk /tmp";
+constexpr const char* debian_du = "wsl -d Debian -u root --exec du -sk /tmp";
+constexpr const char* find_args =
+    "-u root --exec find /tmp -mindepth 1 -maxdepth 1 -mtime +7 ! -name .*-unix -exec rm -rf {} +";
+
+TEST_F(NativeCommandTest, WslListsDistributionsFromUtf16AndMeasuresTmpInEach) {
+  runner().answer(wsl_list,
+                  utf16("Ubuntu-24.04\r\ndocker-desktop\r\nDebian\r\ndocker-desktop-data\r\n"));
+  runner().answer(ubuntu_du, "98566144\t/tmp\n");
+  runner().answer(debian_du, "12\t/tmp\n");
+  NativeCommand prune = action("wsl tmp prune");
+
+  const Result<Preview> preview = prune.preview();
+
+  ASSERT_TRUE(preview) << preview.error().message;
+  ASSERT_EQ(preview->items.size(), 2U);
+  EXPECT_EQ(preview->items[0].path, path("wsl:Ubuntu-24.04:/tmp"));
+  EXPECT_EQ(preview->items[0].size, Bytes{98566144ULL * 1024});
+  EXPECT_EQ(preview->items[1].path, path("wsl:Debian:/tmp"));
+  EXPECT_EQ(preview->items[1].size, Bytes{12ULL * 1024});
+  EXPECT_EQ(runner().calls, (std::vector<std::string>{wsl_list, ubuntu_du, debian_du}));
+  EXPECT_EQ(runner().arguments[1], (std::vector<std::string>{"-d", "Ubuntu-24.04", "-u", "root",
+                                                             "--exec", "du", "-sk", "/tmp"}));
+  EXPECT_EQ(runner().timeouts,
+            (std::vector<std::chrono::milliseconds>{NativeCommand::locate_timeout,
+                                                    NativeCommand::wsl_measure_timeout,
+                                                    NativeCommand::wsl_measure_timeout}));
+  EXPECT_TRUE(fs().operations().empty());  // nothing read or changed through the rootfs
+}
+
+TEST_F(NativeCommandTest, WslListToleratesAByteOrderMarkTheDefaultMarkAndUtf8) {
+  // The mark as the runner's OEM fallback leaves it, a `wsl -l -v` style default mark, and a
+  // name with a code unit beyond ASCII, which is skipped rather than guessed.
+  runner().answer(wsl_list, "\xC2\xA0\xE2\x96\xA0" + utf16("* Debian\r\nUb") + "\xE9" +
+                                std::string(1, '\0') + utf16("\r\n"));
+  runner().answer(debian_du, "4\t/tmp\n");
+  NativeCommand prune = action("wsl tmp prune");
+
+  const Result<Preview> preview = prune.preview();
+
+  ASSERT_TRUE(preview) << preview.error().message;
+  ASSERT_EQ(preview->items.size(), 1U);
+  EXPECT_EQ(preview->items[0].path, path("wsl:Debian:/tmp"));
+  EXPECT_EQ(runner().calls, (std::vector<std::string>{wsl_list, debian_du}));
+
+  FakeRunner utf8;  // with WSL_UTF8=1 wsl.exe writes UTF-8
+  utf8.answer(wsl_list, "Debian\n");
+  utf8.answer(debian_du, "4\t/tmp\n");
+  NativeCommand plain{utf8, fs(), "wsl tmp prune", Tier::automatic};
+  const Result<Preview> again = plain.preview();
+  ASSERT_TRUE(again) << again.error().message;
+  ASSERT_EQ(again->items.size(), 1U);
+}
+
+TEST_F(NativeCommandTest, WslDistributionWhoseMeasureFailsIsLeftOutUnlessAllFail) {
+  runner().answer(wsl_list, utf16("Ubuntu-24.04\r\nDebian\r\n"));
+  runner().answer(ubuntu_du, "", 1, "du: cannot read directory '/tmp': Permission denied\n");
+  runner().answer(debian_du, "8\t/tmp\n");
+  NativeCommand prune = action("wsl tmp prune");
+
+  const Result<Preview> preview = prune.preview();
+
+  ASSERT_TRUE(preview) << preview.error().message;
+  ASSERT_EQ(preview->items.size(), 1U);
+  EXPECT_EQ(preview->items[0].path, path("wsl:Debian:/tmp"));
+
+  runner().answer(debian_du, "not a size\n");
+  const Result<Preview> none = prune.preview();
+  ASSERT_FALSE(none);
+  EXPECT_EQ(none.error().code, Errc::io_error);
+  EXPECT_NE(none.error().message.find("Permission denied"), std::string::npos);
+}
+
+TEST_F(NativeCommandTest, WslApplyRunsFindAsRootInEachPreviewedDistribution) {
+  runner().answer(wsl_list, utf16("Ubuntu-24.04\r\nDebian\r\n"));
+  runner().answer(ubuntu_du, "1000\t/tmp\n");
+  runner().answer(debian_du, "10\t/tmp\n");
+  const std::string ubuntu_find = std::string("wsl -d Ubuntu-24.04 ") + find_args;
+  const std::string debian_find = std::string("wsl -d Debian ") + find_args;
+  runner().answer(ubuntu_find, "");
+  runner().answer(debian_find, "");
+  runner().on_run = [&](const std::string& call) {
+    if (call == ubuntu_find) {  // what find does inside Linux
+      runner().answer(ubuntu_du, "100\t/tmp\n");
+    }
+  };
+  NativeCommand prune = action("wsl tmp prune");
+  Result<Preview> preview = prune.preview();
+  ASSERT_TRUE(preview) << preview.error().message;
+  preview->items.push_back(PlanItem{.path = R"(C:\Users\o\tmp)", .size = 1_MiB});  // not WSL's
+  runner().calls.clear();
+  runner().arguments.clear();
+  runner().timeouts.clear();
+
+  const Result<Undo> undo = prune.apply(*preview);
+
+  ASSERT_TRUE(undo) << undo.error().message;
+  EXPECT_EQ(runner().calls, (std::vector<std::string>{ubuntu_find, debian_find}));
+  EXPECT_EQ(runner().arguments[0],
+            (std::vector<std::string>{
+                "-d",    "Ubuntu-24.04", "-u",  "root",   "--exec", "find", "/tmp",  "-mindepth",
+                "1",     "-maxdepth",    "1",   "-mtime", "+7",     "!",    "-name", ".*-unix",
+                "-exec", "rm",           "-rf", "{}",     "+"}));
+  EXPECT_EQ(runner().timeouts,
+            (std::vector<std::chrono::milliseconds>{NativeCommand::wsl_prune_timeout,
+                                                    NativeCommand::wsl_prune_timeout}));
+  EXPECT_TRUE(fs().operations().empty());
+
+  const Result<Verification> verification = prune.verify(*undo);
+  ASSERT_TRUE(verification) << verification.error().message;
+  EXPECT_EQ(verification->before, static_cast<double>((1010ULL * 1024) + (1_MiB).count()));
+  EXPECT_EQ(verification->after, static_cast<double>(110ULL * 1024));
+  EXPECT_EQ(verification->effect, Effect::better);
+}
+
+TEST_F(NativeCommandTest, WslPruneThatFailsInOneDistributionStillRunsInTheOthers) {
+  const std::string ubuntu_find = std::string("wsl -d Ubuntu-24.04 ") + find_args;
+  const std::string debian_find = std::string("wsl -d Debian ") + find_args;
+  runner().answer(ubuntu_find, "", 1, "find: '/tmp/x': Operation not permitted\n");
+  runner().answer(debian_find, "");
+  NativeCommand prune = action("wsl tmp prune");
+
+  const Result<Undo> undo =
+      prune.apply(Preview{.items = {PlanItem{.path = "wsl:Ubuntu-24.04:/tmp", .size = 1_MiB},
+                                    PlanItem{.path = "wsl:Debian:/tmp", .size = 1_MiB}}});
+
+  ASSERT_FALSE(undo);
+  EXPECT_EQ(undo.error().code, Errc::io_error);
+  EXPECT_NE(undo.error().message.find("Operation not permitted"), std::string::npos);
+  EXPECT_EQ(runner().calls, (std::vector<std::string>{ubuntu_find, debian_find}));
 }
 
 TEST_F(NativeCommandTest, DescribeRunsInTheUserContext) {

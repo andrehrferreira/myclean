@@ -71,3 +71,44 @@ match    = ['C:\Users\owner\AppData\Local\EpicGamesLauncher\Saved\webcache_4430'
 kind     = "attribution"
 case     = "other-launchers"
 match    = ['D:\XboxGames', 'C:\Riot Games', 'C:\Program Files (x86)\Battle.net', 'D:\GOG Games']
+
+[[expect]]
+kind     = "attribution"
+case     = "epic-launcher-data"
+match    = ['C:\ProgramData\Epic\EpicGamesLauncher']
+
+# Unreal games' per-user data (reference machine): logs, crash reports and the shader byte-code
+# cache go; settings, saves and a log being written stay.
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ABInfinite\Saved\Logs\ABInfinite-backup-2026.08.01.log'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\ABInfinite\Saved\Logs\ABInfinite.log'
+age_days = 0
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\SCUM\Saved\Crashes\UECC-Windows-1A2B3C\UEMinidump.dmp'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\b1\Saved\D3DDriverByteCodeBlob_V4318_D8712_S-2012671933_R161.ushaderprecache'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\b1\Saved\Config\Windows\GameUserSettings.ini'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\b1\Saved\SaveGames\slot0.sav'
+
+[[expect]]
+kind     = "clean"
+case     = "unreal-game-logs"
+match    = ['C:\Users\owner\AppData\Local\ABInfinite\Saved\Logs\ABInfinite-backup-2026.08.01.log',
+            'C:\Users\owner\AppData\Local\SCUM\Saved\Crashes\UECC-Windows-1A2B3C']
+no_match = ['C:\Users\owner\AppData\Local\ABInfinite\Saved\Logs\ABInfinite.log',
+            'C:\Users\owner\AppData\Local\b1\Saved\Config\Windows\GameUserSettings.ini',
+            'C:\Users\owner\AppData\Local\b1\Saved\SaveGames\slot0.sav']
+
+[[expect]]
+kind     = "clean"
+case     = "unreal-game-shader-precache"
+match    = ['C:\Users\owner\AppData\Local\b1\Saved\D3DDriverByteCodeBlob_V4318_D8712_S-2012671933_R161.ushaderprecache']
+no_match = ['C:\Users\owner\AppData\Local\b1\Saved\SaveGames\slot0.sav', 'C:\Users\owner\AppData\Local\b1\Saved']
+
+[[expect]]
+kind     = "attribution"
+case     = "unreal-game-logs"
+match    = ['C:\Users\owner\AppData\Local\SCUM\Saved\Crashes']

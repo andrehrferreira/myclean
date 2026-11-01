@@ -5,3 +5,59 @@ kind     = "attribution"
 case     = "autodesk-installers"
 match    = ['C:\Autodesk', 'D:\Autodesk']
 no_match = ['C:\Program Files\Autodesk', 'C:\Autodesk\WI\Autodesk Maya 2025\setup.exe']
+
+# Installer leftovers (reference machine): old Reallusion and Autodesk installers go; the
+# Reallusion apps' data, the content library and ZBrush's QuickSaves never do.
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Reallusion\RLDownloads\ActorCore_AccRIG.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Reallusion\RLDownloads\Reallusion_HUB_544_4002.exe'
+age_days = 10
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Reallusion\ActorCore AccuRIG\settings.ini'
+[[entry]]
+path = 'C:\Autodesk\WI\AutoCAD 2025\setup.exe'
+[[entry]]
+path = 'C:\Users\Public\Documents\ZBrushData2025\QuickSave\QuickSave1.ZPR'
+[[entry]]
+path = 'C:\Users\Public\Documents\Reallusion\Reallusion Templates\Character Creator 4 Template\Default.ccProject'
+
+[[expect]]
+kind     = "clean"
+case     = "reallusion-downloads"
+match    = ['C:\Users\owner\AppData\Local\Reallusion\RLDownloads\ActorCore_AccRIG.exe']
+no_match = ['C:\Users\owner\AppData\Local\Reallusion\RLDownloads\Reallusion_HUB_544_4002.exe',
+            'C:\Users\owner\AppData\Local\Reallusion\ActorCore AccuRIG\settings.ini',
+            'C:\Users\Public\Documents\Reallusion\Reallusion Templates\Character Creator 4 Template\Default.ccProject']
+
+[[expect]]
+kind     = "clean"
+case     = "autodesk-installers"
+match    = ['C:\Autodesk\WI']
+no_match = ['C:\Autodesk', 'C:\Users\Public\Documents\ZBrushData2025\QuickSave\QuickSave1.ZPR']
+
+[[expect]]
+kind     = "attribution"
+case     = "reallusion-content"
+match    = ['C:\Users\Public\Documents\Reallusion']
+
+[[expect]]
+kind     = "attribution"
+case     = "zbrush-quicksave"
+match    = ['C:\Users\Public\Documents\ZBrushData2025\QuickSave']
+no_match = ['C:\Users\Public\Documents\ZBrushData2025']
+
+[[expect]]
+kind     = "attribution"
+case     = "zbrush-data"
+match    = ['C:\Users\Public\Documents\ZBrushData2025']
+
+[[expect]]
+kind     = "attribution"
+case     = "artengine"
+match    = ['C:\Users\owner\AppData\Roaming\.artomatix']
+
+[[expect]]
+kind     = "attribution"
+case     = "gaea-autosave"
+match    = ['C:\Users\owner\AppData\Roaming\QuadSpinner\Gaea\Autosave']

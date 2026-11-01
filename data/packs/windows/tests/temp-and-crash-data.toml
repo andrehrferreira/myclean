@@ -88,3 +88,21 @@ kind     = "attribution"
 case     = "thumbnail-cache"
 match    = ['C:\Users\owner\AppData\Local\Microsoft\Windows\Explorer']
 no_match = ['C:\Users\owner\AppData\Local\Microsoft\Windows\INetCache']
+
+# PowerToys' update installers (reference machine): old ones go, the one just downloaded and
+# anything else in PowerToys' folder stay.
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\PowerToys\Updates\powertoyssetup-0.99.0-x64.exe'
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\PowerToys\Updates\powertoyssetup-0.102.3001.0-x64.exe'
+age_days = 4
+[[entry]]
+path = 'C:\Users\owner\AppData\Local\Microsoft\PowerToys\settings.json'
+
+[[expect]]
+kind     = "clean"
+case     = "powertoys-updates"
+match    = ['C:\Users\owner\AppData\Local\Microsoft\PowerToys\Updates\powertoyssetup-0.99.0-x64.exe']
+no_match = ['C:\Users\owner\AppData\Local\Microsoft\PowerToys\Updates\powertoyssetup-0.102.3001.0-x64.exe',
+            'C:\Users\owner\AppData\Local\Microsoft\PowerToys\Updates',
+            'C:\Users\owner\AppData\Local\Microsoft\PowerToys\settings.json']

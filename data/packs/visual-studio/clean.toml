@@ -34,3 +34,18 @@ strategy = "delete"
 project  = { marker = "*.slnx" }
 targets  = [".vs"]
 require  = { git_ignored = true, not_in_use = true, inactive_days = 14 }
+
+# The Visual Studio Installer's package cache (source: "Disable or move the package cache", see
+# pack.toml): the installed packages' payloads, kept to repair or modify offline; "The installer
+# will download them when needed". Every payload is one folder named <package>,version=<v>[,...]
+# beside the installer's own state (_Instances, _Channels, _bootstrapper), which is never a
+# target (observed on reference machine: 1,494 payload folders, 10.1 GiB). A running setup
+# keeps its payloads open or recent.
+[[rule]]
+id       = "package-payloads"
+category = "ides"
+tier     = "auto"
+scope    = "system"
+strategy = "delete"
+targets  = ['%ProgramData%\Microsoft\VisualStudio\Packages\*,version=*']
+require  = { min_age_days = 30, not_in_use = true }

@@ -44,3 +44,17 @@ targets  = ['%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\
             '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\*\GPUCache',
             '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Crashpad']
 require  = { not_in_use = true }
+
+# electron-updater (electron-builder's auto-update) downloads each update into
+# %LOCALAPPDATA%\<updaterCacheDirName>\pending (update-info.json and the installer) and keeps
+# the installed version's installer as installer.exe, only as the base of the next differential
+# download (sources: pack.toml). Without them the next update downloads in full. Fresh pending
+# downloads may be waiting for the app to quit, so only old ones are offered.
+[[rule]]
+id       = "updater-downloads"
+category = "electron"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\*-updater\pending', '%LOCALAPPDATA%\*-updater\installer.exe']
+require  = { min_age_days = 14, not_in_use = true }

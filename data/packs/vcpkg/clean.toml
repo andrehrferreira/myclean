@@ -9,7 +9,7 @@
 [[rule]]
 id       = "build-files"
 category = "dev-caches"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 targets  = ['%VCPKG_ROOT%\buildtrees\*', '%VCPKG_ROOT%\packages\*', '%VCPKG_ROOT%\downloads\*',
@@ -23,12 +23,12 @@ require  = { min_age_days = 14, not_in_use = true }
 [[rule]]
 id       = "clone-build-files"
 category = "dev-artifacts"
-tier     = "ask"
+tier     = "auto"
 scope    = "user"
 strategy = "delete"
 project  = { marker = ".vcpkg-root" }
 targets  = ["buildtrees", "packages", "downloads"]
-require  = { git_ignored = true, not_in_use = true, inactive_days = 14 }
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
 
 # Binary cache archives (<2 hex digits>\<hash>.zip) not used for 90 days. A missing archive
 # means that port is built from source again.

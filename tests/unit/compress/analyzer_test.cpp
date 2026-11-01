@@ -116,6 +116,28 @@ TEST(Analyzer, CountsEveryExclusionAndNeverReadsExcludedFiles) {
   }
 }
 
+TEST(Analyzer, NeverCountsAWslDistributionAsEligible) {
+  const std::filesystem::path state =
+      R"(C:\Users\owner\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState)";
+  space::ScanResult scan = scan_of(state, {item("settings.dat", mib), item("ext4.vhdx", mib)});
+  scan.folders[1].path = state / "rootfs";
+  scan.folders[1].files = many(".so", 3, mib);
+  const fakes::FakeClock clock{start};
+  const FakeProbe probe;
+
+  const FolderEstimate result = estimate(scan, 0, probe, clock, AnalyzerOptions{});
+
+  EXPECT_EQ(result.eligible_files, 1U);
+  EXPECT_EQ(result.eligible, Bytes{mib});
+  ASSERT_NE(excluded(result, Exclusion::wsl_distribution), nullptr);
+  EXPECT_EQ(excluded(result, Exclusion::wsl_distribution)->files, 3U);
+  EXPECT_EQ(excluded(result, Exclusion::wsl_distribution)->size_on_disk, Bytes{3 * mib});
+  EXPECT_EQ(excluded(result, Exclusion::disk_image)->files, 1U);
+  for (const FakeProbe::Read& read : probe.reads) {
+    EXPECT_EQ(read.file, state / "settings.dat");
+  }
+}
+
 TEST(Analyzer, ExtrapolatesThePooledRatioPerFileWithChunkTableAndClusters) {
   const space::ScanResult scan = scan_of(R"(D:\Tools)", many(".dll", 100, mib));
   const fakes::FakeClock clock{start};

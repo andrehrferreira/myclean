@@ -13,3 +13,13 @@ paths    = ['%APPDATA%\Adobe\Common\Media Cache Files', '%APPDATA%\Adobe\Common\
 category = "app-caches"
 label    = "Adobe media cache (Premiere Pro, After Effects)"
 reclaim  = { kind = "manual-review", note = "Preferences > Media Cache > Delete; it is rebuilt when footage is opened." }
+
+# Shared Camera Raw data of Photoshop and Lightroom: camera and lens profiles and AI models
+# (observed on reference machine: C:\ProgramData\Adobe\CameraRaw\ModelZoo, CameraProfiles,
+# LensProfiles, 2.3 GiB).
+[[area]]
+id       = "camera-raw"
+paths    = ['%ProgramData%\Adobe\CameraRaw']
+category = "apps"
+label    = "Adobe Camera Raw profiles and AI models (Photoshop, Lightroom)"
+reclaim  = { kind = "uninstall", note = "Goes with the last Adobe app that uses Camera Raw." }
