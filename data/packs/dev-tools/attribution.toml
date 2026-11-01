@@ -19,7 +19,7 @@ reclaim  = { kind = "manual-review", note = "Projects can move to the workspace 
 [[area]]
 id       = "sdks"
 paths    = ['%ProgramFiles(x86)%\Windows Kits', '%ProgramFiles%\dotnet', '%ProgramFiles%\NVIDIA GPU Computing Toolkit',
-            '%ProgramFiles%\LLVM', '%ProgramFiles%\Go', '%ProgramFiles%\Android']
+            '%ProgramFiles%\LLVM', '%ProgramFiles%\Go', '%ProgramFiles%\Android', '?:\LLVM']
 category = "dev-toolchains"
 label    = "SDKs and toolchains (Windows SDK, .NET, CUDA, LLVM, Go, Android Studio)"
 reclaim  = { kind = "uninstall", note = "Uninstall SDK versions you no longer build with." }

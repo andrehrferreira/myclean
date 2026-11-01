@@ -479,7 +479,7 @@ TEST(CliPacksTest, ListsAndValidatesTheShippedPacks) {
 
   const Outcome validate = run_cli({"packs", "validate", "--data", MYCLEAN_DATA_DIR});
   EXPECT_EQ(validate.code, exit_ok) << validate.out;
-  EXPECT_NE(validate.out.find("ok   zig: 2 fixtures"), std::string::npos) << validate.out;
+  EXPECT_NE(validate.out.find("ok   zig: 3 fixtures"), std::string::npos) << validate.out;
 }
 
 TEST(CliPacksTest, ValidateReportsAnInvalidPackAndAFailingFixture) {

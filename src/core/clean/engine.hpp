@@ -48,7 +48,8 @@ struct Candidate {
 //   in_use                  a process has a file open in it, its current directory or its image
 //                           inside it (or, for an artifact, inside its project)
 //   unreadable              part of it cannot be listed, so its age or use cannot be proven
-//   not_in_git              its rule requires git_ignored, but the project is in no git work tree
+//   not_in_git              its rule requires git_ignored without outside_git, but the project
+//                           is in no git work tree
 //   not_ignored             inside a git work tree, `git check-ignore` does not ignore it
 //   tracked_files           git tracks files inside it
 //   git_error               git failed; `detail` has the message
@@ -73,8 +74,9 @@ class RuleEngine {
              safety::ProtectedLocations locations);
 
   // The rules without a project marker. A target is an absolute path pattern: %VARIABLES% are
-  // expanded (a target with an unset variable is skipped), '*' and '?' match within one
-  // component, and every entry the last component matches is one candidate. Conditions:
+  // expanded (a target with an unset variable is skipped), a "?:\" drive stands for every fixed
+  // volume (IFileTree::fixed_volumes), '*' and '?' match within one component, and every entry
+  // the last component matches is one candidate. Conditions:
   //   min_age_days  the entry and everything inside it changed at least that long ago
   //   not_in_use    no file inside it is locked, no process folder lies inside it
   // Native and handler rules give one candidate each, sized by their targets; a rule whose
@@ -93,9 +95,12 @@ class RuleEngine {
   //   - with require.git_ignored: the project is inside a git work tree, and git ignores the
   //     artifact and tracks no file inside it. Outside a work tree nothing vouches that the
   //     folder is regenerable (an engine's ThirdParty "build" or a tool's "bin" look the same),
-  //     so it is never proposed;
+  //     so it is never proposed, unless the rule also sets require.outside_git (its targets
+  //     are written only by a tool): then a project outside any work tree qualifies on the
+  //     other conditions, and inside one git must still vouch;
   //   - with require.not_in_use: no locked file inside it and no process folder inside the
-  //     project.
+  //     project; for a rule with require.inactive_days = 0 (it acts inside active projects),
+  //     no process folder inside the artifact itself.
   [[nodiscard]] Evaluation scan_artifacts(std::span<const rules::CleaningRule> rules,
                                           const Workspaces& workspaces, const IGit& git,
                                           WallTime now) const;

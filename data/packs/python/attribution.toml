@@ -14,10 +14,19 @@ category = "dev-caches"
 label    = "uv cache and Python installs"
 reclaim  = { kind = "clean-rule", ref = "uv-cache" }
 
+# pip's uninstall stash (pack.toml); the clean case deletes it after 7 days.
+[[area]]
+id       = "pip-uninstall-leftovers"
+paths    = ['%LOCALAPPDATA%\Programs\Python\Python3*\Lib\site-packages\~*',
+            '%APPDATA%\Python\Python3*\site-packages\~*', '?:\Python3*\Lib\site-packages\~*']
+category = "dev-caches"
+label    = "pip uninstall leftovers ('~' folders in site-packages)"
+reclaim  = { kind = "clean-rule", ref = "pip-uninstall-leftovers", note = "Copies of uninstalled or upgraded packages that pip could not delete; Python never imports them." }
+
 [[area]]
 id       = "installations"
 paths    = ['%LOCALAPPDATA%\Programs\Python', '%USERPROFILE%\miniconda3', '%USERPROFILE%\anaconda3',
-            '%ProgramData%\miniconda3', '%ProgramData%\anaconda3']
+            '%ProgramData%\miniconda3', '%ProgramData%\anaconda3', '?:\Python3?', '?:\Python3??']
 category = "dev-toolchains"
 label    = "Python and Conda installations"
 reclaim  = { kind = "uninstall", note = "For Conda, `conda clean --all` removes cached packages." }

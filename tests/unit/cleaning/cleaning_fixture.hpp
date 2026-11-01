@@ -68,6 +68,17 @@ class FsTree final : public clean::IFileTree {
     }
     return listed;
   }
+  // Every drive root the fake file system holds.
+  [[nodiscard]] std::vector<std::filesystem::path> fixed_volumes() const override {
+    std::vector<std::filesystem::path> volumes;
+    for (wchar_t letter = L'A'; letter <= L'Z'; ++letter) {
+      const std::filesystem::path root = std::wstring{letter, L':', L'\\'};
+      if (file_system_->exists(root)) {
+        volumes.push_back(root);
+      }
+    }
+    return volumes;
+  }
 
  private:
   const fakes::FakeFileSystem* file_system_;

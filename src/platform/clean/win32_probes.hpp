@@ -22,6 +22,8 @@ class Win32FileTree final : public clean::IFileTree {
   [[nodiscard]] Result<clean::Entry> stat(const std::filesystem::path& path) const override;
   [[nodiscard]] Result<std::vector<clean::Entry>> list(
       const std::filesystem::path& path) const override;
+  // The drive letters GetDriveTypeW reports as DRIVE_FIXED.
+  [[nodiscard]] std::vector<std::filesystem::path> fixed_volumes() const override;
 };
 
 // The calling process's environment block.

@@ -1,0 +1,19 @@
+# The reference machine's servers, installed at the root of F:.
+
+[[expect]]
+kind     = "attribution"
+case     = "mongodb-server"
+match    = ['F:\MongoDB\Server\8.0', 'C:\Program Files\MongoDB\Server\7.0']
+no_match = ['F:\MongoDB', 'C:\Users\owner\AppData\Local\MongoDBCompass']
+
+[[expect]]
+kind     = "attribution"
+case     = "postgresql"
+match    = ['F:\PostgreSQL\18', 'C:\Program Files\PostgreSQL\16']
+no_match = ['F:\PostgreSQL']
+
+[[expect]]
+kind     = "attribution"
+case     = "pgadmin"
+match    = ['F:\pgAdmin 4', 'C:\Program Files\pgAdmin 4']
+no_match = ['F:\PostgreSQL\18\pgAdmin 4']

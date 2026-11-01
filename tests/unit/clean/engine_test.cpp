@@ -274,6 +274,31 @@ TEST_F(RuleEngineTest, RejectedRuleFileSelectsNothing) {
   EXPECT_EQ(paths_of(evaluation), (std::vector<fs::path>{R"(C:\good\a)"}));
 }
 
+// A "?:\" target is the same path on every fixed volume, with the deny-list applied on each.
+TEST_F(RuleEngineTest, AnyDriveTargetCoversEveryFixedVolume) {
+  tree().add_file(R"(C:\Python313\Lib\site-packages\~orch\torch_cpu.dll)", 1_MiB, days_ago(30));
+  tree().add_file(R"(F:\Python313\Lib\site-packages\~-rch\torch_cuda.dll)", 2_MiB, days_ago(30));
+  tree().add_file(R"(F:\Python313\Lib\site-packages\torch\torch_cpu.dll)", 1_MiB, days_ago(30));
+  tree().add_file(R"(G:\Python312\Lib\site-packages\~umpy\core.pyd)", 1_MiB, days_ago(30));
+  tree().add_file(R"(H:\Python313\Lib\site-packages\~andas\frame.py)", 1_MiB, days_ago(30));
+  tree().set_fixed_volumes({R"(C:\)", R"(F:\)", R"(G:\)"});  // H: is a USB stick
+  const CleaningRule rule{.id = "leftovers",
+                          .category = "test",
+                          .tier = Tier::automatic,
+                          .scope = ExecutionContext::user,
+                          .strategy = Strategy::remove,
+                          .targets = {R"(?:\Python3*\Lib\site-packages\~*)"},
+                          .require = {.not_in_use = true, .min_age_days = 7}};
+
+  const Evaluation evaluation = evaluate(rule);
+
+  EXPECT_EQ(paths_of(evaluation),
+            (std::vector<fs::path>{R"(C:\Python313\Lib\site-packages\~orch)",
+                                   R"(F:\Python313\Lib\site-packages\~-rch)",
+                                   R"(G:\Python312\Lib\site-packages\~umpy)"}));
+  EXPECT_TRUE(evaluation.dropped.empty());
+}
+
 TEST_F(RuleEngineTest, ProcessFolderInsideAnEntryMeansInUse) {
   tree().add_file(temp / "tool" / "tool.exe", 1_MiB, days_ago(10));
   usage().add_process_folder(temp / "tool");

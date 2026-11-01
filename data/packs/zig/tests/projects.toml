@@ -1,0 +1,120 @@
+# Zig projects in a workspace, with the reference machine's folder names (E:). An inactive
+# project's ignored .zig-cache goes, with those of its demos and of an agent worktree; an active
+# project keeps its cache; zig-out, a cache git does not ignore and a cache without build.zig
+# beside it stay.
+
+[workspace]
+roots = ['E:\']
+
+# UzEngine: last source change 9 days ago.
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\.git'
+folder = true
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\runtime\build.zig'
+age_days = 9
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\runtime\engine\renderer.zig'
+age_days = 9
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\runtime\.zig-cache'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\runtime\.zig-cache\o\255b6c40b8517e9e7f3bf461b43ebe4f\runtime.lib'
+size = 751619276
+age_days = 9
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\runtime\.zig-cache\h\timestamp'
+age_days = 9
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\runtime\demos\triangle\build.zig'
+age_days = 200
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\runtime\demos\triangle\main.zig'
+age_days = 200
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\runtime\demos\triangle\.zig-cache'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\runtime\demos\triangle\.zig-cache\o\8f1d2c3b4a5968778695a4b3c2d1e0f1\triangle.exe'
+size = 16777216
+age_days = 200
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\runtime\demos\triangle\zig-out'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\runtime\demos\triangle\zig-out\bin\triangle.exe'
+size = 16777216
+age_days = 200
+# A project-pinned global cache: no build.zig beside it.
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\.tools\zig-cache\o\0a1b2c3d4e5f60718293a4b5c6d7e8f9\std.o'
+age_days = 22
+
+# A Claude Code agent worktree of UzEngine (its .git is a file on disk; a folder here).
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\.claude\worktrees\agent-a1ea4dfd25f07d406\.git'
+folder = true
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\.claude\worktrees\agent-a1ea4dfd25f07d406\runtime\build.zig'
+age_days = 9
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\.claude\worktrees\agent-a1ea4dfd25f07d406\runtime\.zig-cache'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\.claude\worktrees\agent-a1ea4dfd25f07d406\runtime\.zig-cache\o\4c2f9a0b1c2d3e4f5a6b7c8d9e0f1a2b\runtime.lib'
+size = 734003200
+age_days = 9
+
+# An old worktree whose .gitignore did not list .zig-cache yet.
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\.claude\worktrees\fix-vfx-pr7\.git'
+folder = true
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\.claude\worktrees\fix-vfx-pr7\runtime\build.zig'
+age_days = 213
+[[entry]]
+path = 'E:\UzmiGames\UzEngine\.claude\worktrees\fix-vfx-pr7\runtime\.zig-cache\o\9a8b7c6d5e4f30211203f4e5d6c7b8a9\runtime.lib'
+age_days = 213
+
+# UzPainter: a source changed yesterday.
+[[entry]]
+path = 'E:\UzmiGames\UzPainter\.git'
+folder = true
+[[entry]]
+path = 'E:\UzmiGames\UzPainter\build.zig'
+age_days = 5
+[[entry]]
+path = 'E:\UzmiGames\UzPainter\src\main.zig'
+age_days = 1
+[[entry]]
+path = 'E:\UzmiGames\UzPainter\.zig-cache'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'E:\UzmiGames\UzPainter\.zig-cache\o\3eb303f6fe45043d576a718883419a9f\uzpainter.dll'
+size = 322122547
+age_days = 5
+
+[[expect]]
+kind     = "clean"
+case     = "project-cache"
+match    = ['E:\UzmiGames\UzEngine\runtime\.zig-cache',
+            'E:\UzmiGames\UzEngine\runtime\demos\triangle\.zig-cache',
+            'E:\UzmiGames\UzEngine\.claude\worktrees\agent-a1ea4dfd25f07d406\runtime\.zig-cache']
+no_match = ['E:\UzmiGames\UzPainter\.zig-cache', 'E:\UzmiGames\UzEngine\runtime\demos\triangle\zig-out',
+            'E:\UzmiGames\UzEngine\.claude\worktrees\fix-vfx-pr7\runtime\.zig-cache',
+            'E:\UzmiGames\UzEngine\.tools\zig-cache', 'E:\UzmiGames\UzEngine\runtime\build.zig',
+            'E:\UzmiGames\UzEngine\runtime\.zig-cache\o', 'E:\UzmiGames\UzEngine\runtime\engine']
+
+[[expect]]
+kind     = "attribution"
+case     = "project-cache"
+match    = ['E:\UzmiGames\UzEngine\runtime\.zig-cache', 'E:\UzmiGames\UzPainter\.zig-cache',
+            'E:\UzmiGames\UzEngine\.claude\worktrees\agent-a1ea4dfd25f07d406\runtime\.zig-cache']
+no_match = ['E:\UzmiGames\UzEngine\runtime', 'E:\UzmiGames\UzEngine\runtime\demos\triangle\zig-out',
+            'E:\UzmiGames\UzEngine\.tools\zig-cache']

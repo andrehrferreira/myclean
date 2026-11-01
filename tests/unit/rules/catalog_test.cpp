@@ -20,7 +20,7 @@ const std::filesystem::path rules_dir = data_dir / "rules";
 std::string rule(std::string_view id, std::string_view tier = "ask") {
   return "[[rule]]\nid = \"" + std::string(id) + "\"\ncategory = \"caches\"\ntier = \"" +
          std::string(tier) + "\"\nscope = \"user\"\nstrategy = \"quarantine\"\n" +
-         "targets = [\"cache\"]\n";
+         "targets = ['%TEMP%\\cache']\n";
 }
 
 std::vector<std::string> ids_of(const RuleCatalog& catalog) {

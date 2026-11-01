@@ -15,6 +15,20 @@ category = "vm-disks"
 label    = "Docker Desktop disk (images, containers, volumes)"
 reclaim  = { kind = "relocate", ref = "docker", note = "Docker Desktop > Settings > Resources > Advanced > Disk image location moves it; `docker system prune` frees space inside it." }
 
+# Docker Desktop's disk in a custom "Disk image location" (Settings > Resources > Advanced;
+# docs.docker.com, see pack.toml): CustomWslDistroDir in %APPDATA%\Docker\settings-store.json
+# names a folder ...\DockerDesktopWSL holding disk\docker_data.vhdx and main\ext4.vhdx.
+# Observed on reference machine: the live one in D:\Database\DockerDesktopWSL (1.55 TB), and a
+# copy left behind by a move, renamed F:\WSL\wsl\DockerDesktopWSL.ANTIGO (998 GiB, last written
+# 7 weeks before), which Docker never reads.
+[[area]]
+id       = "docker-data-custom"
+paths    = ['?:\DockerDesktopWSL*', '?:\*\DockerDesktopWSL*', '?:\*\*\DockerDesktopWSL*',
+            '?:\*\*\*\DockerDesktopWSL*']
+category = "vm-disks"
+label    = "Docker Desktop disk in a custom location, or a copy left by a move"
+reclaim  = { kind = "manual-review", note = "Docker Desktop uses only the folder named by CustomWslDistroDir in %APPDATA%\\Docker\\settings-store.json. Any other DockerDesktopWSL folder (renamed, or left by a move) is a copy Docker never reads: check what you need is in the live one, then delete it. The live one moves with Settings > Resources > Advanced > Disk image location." }
+
 # A WSL 1 distribution keeps its Linux files in a rootfs folder instead of a disk (observed on
 # reference machine).
 [[area]]

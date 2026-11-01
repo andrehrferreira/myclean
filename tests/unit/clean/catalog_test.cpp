@@ -115,12 +115,28 @@ TEST(ShippedCatalog, BrowserAndElectronTargetsAreCachesOnly) {
 
 // Cleaning spec, "Developer Artifact Qualification": every artifact rule requires git, no use
 // and inactivity; auto-tier ones wait at least 7 days, for the project or for the item itself.
+// Invariant for outside_git (a project outside any git work tree may be offered): only together
+// with git_ignored (inside a work tree git still vouches), and only on auto-tier pure caches,
+// whose loss costs nothing but a rebuild, that also wait 7 days for the cache itself
+// (min_age_days). Their targets never end in a name a person may give a folder by hand (build
+// output such as bin or Binaries can be all a project without its sources has).
 TEST(ShippedCatalog, ArtifactRulesRequireEveryQualification) {
   for (const CleaningRule& rule : shipped_rules()) {
     if (!rule.project_marker) {
       continue;
     }
     EXPECT_TRUE(rule.require.git_ignored) << rule.id;
+    if (rule.require.outside_git) {
+      EXPECT_EQ(rule.tier, Tier::automatic) << rule.id;
+      EXPECT_GE(rule.require.min_age_days.value_or(0), 7) << rule.id;
+      for (const std::string& target : rule.targets) {
+        const std::string name = std::filesystem::path{target}.filename().string();
+        for (const std::string_view hand_made :
+             {"build", "dist", "out", "bin", "obj", "Binaries", "target", "Saved", "lib"}) {
+          EXPECT_NE(name, hand_made) << rule.id << ": " << target;
+        }
+      }
+    }
     EXPECT_TRUE(rule.require.not_in_use) << rule.id;
     ASSERT_TRUE(rule.require.inactive_days) << rule.id;
     if (rule.tier == Tier::automatic) {

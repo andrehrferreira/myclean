@@ -17,8 +17,8 @@ no_match = ['C:\Users\owner\Documents', 'C:\Users\owner\source']
 kind     = "attribution"
 case     = "sdks"
 match    = ['C:\Program Files (x86)\Windows Kits', 'C:\Program Files\dotnet', 'C:\Program Files\NVIDIA GPU Computing Toolkit',
-            'C:\Program Files\LLVM', 'C:\Program Files\Go', 'C:\Program Files\Android']
-no_match = ['C:\Program Files\Git']
+            'C:\Program Files\LLVM', 'C:\Program Files\Go', 'C:\Program Files\Android', 'F:\LLVM']
+no_match = ['C:\Program Files\Git', 'F:\LLVM\bin', 'F:\Go']
 
 # Trivy's Java database (reference machine): the database goes, its metadata stays.
 [[entry]]

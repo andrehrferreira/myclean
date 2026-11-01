@@ -40,6 +40,9 @@ class IFileTree {
   // point, not_found when it is gone, access_denied when it cannot be read.
   [[nodiscard]] virtual Result<std::vector<Entry>> list(
       const std::filesystem::path& path) const = 0;
+  // The root of every local fixed volume with a drive letter ("C:\", "F:\"), in letter order:
+  // what a "?:\" target stands for. Removable, network and optical drives are not listed.
+  [[nodiscard]] virtual std::vector<std::filesystem::path> fixed_volumes() const = 0;
 
  protected:
   IFileTree() = default;

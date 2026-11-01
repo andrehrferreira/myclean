@@ -1,0 +1,160 @@
+# The code-intelligence caches of solutions on G: (the reference machine's names). In two git
+# work trees that ignore .vs and were last changed 10 days ago, the caches go and the per-user
+# state stays (the whole .vs waits 14 days for sln-state). The live client is outside git: its
+# caches go too, since only Visual Studio writes them. A work tree that does not ignore .vs keeps
+# its cache, and a cache written yesterday stays.
+
+[workspace]
+roots = ['G:\']
+
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\.git'
+folder = true
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\Client\Client.sln'
+age_days = 10
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\Client\Source\Client\Client.Build.cs'
+age_days = 10
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17\ipch'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17\ipch\109baed67d4092a.ipch'
+size = 268435456
+age_days = 10
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17\Browse.VC.db'
+size = 2427936768
+age_days = 10
+git_ignored = true
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17\Solution.VC.db'
+size = 402182144
+age_days = 10
+git_ignored = true
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17\.suo'
+age_days = 10
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17\DocumentLayout.json'
+age_days = 10
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\FileContentIndex'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\FileContentIndex\38ef5d94-93dd-4be6-9dff-4d93a83bffc2.vsidx'
+age_days = 10
+
+[[entry]]
+path = 'G:\GenericServer\Server\.git'
+folder = true
+[[entry]]
+path = 'G:\GenericServer\Server\Server.sln'
+age_days = 10
+[[entry]]
+path = 'G:\GenericServer\Server\Program.cs'
+age_days = 10
+[[entry]]
+path = 'G:\GenericServer\Server\.vs'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'G:\GenericServer\Server\.vs\Server\CopilotIndices'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'G:\GenericServer\Server\.vs\Server\CopilotIndices\17.14.794.21998\CodeChunks.db'
+age_days = 10
+[[entry]]
+path = 'G:\GenericServer\Server\.vs\Server\v17\Browse.VC.db'
+age_days = 10
+git_ignored = true
+[[entry]]
+path = 'G:\GenericServer\Server\.vs\Server\v17\Browse.VC.db-wal'
+age_days = 10
+git_ignored = true
+[[entry]]
+path = 'G:\GenericServer\Server\.vs\Server\v17\Browse.VC.db-shm'
+age_days = 10
+git_ignored = true
+[[entry]]
+path = 'G:\GenericServer\Server\.vs\Server\v17\Browse.VC.opendb'
+age_days = 10
+[[entry]]
+path = 'G:\GenericServer\Server\.vs\Server\DesignTimeBuild\.dtbcache.v2'
+age_days = 10
+[[entry]]
+path = 'G:\GenericServer\Server\.vs\ProjectEvaluation\server.projects.v9.bin'
+age_days = 10
+
+# Outside git.
+[[entry]]
+path = 'G:\ToS\Client\Client.sln'
+[[entry]]
+path = 'G:\ToS\Client\Source\Client\Client.Build.cs'
+[[entry]]
+path = 'G:\ToS\Client\.vs\Client\v17\Browse.VC.db'
+[[entry]]
+path = 'G:\ToS\Client\.vs\Client\v17\.suo'
+[[entry]]
+path = 'G:\ToS\Client\.vs\Client\CopilotIndices\17.14.794.21998\SemanticSymbols.db'
+[[entry]]
+path = 'G:\ToS\Client\.vs\Client\FileContentIndex\0d4b6a1e-1c2f-4e3a-9b8c-7d6e5f4a3b2c.vsidx'
+age_days = 1
+[[entry]]
+path = 'G:\UnderTheShadow\UnderTheShadow.slnx'
+[[entry]]
+path = 'G:\UnderTheShadow\.vs\UnderTheShadow\v17\ipch\AutoPCH\1a2b3c4d\Game.ipch'
+
+# A work tree whose .gitignore does not list .vs.
+[[entry]]
+path = 'G:\NetworkSample\.git'
+folder = true
+[[entry]]
+path = 'G:\NetworkSample\NetworkSample.sln'
+[[entry]]
+path = 'G:\NetworkSample\.vs\NetworkSample\v17\ipch\AutoPCH\5e6f7a8b\Network.ipch'
+
+[[expect]]
+kind     = "clean"
+case     = "intellisense-cache"
+match    = ['G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17\ipch',
+            'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17\Browse.VC.db',
+            'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17\Solution.VC.db',
+            'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\FileContentIndex',
+            'G:\GenericServer\Server\.vs\Server\CopilotIndices',
+            'G:\GenericServer\Server\.vs\Server\v17\Browse.VC.db',
+            'G:\GenericServer\Server\.vs\Server\v17\Browse.VC.db-wal',
+            'G:\GenericServer\Server\.vs\Server\v17\Browse.VC.db-shm',
+            'G:\ToS\Client\.vs\Client\v17\Browse.VC.db',
+            'G:\ToS\Client\.vs\Client\CopilotIndices']
+no_match = ['G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs',
+            'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17',
+            'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17\.suo',
+            'G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs\Client\v17\DocumentLayout.json',
+            'G:\ToS\_Backups\Backup - ToS3\2025\Client\Source',
+            'G:\GenericServer\Server\.vs\Server\DesignTimeBuild',
+            'G:\GenericServer\Server\.vs\ProjectEvaluation',
+            'G:\GenericServer\Server\.vs\Server\v17\Browse.VC.opendb',
+            'G:\ToS\Client\.vs', 'G:\ToS\Client\.vs\Client\v17\.suo',
+            'G:\ToS\Client\.vs\Client\FileContentIndex', 'G:\ToS\Client\Source',
+            'G:\NetworkSample\.vs\NetworkSample\v17\ipch']
+
+[[expect]]
+kind     = "clean"
+case     = "slnx-intellisense-cache"
+match    = ['G:\UnderTheShadow\.vs\UnderTheShadow\v17\ipch']
+no_match = ['G:\UnderTheShadow\.vs']
+
+[[expect]]
+kind     = "clean"
+case     = "sln-state"
+no_match = ['G:\ToS\_Backups\Backup - ToS3\2025\Client\.vs', 'G:\GenericServer\Server\.vs',
+            'G:\ToS\Client\.vs']

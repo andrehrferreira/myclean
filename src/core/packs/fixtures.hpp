@@ -12,13 +12,17 @@
 // and what each case must and must not select on it. Run by the packs tests and by
 // `myclean packs validate`, on an in-memory machine: nothing on the real one is read.
 //
+//   volumes = ['C:\', 'F:\']                # optional, before any table: the fixed volumes a
+//                                           # "?:\" clean target stands for (default: every
+//                                           # drive of the entries)
+//
 //   [env]                                   # optional: on top of the reference owner's
 //   VCPKG_ROOT = 'D:\vcpkg'                 # environment (C:\Users\owner, C:\Windows, ...)
 //
 //   [workspace]                             # optional: roots the artifact scanner walks, for
 //   roots = ['F:\']                         # clean cases with a project marker
 //
-//   [[entry]]                               # the fake file tree; parent folders are implied
+//   [[entry]]                              # the fake file tree; parent folders are implied
 //   path        = 'C:\Users\owner\AppData\Local\zig\o\1f\main.obj'
 //   size        = 4096                      # optional, bytes of a file (default 4096)
 //   age_days    = 365                       # optional, days since it changed (default 365)

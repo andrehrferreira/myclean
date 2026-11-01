@@ -1,5 +1,5 @@
 id          = "wsl-docker"
-version     = "1.4.0"
+version     = "1.5.0"
 title       = "WSL and Docker Desktop"
 description = "The virtual disks of WSL distributions and of Docker Desktop and the file systems of WSL 1 distributions and their /tmp: where they are, and moving a distribution to another drive with WSL's own command; `docker system prune`; emptying old entries of a WSL 1 /tmp from inside Linux; what the WSL and Docker processes are."
 sources     = [
@@ -12,6 +12,7 @@ sources     = [
   "observed on reference machine: Ubuntu-24.04 in %LOCALAPPDATA%\\Packages\\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\\LocalState\\ext4.vhdx; the docker-desktop distribution registered by Docker Desktop (Lxss Flags 15, a WSL 2 disk) and Ubuntu-24.04 as WSL 1 (Flags 7, Version 2, a rootfs folder): bit 0x8 of Flags marks WSL 2; %LOCALAPPDATA%\\Docker\\wsl; WSL 1 distributions keep a rootfs folder in their package folder (analysis F-013, F-016)",
   "observed on reference machine: the WSL 1 Ubuntu-24.04 /tmp (rootfs\\tmp) holds 39,000 .tmpXXXXXX folders left by test runs, 94 GiB, nearly all from 2025",
   "observed on reference machine: wsl.exe, wslservice.exe, wslhost.exe and msrdc.exe of WSL and the Docker Desktop processes, their image paths and signers",
+  "observed on reference machine: CustomWslDistroDir = D:\\Database\\DockerDesktopWSL (settings-store.json), holding disk\\docker_data.vhdx (1.55 TB) and main\\ext4.vhdx, the docker-desktop Lxss BasePath; a timestamp-identical older copy renamed F:\\WSL\\wsl\\DockerDesktopWSL.ANTIGO (998 GiB, last written 2026-09-11) that nothing opens",
 ]
 min_myclean = "0.1.0"
 

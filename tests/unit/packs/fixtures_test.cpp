@@ -59,6 +59,15 @@ strategy = "delete"
 project  = { marker = ".tool-root" }
 targets  = ["out"]
 require  = { git_ignored = true, inactive_days = 30 }
+
+[[rule]]
+id       = "leftovers"
+category = "dev-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['?:\tool\leftovers\*']
+require  = { min_age_days = 7 }
 )");
   files.put(folder / "attribution.toml", R"([[area]]
 id       = "home"
@@ -120,6 +129,44 @@ case = "prune"
 match = ['C:\Users\owner\AppData\Local\tool\store']
 )");
   EXPECT_TRUE(failures.empty()) << failures.front();
+}
+
+// "?:\" stands for the fixture's fixed volumes: those it declares, or else every drive of its
+// entries.
+TEST(Fixtures, AnyDriveTargetsCoverTheFixedVolumes) {
+  constexpr std::string_view entries = R"(
+[[entry]]
+path = 'C:\tool\leftovers\a\x'
+[[entry]]
+path = 'F:\tool\leftovers\b\x'
+[[entry]]
+path = 'H:\tool\leftovers\c\x'
+)";
+  const std::vector<std::string> every_drive = run(std::string(entries) + R"(
+[[expect]]
+kind = "clean"
+case = "leftovers"
+match = ['C:\tool\leftovers\a', 'F:\tool\leftovers\b', 'H:\tool\leftovers\c']
+)");
+  EXPECT_TRUE(every_drive.empty()) << every_drive.front();
+  const std::vector<std::string> declared =
+      run(R"(volumes = ['C:\', 'F:\'])" + std::string(entries) + R"(
+[[expect]]
+kind = "clean"
+case = "leftovers"
+match = ['C:\tool\leftovers\a', 'F:\tool\leftovers\b']
+no_match = ['H:\tool\leftovers\c']
+)");
+  EXPECT_TRUE(declared.empty()) << declared.front();
+  EXPECT_NE(run(R"(volumes = ['F:\tool']
+[[expect]]
+kind = "kb"
+case = "agent"
+match = ['ToolAgent.exe']
+)")
+                .at(0)
+                .find(R"(field 'volumes' must hold volume roots such as 'C:\', not 'F:\tool')"),
+            std::string::npos);
 }
 
 TEST(Fixtures, KbCasesSelectTheirImageInAnyCase) {

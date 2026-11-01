@@ -27,3 +27,9 @@ kind     = "attribution"
 case     = "docker-data"
 match    = ['C:\Users\owner\AppData\Local\Docker\wsl', 'C:\ProgramData\DockerDesktop\vm-data']
 no_match = ['C:\Users\owner\AppData\Local\Docker\log']
+
+[[expect]]
+kind     = "attribution"
+case     = "docker-data-custom"
+match    = ['D:\Database\DockerDesktopWSL', 'F:\WSL\wsl\DockerDesktopWSL.ANTIGO']
+no_match = ['F:\WSL\wsl\main', 'F:\WSL\wsl', 'C:\Users\owner\AppData\Local\Docker\wsl']

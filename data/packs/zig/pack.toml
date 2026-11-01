@@ -1,10 +1,13 @@
 id          = "zig"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "Zig"
-description = "Zig's global build cache: compiled outputs, hash manifests and ZIR caches that zig rebuilds when missing."
+description = "Zig's global build cache (compiled outputs, hash manifests and ZIR caches that zig rebuilds when missing) and the .zig-cache of Zig projects inactive for 7 days."
 sources     = [
   "https://github.com/ziglang/zig/blob/master/lib/std/zig/introspect.zig (resolveGlobalCacheDir: ZIG_GLOBAL_CACHE_DIR, else %LOCALAPPDATA%\\zig)",
   "observed on reference machine: %LOCALAPPDATA%\\zig holds b, h, o, tmp and z; zig recompiles entries that are gone",
+  "https://ziglang.org/learn/build-system/ (zig build creates .zig-cache beside build.zig: it \"can be completely deleted at any time with no consequences\"; zig-out is the installation prefix, its content the project's choice)",
+  "https://ziglang.org/download/0.13.0/release-notes.html (the local cache folder zig-cache was renamed .zig-cache)",
+  "observed on reference machine: 246 GiB in 16 .zig-cache folders on E: (E:\\UzmiGames\\UzEngine\\runtime\\.zig-cache 117 GiB with 20,743 o entries, E:\\UzmiGames\\UzPainter\\.zig-cache 74 GiB, eight agent worktrees 4.7-7.7 GiB each), all ignored by git; Zig never trimmed them",
 ]
 min_myclean = "0.1.0"
 

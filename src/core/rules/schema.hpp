@@ -31,11 +31,14 @@ struct Pattern {
 //   tier     = "auto"                         # required: auto | ask | report
 //   scope    = "user"                         # required: user (tray, owner token) | system (svc)
 //   strategy = "delete"                       # required: delete | quarantine | native | handler
-//   targets  = ["node_modules", ".next"]      # required for delete and quarantine
+//   targets  = ["node_modules", ".next"]      # required for delete and quarantine; absolute
+//                                             # (%VARIABLE%, "C:\", "?:\" = every fixed volume)
+//                                             # or, with `project`, relative to the project root
 //   command  = "pnpm store prune"             # required for native, not allowed otherwise
 //   handler  = "Temporary Files"              # required for handler, not allowed otherwise
 //   project  = { marker = "package.json" }    # optional: targets are relative to a project root
-//   require  = { git_ignored = true, inactive_days = 30, not_in_use = true, min_age_days = 2 }
+//   require  = { git_ignored = true, inactive_days = 30, not_in_use = true, min_age_days = 2,
+//                outside_git = true }
 
 // How a rule removes what it selects.
 enum class Strategy {
@@ -50,7 +53,10 @@ enum class Strategy {
 
 // Conditions every selected item must meet. Absent values impose no condition.
 struct Requirements {
-  bool git_ignored = false;          // `git check-ignore` reports the item as ignored
+  bool git_ignored = false;  // `git check-ignore` reports the item as ignored
+  // With git_ignored, project rules only: a project outside any git work tree may be offered too
+  // (inside one, git must still vouch). For targets only a tool writes, never a person.
+  bool outside_git = false;
   bool not_in_use = false;           // no process has its current directory or a file open in it
   std::optional<int> inactive_days;  // project untouched (last commit, newest source) this long
   std::optional<int> min_age_days;   // the item itself is at least this old

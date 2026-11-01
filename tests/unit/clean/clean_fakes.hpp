@@ -81,6 +81,24 @@ class FakeTree final : public IFileTree {
     return children;
   }
 
+  // Every volume root in the tree, unless set_fixed_volumes() named them.
+  void set_fixed_volumes(std::vector<std::filesystem::path> volumes) {
+    fixed_volumes_ = std::move(volumes);
+  }
+
+  [[nodiscard]] std::vector<std::filesystem::path> fixed_volumes() const override {
+    if (fixed_volumes_) {
+      return *fixed_volumes_;
+    }
+    std::vector<std::filesystem::path> roots;
+    for (const auto& [key, entry] : entries_) {
+      if (!entry.path.has_relative_path()) {
+        roots.push_back(entry.path);
+      }
+    }
+    return roots;
+  }
+
  private:
   void add(const std::filesystem::path& path, os::EntryKind kind, Bytes size, WallTime touched,
            os::FileAttributes attributes) {
@@ -112,6 +130,7 @@ class FakeTree final : public IFileTree {
 
   std::map<std::wstring, Entry> entries_;
   std::set<std::wstring> denied_;
+  std::optional<std::vector<std::filesystem::path>> fixed_volumes_;
   mutable std::map<std::wstring, int> list_calls_;
   int next_id_ = 0;
 };

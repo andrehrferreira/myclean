@@ -1,10 +1,12 @@
 id          = "unreal"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "Unreal Engine"
-description = "Build output and derived data of inactive Unreal projects (cleaned, asking first), the shared derived data cache (movable), engine installations, per-user data and the Marketplace (Fab) download cache (for review or uninstall)."
+description = "Build output, derived data, cook and stage output and editor web caches of inactive Unreal projects (cleaned, asking first), the shared derived data cache (movable), engine installations, per-user data, the Marketplace (Fab) download cache and the Quixel Bridge (Megascans) library (for review or uninstall)."
 sources     = [
   "https://dev.epicgames.com/documentation/en-us/unreal-engine/derived-data-cache-in-unreal-engine (the local shared DDC in %LOCALAPPDATA%\\UnrealEngine\\Common\\DerivedDataCache; projects rebuild derived data)",
   "observed on reference machine: engines in %ProgramFiles%\\Epic Games\\UE_<version>; %LOCALAPPDATA%\\UnrealEngine; the launcher's VaultCache in %ProgramData%\\Epic\\EpicGamesLauncher; projects (*.uproject) with Intermediate, DerivedDataCache, Binaries and Saved (Logs, Crashes, Config) (analysis F-012, F-016)",
+  "observed on reference machine: G:\\UE_Projects\\ClothTest55\\Saved\\Cooked (1.99 GiB) and Saved\\StagedBuilds (1.71 GiB), cook and stage output of Package Project; Saved\\webcache_4430 and webcache_6613, the editor's embedded Chromium cache, in 9 projects (1.58 GiB)",
+  "observed on reference machine: G:\\UE\\Megascans Library\\Downloaded\\UAssets\\<id>\\Tier0 (26.96 GiB), also in G:\\UnderTheShadow\\Content\\Megascans (Quixel Bridge's local library)",
 ]
 min_myclean = "0.1.0"
 

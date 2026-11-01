@@ -249,6 +249,19 @@ Result<std::vector<clean::Entry>> Win32FileTree::list(const fs::path& path) cons
   return entries;
 }
 
+std::vector<fs::path> Win32FileTree::fixed_volumes() const {
+  std::vector<fs::path> volumes;
+  const DWORD drives = ::GetLogicalDrives();
+  for (wchar_t letter = L'A'; letter <= L'Z'; ++letter) {
+    const std::wstring root = {letter, L':', L'\\'};
+    if ((drives & (DWORD{1} << (letter - L'A'))) != 0 &&
+        ::GetDriveTypeW(root.c_str()) == DRIVE_FIXED) {
+      volumes.emplace_back(root);
+    }
+  }
+  return volumes;
+}
+
 std::optional<std::wstring> Win32Environment::variable(std::wstring_view name) const {
   const std::wstring key(name);
   std::wstring value(::GetEnvironmentVariableW(key.c_str(), nullptr, 0), L'\0');

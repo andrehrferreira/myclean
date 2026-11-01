@@ -24,7 +24,11 @@ struct Matches {
 [[nodiscard]] Matches resolve(const IFileTree& tree, const std::filesystem::path& base,
                               const std::filesystem::path& pattern);
 
-// resolve() of an absolute pattern from its volume root.
+// True when `pattern` starts with "?:\": the same path on every fixed volume.
+[[nodiscard]] bool on_every_volume(const std::filesystem::path& pattern);
+
+// resolve() of an absolute pattern from its volume root; a pattern on_every_volume() is resolved
+// from the root of each of the tree's fixed_volumes().
 [[nodiscard]] Matches resolve(const IFileTree& tree, const std::filesystem::path& pattern);
 
 enum class Visit {

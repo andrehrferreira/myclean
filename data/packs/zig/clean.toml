@@ -14,3 +14,23 @@ targets  = ['%LOCALAPPDATA%\zig\o\*', '%LOCALAPPDATA%\zig\h\*', '%LOCALAPPDATA%\
             '%ZIG_GLOBAL_CACHE_DIR%\o\*', '%ZIG_GLOBAL_CACHE_DIR%\h\*', '%ZIG_GLOBAL_CACHE_DIR%\z\*',
             '%ZIG_GLOBAL_CACHE_DIR%\tmp\*']
 require  = { min_age_days = 30, not_in_use = true }
+
+# The local cache of a Zig project (source: Zig build system guide, see pack.toml): zig build
+# keeps it in .zig-cache beside build.zig (zig-cache before Zig 0.13), and it "can be completely
+# deleted at any time with no consequences"; the next build compiles again. Zig never trims it
+# (observed on reference machine: 246 GiB in 16 caches on E:, 117 GiB in one). The scanner walks
+# the roots of data/workspaces.toml; a folder holding build.zig is a project root. The whole
+# cache is proposed only when git ignores it and tracks nothing inside it, no process uses it or
+# the project, and the project is inactive for 7 days (newest of the last commit and every source
+# file), as for Cargo's target. Single h or o entries are never targets: a manifest left without
+# its output can make zig use a missing file. zig-out, the install prefix, is never a target:
+# what goes there is the project's choice.
+[[rule]]
+id       = "project-cache"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "build.zig" }
+targets  = [".zig-cache", "zig-cache"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 7 }

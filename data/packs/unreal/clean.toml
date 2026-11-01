@@ -5,8 +5,12 @@
 # it, no process uses it or the project, and the project is inactive for require.inactive_days
 # (newest of the last commit and every source file).
 
-# Unreal: rebuilding Binaries and DerivedDataCache takes long, so it is "ask". Saved holds the
-# project's config, so only its Logs and Crashes are targets, never Saved itself.
+# Unreal: rebuilding DerivedDataCache and Intermediate takes long, so it is "ask". Saved holds
+# the project's config, so only its regenerated subfolders are targets, never Saved itself:
+# Logs, Crashes, the cook and stage output (Saved\Cooked, Saved\StagedBuilds: written again by
+# the next cook or package) and the editor's embedded Chromium cache (Saved\webcache_<CEF
+# branch>). Observed on reference machine: G:\UE_Projects\ClothTest55\Saved\Cooked 1.99 GiB and
+# StagedBuilds 1.71 GiB; Saved\webcache_4430 and webcache_6613 in 9 projects, 1.58 GiB.
 [[rule]]
 id       = "project-artifacts"
 category = "dev-artifacts"
@@ -14,5 +18,18 @@ tier     = "ask"
 scope    = "user"
 strategy = "delete"
 project  = { marker = "*.uproject" }
-targets  = ["Intermediate", "DerivedDataCache", "Binaries", 'Saved\Logs', 'Saved\Crashes']
+targets  = ["Intermediate", "DerivedDataCache", 'Saved\Logs', 'Saved\Crashes', 'Saved\Cooked',
+            'Saved\StagedBuilds', 'Saved\webcache_*']
+require  = { git_ignored = true, not_in_use = true, inactive_days = 14 }
+
+# Binaries: rebuilt from Source; its own case because a project without Source needs them, so
+# it is never a candidate to widen beyond what git vouches for.
+[[rule]]
+id       = "project-binaries"
+category = "dev-artifacts"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "*.uproject" }
+targets  = ["Binaries"]
 require  = { git_ignored = true, not_in_use = true, inactive_days = 14 }

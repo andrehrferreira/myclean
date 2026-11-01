@@ -1,0 +1,23 @@
+# Sources: pack.toml. The data folders inside hold the owner's databases: review or uninstall,
+# never cleaned.
+
+[[area]]
+id       = "mongodb-server"
+paths    = ['%ProgramFiles%\MongoDB\Server\*', '?:\MongoDB\Server\*']
+category = "apps"
+label    = "MongoDB server"
+reclaim  = { kind = "uninstall", note = "bin\\*.pdb are debug symbols, only needed to read a crash dump; log\\mongod.log grows until rotated (logRotate). Export data before uninstalling." }
+
+[[area]]
+id       = "postgresql"
+paths    = ['%ProgramFiles%\PostgreSQL\*', '?:\PostgreSQL\*']
+category = "apps"
+label    = "PostgreSQL server"
+reclaim  = { kind = "uninstall", note = "The installer can add its own pgAdmin 4 here; one pgAdmin is enough. Dump the databases before uninstalling." }
+
+[[area]]
+id       = "pgadmin"
+paths    = ['%ProgramFiles%\pgAdmin 4', '%LOCALAPPDATA%\Programs\pgAdmin 4', '?:\pgAdmin 4']
+category = "apps"
+label    = "pgAdmin 4 (standalone)"
+reclaim  = { kind = "uninstall", note = "PostgreSQL's installer may already include pgAdmin 4." }

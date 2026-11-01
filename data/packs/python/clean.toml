@@ -63,3 +63,28 @@ scope    = "user"
 strategy = "native"
 command  = "uv cache prune"
 targets  = ['%LOCALAPPDATA%\uv\cache']
+
+# pip's uninstall stash left behind (sources: pip's src/pip/_internal/utils/temp_dir.py,
+# AdjacentTempDirectory, and src/pip/_internal/req/req_uninstall.py, StashedUninstallPathSet;
+# see pack.toml). Uninstalling or upgrading moves each top-level folder of the old version aside
+# to a name that starts with '~' (torch -> ~orch, ~-rch), which no Python module or distribution
+# may start with, and deletes it on commit. On Windows the delete fails when a DLL of the old
+# version is loaded, and the stash stays; Python cannot import it and pip ignores it ("Ignoring
+# invalid distribution ~orch"). Observed on reference machine: F:\Python313\Lib\site-packages\
+# ~-rch (3.5 GiB of CUDA torch DLLs), ~orch, ~umpy and ~umpy.libs, left by a torch upgrade on
+# 2026-06-25; '?:\Python3*' reaches such installs at the root of any fixed volume. A week-old
+# stash belongs to no running pip. %ProgramFiles% installs are left to the deny-list.
+[[rule]]
+id       = "pip-uninstall-leftovers"
+category = "dev-caches"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%LOCALAPPDATA%\Programs\Python\Python3*\Lib\site-packages\~*',
+            '%APPDATA%\Python\Python3*\site-packages\~*',
+            '%USERPROFILE%\miniconda3\Lib\site-packages\~*',
+            '%USERPROFILE%\miniconda3\envs\*\Lib\site-packages\~*',
+            '%USERPROFILE%\anaconda3\Lib\site-packages\~*',
+            '%USERPROFILE%\anaconda3\envs\*\Lib\site-packages\~*',
+            '?:\Python3*\Lib\site-packages\~*']
+require  = { min_age_days = 7, not_in_use = true }

@@ -72,6 +72,14 @@ existing schema, documented next to their types.
 | `relocate.toml` | `[[relocate]]` | `packs::RelocationRecipe` (below) | placement |
 | `compress.toml` | `[[compress]]` | `packs::CompressTarget` (below) | compress |
 
+A clean target is an absolute path pattern (starting with a `%VARIABLE%`, a drive such as
+`C:\`, or `?:\`, which stands for the same path on every local fixed volume) or, in a rule
+with `project`, a pattern relative to the project root. A target that could never match
+(relative without `project`, absolute with it, or with a `..` component) rejects the pack.
+A project rule with `require.git_ignored` may add `require.outside_git = true` when its targets
+are written only by a tool: a project outside any git work tree is then offered on the other
+conditions, while inside one git must still ignore the folder and track nothing in it.
+
 ### relocate.toml: relocation recipes
 
 Moving something to another drive through the tool's own supported setting or command, never a
@@ -236,6 +244,10 @@ is `packs::run_fixtures` (`src/core/packs/fixtures.hpp`), the same one `myclean 
 uses, so a pack can be checked without a build.
 
 ```toml
+volumes = ['C:\', 'F:\']                # optional, before any table: the fixed volumes a
+                                        # '?:\' clean target stands for (default: every drive
+                                        # the entries are on)
+
 [env]                                   # optional, on top of the reference owner's environment:
 VCPKG_ROOT = 'F:\tools\vcpkg'           # C:\Users\owner, C:\Windows, C:\ProgramData, ...
 
@@ -311,6 +323,7 @@ the new ones.
 | `browsers` | clean: HTTP, code and GPU caches of Chrome, Edge, Brave, Firefox; attribution: profiles and service worker caches (review); kb: Edge, WebView2 |
 | `chrome` | clean: per-profile WebGPU (Dawn) caches; attribution: on-device AI model (review); kb: chrome.exe |
 | `cpp` | clean: build output of inactive vcxproj and CMake projects |
+| `databases` | attribution (uninstall): MongoDB and PostgreSQL servers, pgAdmin 4 |
 | `creative-apps` | clean: Reallusion Hub downloads, Autodesk installer leftovers (ask); attribution: Reallusion, ZBrush, Marvelous Designer and Gaea content and autosaves (review), ArtEngine (uninstall); kb: Autodesk, FlexNet, Maxon, Reallusion processes |
 | `dev-tools` | clean: Trivy's Java database; attribution (review/uninstall): source projects, SDKs and toolchains, ~/.cache; kb: Git |
 | `device-software` | attribution: Corsair iCUE data (uninstall); kb: Realtek, Intel, Epson, TC-Helicon, Apple Bonjour |
@@ -324,17 +337,17 @@ the new ones.
 | `jetbrains` | clean: IDE caches, local folders of old IDE versions; attribution: settings (review), IDEs (uninstall) |
 | `node` | clean: node_modules and build output of inactive JavaScript projects, npm/pnpm/Yarn caches (their own prune commands), old Electron downloads and Bun cache entries; attribution: npm cache (relocate), global packages (review); kb: node.exe |
 | `playwright` | clean: test browsers; attribution: browsers, MCP profiles (review) |
-| `python` | clean: caches and build output of inactive Python projects, pip and uv caches (their own commands); attribution: pip cache (relocate), uv, Python and Conda installs (uninstall); kb: python.exe |
+| `python` | clean: caches and build output of inactive Python projects, pip's uninstall leftovers ('~' folders in site-packages, on any fixed volume), pip and uv caches (their own commands); attribution: pip cache (relocate), uv, Python and Conda installs (uninstall); kb: python.exe |
 | `python-store` | clean: pip cache of Store Pythons; attribution: installs (uninstall), user packages (review) |
 | `rust` | clean: Cargo crate cache, sources and git checkouts, target of Cargo projects inactive 7 days, incremental caches no build wrote for 7 days (active projects too); compress: toolchains (LZX); relocate: RUSTUP_HOME; attribution: Cargo home (relocate), ort's ONNX Runtime downloads (review) |
 | `security-network` | attribution: Kaspersky data; kb: Kaspersky, OpenVPN, WireGuard, AnyDesk, ExitLag |
 | `unity` | clean: Library, Temp, Obj and Logs of inactive Unity projects (ask); attribution: editors (uninstall), package and Asset Store cache (review) |
-| `unreal` | clean: build output, derived data, logs and crashes of inactive Unreal projects (ask); attribution: engines (uninstall), shared DDC (relocate), per-user data and Vault cache (review) |
+| `unreal` | clean: build output, derived data, logs, crashes, cook and stage output and editor web caches of inactive Unreal projects, binaries as a case of their own (ask); attribution: engines (uninstall), shared DDC (relocate), per-user data, Vault cache and Quixel Bridge (Megascans) library (review) |
 | `uzpainter` | clean: verification runs' pytest temporary folders, cache (ask); attribution (review): app data |
 | `vcpkg` | clean: build trees, packages and downloads of the usual roots and of clones in the workspaces, binary cache archives; attribution (installed libraries: uninstall; roots: review) |
-| `visual-studio` | clean: component (MEF) cache, the installer's package payloads, .vs state of inactive solutions; attribution: installations (uninstall), per-user data (review); kb: vctip |
+| `visual-studio` | clean: component (MEF) cache, the installer's package payloads, IntelliSense, browse-database, Copilot and search caches inside .vs of solutions inactive 7 days (also outside git), .vs state of inactive solutions; attribution: installations (uninstall), per-user data (review); kb: vctip |
 | `vscode` | clean: old version data, extension packages, stale workspace storage, Chromium caches, webview resource cache (ask); attribution: web storage, extensions and Cursor data (review); kb: Code, Copilot runtime |
 | `windows` | clean: temp folders, crash dumps, error reports, icon cache, PowerToys update installers, the Windows cleanup handlers, DISM component cleanup; attribution: system files and folders, programs, the owner's folders, MyClean's quarantine; kb: Windows, PowerToys, OneDrive and other Microsoft processes |
 | `windows-setup-logs` | clean: the Setup Log Files and Windows Upgrade Log Files handlers; attribution: Panther (the upgrade-log handler), setup logs |
-| `wsl-docker` | relocate: WSL 2 distributions (`wsl --manage --move`), WSL 1 distributions (`wsl-import`); clean: `docker system prune`, `wsl tmp prune` (entries of a WSL 1 distribution's /tmp older than 7 days, deleted from inside Linux); attribution: distribution disks, WSL 1 file systems and their /tmp, Docker Desktop disk; kb: WSL and Docker processes |
-| `zig` | clean: global cache entries; attribution |
+| `wsl-docker` | relocate: WSL 2 distributions (`wsl --manage --move`), WSL 1 distributions (`wsl-import`); clean: `docker system prune`, `wsl tmp prune` (entries of a WSL 1 distribution's /tmp older than 7 days, deleted from inside Linux); attribution: distribution disks, WSL 1 file systems and their /tmp, Docker Desktop disk (also in a custom location, and copies left by a move); kb: WSL and Docker processes |
+| `zig` | clean: global cache entries, the `.zig-cache` of Zig projects inactive 7 days; attribution: global cache, project caches |

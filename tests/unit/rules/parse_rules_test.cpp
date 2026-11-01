@@ -19,7 +19,7 @@ const std::filesystem::path rule_file = R"(C:\MyClean\data\rules\dev.toml)";
 std::string valid_rule(std::string_view id, std::string_view extra = {}) {
   return "[[rule]]\nid = \"" + std::string(id) +
          "\"\ncategory = \"caches\"\ntier = \"ask\"\nscope = \"user\"\n"
-         "strategy = \"quarantine\"\ntargets = [\"cache\"]\n" +
+         "strategy = \"quarantine\"\ntargets = ['%TEMP%\\cache']\n" +
          std::string(extra) + "\n";
 }
 
@@ -59,6 +59,7 @@ strategy    = "delete"
             (std::vector<std::string>{"node_modules", ".next", ".turbo", ".parcel-cache"}));
   EXPECT_EQ(rule.project_marker, "package.json");
   EXPECT_TRUE(rule.require.git_ignored);
+  EXPECT_FALSE(rule.require.outside_git);
   EXPECT_TRUE(rule.require.not_in_use);
   EXPECT_EQ(rule.require.inactive_days, 30);
   EXPECT_FALSE(rule.require.min_age_days.has_value());
@@ -111,7 +112,7 @@ TEST(ParseRules, OneRuleMissingTierRejectsAllElevenNamingFileRuleAndField) {
   }
   text +=
       "[[rule]]\nid = \"cache.broken\"\ncategory = \"caches\"\nscope = \"user\"\n"
-      "strategy = \"quarantine\"\ntargets = [\"cache\"]\n";
+      "strategy = \"quarantine\"\ntargets = ['%TEMP%\\cache']\n";
 
   EXPECT_EQ(rejection(text),
             R"(C:\MyClean\data\rules\dev.toml: rule #11 'cache.broken': field 'tier' is missing)");
@@ -199,6 +200,67 @@ TEST(ParseRules, TargetListsMustHoldNonEmptyStrings) {
             std::string::npos);
   EXPECT_NE(rejection(head + "targets = \"a\"\n").find("field 'targets' must be a non-empty"),
             std::string::npos);
+}
+
+// A target the engine would never match rejects the file instead of loading and selecting
+// nothing: absolute targets need a drive, "?:\" or a %VARIABLE%; project targets are relative.
+TEST(ParseRules, TargetsTheEngineWouldDropRejected) {
+  const std::string head =
+      "[[rule]]\nid = \"x\"\ncategory = \"c\"\ntier = \"ask\"\nscope = \"user\"\n"
+      "strategy = \"delete\"\n";
+  const std::string project = "project = { marker = \"build.zig\" }\n";
+  for (const char* target : {"cache", R"(\cache)", R"(C:cache)", R"(?:cache)"}) {
+    EXPECT_NE(rejection(head + "targets = ['" + target + "']\n")
+                  .find("field 'targets' must hold absolute paths starting with a drive, '?:\\' "
+                        "or a %VARIABLE%, not '" +
+                        std::string(target) + "'"),
+              std::string::npos)
+        << target;
+  }
+  for (const char* target : {R"(C:\out)", R"(?:\out)", R"(\out)", R"(%TEMP%\out)"}) {
+    EXPECT_NE(rejection(head + project + "targets = ['" + target + "']\n")
+                  .find("field 'targets' must hold paths relative to the project root, not '" +
+                        std::string(target) + "'"),
+              std::string::npos)
+        << target;
+  }
+  EXPECT_NE(rejection(head + R"(targets = ['%TEMP%\..\x'])" + "\n")
+                .find(R"(field 'targets' must not hold a '..' component, in '%TEMP%\..\x')"),
+            std::string::npos);
+  EXPECT_NE(rejection(head + project + "targets = ['out/../src']\n")
+                .find("field 'targets' must not hold a '..' component"),
+            std::string::npos);
+
+  const Result<std::vector<CleaningRule>> valid = parse_rule_file(
+      head + R"(targets = ['?:\Python3*\Lib\site-packages\~*', 'F:\x', '%TEMP%\y'])" + "\n" +
+          "[[rule]]\nid = \"p\"\ncategory = \"c\"\ntier = \"ask\"\nscope = \"user\"\n"
+          "strategy = \"delete\"\n" +
+          project + R"(targets = ['.zig-cache', '.vs\*\v1*\ipch'])" + "\n",
+      rule_file);
+  ASSERT_TRUE(valid.has_value()) << valid.error().message;
+  EXPECT_EQ(valid->front().targets.front(), R"(?:\Python3*\Lib\site-packages\~*)");
+}
+
+// require.outside_git widens git_ignored for project rules; anywhere else it would mean nothing.
+TEST(ParseRules, OutsideGitOnlyOnProjectRulesWithGitIgnored) {
+  const std::string head =
+      "[[rule]]\nid = \"x\"\ncategory = \"c\"\ntier = \"auto\"\nscope = \"user\"\n"
+      "strategy = \"delete\"\n";
+  const std::string project = "project = { marker = \"*.sln\" }\ntargets = ['.vs']\n";
+  const Result<std::vector<CleaningRule>> rules = parse_rule_file(
+      head + project + "require = { git_ignored = true, outside_git = true }\n", rule_file);
+  ASSERT_TRUE(rules.has_value()) << rules.error().message;
+  EXPECT_TRUE(rules->front().require.outside_git);
+  EXPECT_TRUE(rules->front().require.git_ignored);
+
+  for (const std::string& rule :
+       {head + project + "require = { outside_git = true }\n",
+        head + "targets = ['%TEMP%\\x']\nrequire = { git_ignored = true, outside_git = true }\n"}) {
+    EXPECT_NE(rejection(rule).find("field 'require.outside_git' is only allowed on a project rule "
+                                   "with require.git_ignored"),
+              std::string::npos)
+        << rule;
+  }
 }
 
 TEST(ParseRules, StrategySpecificFieldsEnforced) {

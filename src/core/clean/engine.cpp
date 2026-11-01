@@ -337,9 +337,10 @@ bool git_vouches(Session& session, const IGit& git, const fs::path& work_tree, c
 void qualify(Session& session, const IFileTree& tree, const IGit& git, const Project& project,
              std::span<const std::wstring> skip) {
   const std::optional<fs::path> work_tree = work_tree_of(tree, project.root);
-  if (!work_tree && std::ranges::all_of(project.found, [](const Found& found) {
-        return found.rule->require.git_ignored;
-      })) {
+  const auto needs_git = [](const Found& found) {
+    return found.rule->require.git_ignored && !found.rule->require.outside_git;
+  };
+  if (!work_tree && std::ranges::all_of(project.found, needs_git)) {
     drop_all(session, project, "not_in_git");
     return;
   }
@@ -358,14 +359,18 @@ void qualify(Session& session, const IFileTree& tree, const IGit& git, const Pro
     if (*newest > session.now() - days(inactive_days(rule))) {
       continue;
     }
-    if (rule.require.git_ignored && !work_tree) {
+    if (!work_tree && needs_git(found)) {
       session.drop(rule, found.entry.path, "not_in_git");
       continue;
     }
-    if (rule.require.git_ignored && !git_vouches(session, git, *work_tree, found)) {
+    if (rule.require.git_ignored && work_tree && !git_vouches(session, git, *work_tree, found)) {
       continue;
     }
-    session.consider(rule, found.entry, project.root, project.root);
+    // A rule that acts inside active projects (inactive_days 0) takes a folder no build wrote
+    // for its min_age_days: only a process inside that folder uses it, not one elsewhere in
+    // the project (an idle terminal open in it for days).
+    const fs::path& use_root = rule.require.inactive_days == 0 ? found.entry.path : project.root;
+    session.consider(rule, found.entry, use_root, project.root);
   }
 }
 
@@ -400,7 +405,7 @@ std::vector<Entry> target_entries(const IFileTree& tree, const IEnvironment& env
       continue;  // names a variable this machine does not set
     }
     const fs::path pattern{*expanded};
-    if (!pattern.has_root_name() || !pattern.has_root_directory()) {
+    if (!on_every_volume(pattern) && (!pattern.has_root_name() || !pattern.has_root_directory())) {
       session.drop(rule, pattern, "invalid_path", "a target must be an absolute path");
       continue;
     }

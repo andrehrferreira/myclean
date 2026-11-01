@@ -1,8 +1,9 @@
-# An inactive Unreal project in a workspace: its ignored build output, derived data, logs and
-# crash reports go; Content, Config, Saved\Config and Saved itself stay.
+# An inactive Unreal project in a workspace: its ignored build output, derived data, logs, crash
+# reports, cook and stage output and editor web cache go; Content, Config, Saved\Config,
+# Autosaves, Collections and Saved itself stay. A project outside git keeps everything.
 
 [workspace]
-roots = ['F:\']
+roots = ['F:\', 'G:\']
 
 [[entry]]
 path = 'F:\Unreal\ShooterDemo\.git'
@@ -46,17 +47,62 @@ path = 'F:\Unreal\ShooterDemo\Saved\Crashes\UECC-Windows-1A2B3C\CrashContext.run
 [[entry]]
 path = 'F:\Unreal\ShooterDemo\Saved\Config\WindowsEditor\EditorPerProjectUserSettings.ini'
 [[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\Cooked'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\Cooked\Windows\ShooterDemo\Content\Maps\Arena.umap'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\StagedBuilds'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\StagedBuilds\Windows\ShooterDemo\Content\Paks\ShooterDemo-Windows.ucas'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\webcache_4430'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\webcache_4430\Cache\data_0'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\Autosaves\Game\Maps\Arena_Auto1.umap'
+[[entry]]
+path = 'F:\Unreal\ShooterDemo\Saved\Collections\Favorites.collection'
+[[entry]]
 path = 'F:\Unreal\ShooterDemo\Content\Maps\Arena.umap'
 [[entry]]
 path = 'F:\Unreal\ShooterDemo\Config\DefaultEngine.ini'
 
+# A project outside git (G:\UnderTheShadow on the reference machine): nothing vouches for its
+# folders, so nothing is offered.
+[[entry]]
+path = 'G:\UnderTheShadow\UnderTheShadow.uproject'
+[[entry]]
+path = 'G:\UnderTheShadow\Intermediate\Build\Win64\UnrealEditor\Development\UnderTheShadow.obj'
+[[entry]]
+path = 'G:\UnderTheShadow\Binaries\Win64\UnrealEditor-UnderTheShadow.dll'
+
 [[expect]]
 kind     = "clean"
 case     = "project-artifacts"
-match    = ['F:\Unreal\ShooterDemo\Intermediate', 'F:\Unreal\ShooterDemo\DerivedDataCache', 'F:\Unreal\ShooterDemo\Binaries',
-            'F:\Unreal\ShooterDemo\Saved\Logs', 'F:\Unreal\ShooterDemo\Saved\Crashes']
+match    = ['F:\Unreal\ShooterDemo\Intermediate', 'F:\Unreal\ShooterDemo\DerivedDataCache',
+            'F:\Unreal\ShooterDemo\Saved\Logs', 'F:\Unreal\ShooterDemo\Saved\Crashes', 'F:\Unreal\ShooterDemo\Saved\Cooked',
+            'F:\Unreal\ShooterDemo\Saved\StagedBuilds', 'F:\Unreal\ShooterDemo\Saved\webcache_4430']
 no_match = ['F:\Unreal\ShooterDemo\Saved', 'F:\Unreal\ShooterDemo\Saved\Config', 'F:\Unreal\ShooterDemo\Content',
-            'F:\Unreal\ShooterDemo\Config']
+            'F:\Unreal\ShooterDemo\Config', 'F:\Unreal\ShooterDemo\Saved\Autosaves', 'F:\Unreal\ShooterDemo\Saved\Collections',
+            'F:\Unreal\ShooterDemo\Binaries', 'G:\UnderTheShadow\Intermediate']
+
+[[expect]]
+kind     = "clean"
+case     = "project-binaries"
+match    = ['F:\Unreal\ShooterDemo\Binaries']
+no_match = ['G:\UnderTheShadow\Binaries', 'F:\Unreal\ShooterDemo\Intermediate']
+
+[[expect]]
+kind     = "attribution"
+case     = "megascans-library"
+match    = ['G:\UE\Megascans Library', 'C:\Users\owner\Documents\Megascans Library']
+no_match = ['G:\UE', 'G:\UnderTheShadow\Content\Megascans']
 
 [[expect]]
 kind     = "attribution"
@@ -83,5 +129,11 @@ match    = ['C:\ProgramData\Epic\EpicGamesLauncher\VaultCache']
 kind     = "attribution"
 case     = "project-output"
 match    = ['C:\Users\owner\Documents\Unreal Projects\ShooterDemo\Intermediate',
+            'C:\Users\owner\Documents\Unreal Projects\ShooterDemo\DerivedDataCache']
+no_match = ['C:\Users\owner\Documents\Unreal Projects\ShooterDemo\Content',
             'C:\Users\owner\Documents\Unreal Projects\ShooterDemo\Binaries']
-no_match = ['C:\Users\owner\Documents\Unreal Projects\ShooterDemo\Content']
+
+[[expect]]
+kind     = "attribution"
+case     = "project-binaries"
+match    = ['C:\Users\owner\Documents\Unreal Projects\ShooterDemo\Binaries']

@@ -32,6 +32,15 @@ category = "recycle-bin"
 label    = "Recycle Bin"
 reclaim  = { kind = "clean-rule", ref = "recycle-bin", note = "Empties the Recycle Bin; other users' bins need admin." }
 
+# Windows Installer's rollback folder on each volume (sources: pack.toml): rollback scripts and
+# the files an installation replaces, kept until it commits. Only administrators can open it.
+[[area]]
+id       = "installer-rollback"
+paths    = ['?:\Config.Msi']
+category = "system"
+label    = "Windows Installer rollback files (needs admin to size)"
+reclaim  = { kind = "none" }
+
 [[area]]
 id       = "system"
 paths    = ['%WINDIR%']

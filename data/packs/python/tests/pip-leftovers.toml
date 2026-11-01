@@ -1,0 +1,76 @@
+# pip's uninstall stash in site-packages, as on the reference machine (F:\Python313: ~-rch,
+# ~orch, ~umpy.libs next to torch 2.12.1+cpu). Installed packages and a stash a running pip may
+# still roll back stay; a Python on a removable drive (H:) is not on a fixed volume.
+
+volumes = ['C:\', 'D:\', 'E:\', 'F:\', 'G:\', 'W:\']
+
+[[entry]]
+path     = 'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\~-rch\lib\torch_cuda.dll'
+size     = 966367641
+age_days = 129
+[[entry]]
+path     = 'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\~orch\lib\torch_cpu.dll'
+age_days = 129
+[[entry]]
+path     = 'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\~umpy.libs\libscipy_openblas64_.dll'
+age_days = 361
+[[entry]]
+path     = 'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\~ydantic\main.py'
+age_days = 0
+[[entry]]
+path     = 'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\torch\lib\torch_cpu.dll'
+age_days = 129
+[[entry]]
+path     = 'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\torch-2.12.1+cpu.dist-info\METADATA'
+age_days = 129
+[[entry]]
+path     = 'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\numpy\__init__.py'
+[[entry]]
+path     = 'C:\Users\owner\AppData\Roaming\Python\Python312\site-packages\~andas\core\frame.py'
+age_days = 30
+
+[[entry]]
+path     = 'F:\Python313\Lib\site-packages\~-rch\lib\torch_cuda.dll'
+size     = 966367641
+age_days = 129
+[[entry]]
+path     = 'F:\Python313\Lib\site-packages\~umpy.libs\libscipy_openblas64_.dll'
+age_days = 129
+[[entry]]
+path     = 'F:\Python313\Lib\site-packages\torch\lib\torch_cpu.dll'
+age_days = 129
+[[entry]]
+path     = 'F:\Python312\Lib\site-packages\~ip\__init__.py'
+age_days = 2
+[[entry]]
+path     = 'H:\Python313\Lib\site-packages\~orch\lib\torch_cpu.dll'
+age_days = 129
+
+[[expect]]
+kind     = "clean"
+case     = "pip-uninstall-leftovers"
+match    = ['C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\~-rch',
+            'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\~orch',
+            'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\~umpy.libs',
+            'C:\Users\owner\AppData\Roaming\Python\Python312\site-packages\~andas',
+            'F:\Python313\Lib\site-packages\~-rch', 'F:\Python313\Lib\site-packages\~umpy.libs']
+no_match = ['C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\~ydantic',
+            'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\torch',
+            'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\torch-2.12.1+cpu.dist-info',
+            'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\numpy',
+            'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages',
+            'F:\Python313\Lib\site-packages\torch', 'F:\Python313\Lib\site-packages',
+            'F:\Python312\Lib\site-packages\~ip', 'H:\Python313\Lib\site-packages\~orch']
+
+[[expect]]
+kind     = "attribution"
+case     = "pip-uninstall-leftovers"
+match    = ['F:\Python313\Lib\site-packages\~-rch', 'F:\Python313\Lib\site-packages\~umpy.libs',
+            'C:\Users\owner\AppData\Local\Programs\Python\Python313\Lib\site-packages\~orch']
+no_match = ['F:\Python313\Lib\site-packages\torch', 'F:\Python313\Lib\site-packages']
+
+[[expect]]
+kind     = "attribution"
+case     = "installations"
+match    = ['F:\Python313', 'F:\Python312', 'C:\Users\owner\AppData\Local\Programs\Python']
+no_match = ['F:\Python', 'F:\Python-tools', 'F:\MyClean']

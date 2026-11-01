@@ -92,6 +92,19 @@ TEST(Win32FileTree, DescribesALinkAndNeverListsThroughIt) {
   EXPECT_EQ(tree.stat(sandbox.root() / "missing").error().code, Errc::not_found);
 }
 
+TEST(Win32FileTree, FixedVolumesIncludeTheSystemDriveInLetterOrder) {
+  const std::vector<fs::path> volumes = Win32FileTree{}.fixed_volumes();
+  std::wstring windows(MAX_PATH, L'\0');
+  ASSERT_GT(::GetWindowsDirectoryW(windows.data(), MAX_PATH), 0U);
+  const fs::path system = std::wstring{windows.front(), L':', L'\\'};
+  EXPECT_NE(std::ranges::find(volumes, system), volumes.end());
+  EXPECT_TRUE(std::ranges::is_sorted(volumes));
+  for (const fs::path& volume : volumes) {
+    EXPECT_EQ(volume.native().size(), 3U);
+    EXPECT_EQ(::GetDriveTypeW(volume.c_str()), static_cast<UINT>(DRIVE_FIXED));
+  }
+}
+
 TEST(Win32Usage, FileOpenWithoutDeleteSharingIsLocked) {
   const Sandbox sandbox;
   const fs::path path = sandbox.root() / "open.log";

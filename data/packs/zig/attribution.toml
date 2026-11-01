@@ -6,3 +6,18 @@ paths    = ['%LOCALAPPDATA%\zig', '%ZIG_GLOBAL_CACHE_DIR%']
 category = "dev-caches"
 label    = "Zig global build cache"
 reclaim  = { kind = "clean-rule", ref = "global-cache", note = "Regenerates: entries unused for 30 days are offered." }
+
+# Project-local build caches (source: Zig build system guide, see pack.toml). Projects can be
+# anywhere, so the folder is named at every depth the workspace scanner walks (data/workspaces.toml,
+# max_depth 8). The old name zig-cache is left out: a project-pinned global cache can carry it too
+# (E:\UzmiGames\UzEngine\.tools\zig-cache), and the area would mislabel it. Observed on reference
+# machine: E:\UzmiGames\UzEngine\runtime\.zig-cache (117 GiB),
+# E:\UzmiGames\UzEngine\.claude\worktrees\agent-*\runtime\.zig-cache.
+[[area]]
+id       = "project-cache"
+paths    = ['?:\.zig-cache', '?:\*\.zig-cache', '?:\*\*\.zig-cache', '?:\*\*\*\.zig-cache',
+            '?:\*\*\*\*\.zig-cache', '?:\*\*\*\*\*\.zig-cache', '?:\*\*\*\*\*\*\.zig-cache',
+            '?:\*\*\*\*\*\*\*\.zig-cache', '?:\*\*\*\*\*\*\*\*\.zig-cache']
+category = "build-artifacts"
+label    = "Zig project build caches (.zig-cache)"
+reclaim  = { kind = "clean-rule", ref = "project-cache", note = "Deleted on its own once the project is inactive for 7 days; zig build compiles again." }

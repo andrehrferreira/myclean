@@ -35,6 +35,44 @@ project  = { marker = "*.slnx" }
 targets  = [".vs"]
 require  = { git_ignored = true, not_in_use = true, inactive_days = 14 }
 
+# Visual Studio's code-intelligence caches inside a solution's .vs folder (sources: pack.toml):
+# the C++ IntelliSense precompiled-header cache (v17\ipch), the browse databases (Browse.VC.db,
+# Solution.VC.db, with their SQLite -wal/-shm journals, which must go with them), Copilot's code
+# index (CopilotIndices\<VS version>\CodeChunks.db, SemanticSymbols.db) and the Find in Files
+# index (FileContentIndex\*.vsidx). Visual Studio rebuilds each in the background when the
+# solution opens; no build is needed. The per-user state beside them (.suo, DocumentLayout.json,
+# fileList.bin, *.projects.v*.bin, DesignTimeBuild) is never a target; .vs as a whole is the
+# ask-tier sln-state case, which covers these once the solution is inactive 14 days. Observed on
+# reference machine: 15 .vs folders on G:, 45.06 GiB, of which 44.74 GiB are these caches
+# (G:\ToS\_Backups\NetworkSample\.vs\NetworkSample: v17\ipch 9.89 GiB, v17\Browse.VC.db 2.32 GiB,
+# CopilotIndices\17.14.794.21998 4.22 GiB). Artifact rules (cleaning spec, "Developer Artifact
+# Qualification"): unused, auto waits 7 days for the project and for the cache itself; only a
+# tool writes these names, so a solution outside git qualifies too (outside_git), while inside a
+# work tree git must ignore the cache and track nothing in it.
+[[rule]]
+id       = "intellisense-cache"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "*.sln" }
+targets  = ['.vs\*\v1*\ipch', '.vs\*\v1*\Browse.VC.db', '.vs\*\v1*\Solution.VC.db',
+            '.vs\*\v1*\*.VC.db-wal', '.vs\*\v1*\*.VC.db-shm', '.vs\*\CopilotIndices',
+            '.vs\*\FileContentIndex']
+require  = { git_ignored = true, outside_git = true, not_in_use = true, inactive_days = 7, min_age_days = 7 }
+
+[[rule]]
+id       = "slnx-intellisense-cache"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "*.slnx" }
+targets  = ['.vs\*\v1*\ipch', '.vs\*\v1*\Browse.VC.db', '.vs\*\v1*\Solution.VC.db',
+            '.vs\*\v1*\*.VC.db-wal', '.vs\*\v1*\*.VC.db-shm', '.vs\*\CopilotIndices',
+            '.vs\*\FileContentIndex']
+require  = { git_ignored = true, outside_git = true, not_in_use = true, inactive_days = 7, min_age_days = 7 }
+
 # The Visual Studio Installer's package cache (source: "Disable or move the package cache", see
 # pack.toml): the installed packages' payloads, kept to repair or modify offline; "The installer
 # will download them when needed". Every payload is one folder named <package>,version=<v>[,...]

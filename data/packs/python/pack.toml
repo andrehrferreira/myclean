@@ -1,13 +1,15 @@
 id          = "python"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "Python, pip, uv and Conda"
-description = "Caches and build output of inactive Python projects (cleaned), pip's and uv's caches (pruned with each tool's own command), Python and Conda installations (uninstall), and what python.exe is. Store Pythons are in the python-store pack."
+description = "Caches and build output of inactive Python projects (cleaned), pip's uninstall leftovers (cleaned), pip's and uv's caches (pruned with each tool's own command), Python and Conda installations (uninstall), and what python.exe is. Store Pythons are in the python-store pack."
 sources     = [
   "https://pip.pypa.io/en/stable/topics/caching/ (pip's cache, %LOCALAPPDATA%\\pip\\cache on Windows: HTTP responses and built wheels, safe to remove)",
   "https://pip.pypa.io/en/stable/cli/pip_cache/ (`pip cache purge`)",
   "https://docs.astral.sh/uv/concepts/cache/ (uv's cache, %LOCALAPPDATA%\\uv\\cache on Windows; `uv cache prune`)",
   "https://docs.conda.io/projects/conda/en/latest/commands/clean.html (`conda clean --all`)",
   "observed on reference machine: %LOCALAPPDATA%\\pip\\cache, %LOCALAPPDATA%\\uv\\cache, %LOCALAPPDATA%\\Programs\\Python; Python projects (pyproject.toml, setup.py, requirements*.txt) with __pycache__, .pytest_cache, .mypy_cache, .ruff_cache, .tox, *.egg-info, build and dist ignored by git (analysis F-012, F-013); python.exe, its image path and signer",
+  "https://github.com/pypa/pip/blob/main/src/pip/_internal/utils/temp_dir.py (AdjacentTempDirectory: a stash is named '~' plus characters that are not valid package names, e.g. torch -> ~orch, ~-rch) and https://github.com/pypa/pip/blob/main/src/pip/_internal/req/req_uninstall.py (StashedUninstallPathSet: the stash is deleted on commit, restored on rollback)",
+  "observed on reference machine: F:\\Python313 and F:\\Python312 installed at the root of F:; F:\\Python313\\Lib\\site-packages\\~-rch (3.5 GiB), ~orch, ~umpy, ~umpy.libs left by a torch upgrade on 2026-06-25, next to torch 2.12.1+cpu",
 ]
 min_myclean = "0.1.0"
 

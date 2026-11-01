@@ -108,6 +108,22 @@ class MemoryTree final : public clean::IFileTree {
     return children;
   }
 
+  // Every volume root in the tree, unless set_fixed_volumes() named them.
+  void set_fixed_volumes(std::vector<fs::path> volumes) { fixed_volumes_ = std::move(volumes); }
+
+  [[nodiscard]] std::vector<fs::path> fixed_volumes() const override {
+    if (fixed_volumes_) {
+      return *fixed_volumes_;
+    }
+    std::vector<fs::path> roots;
+    for (const auto& [key, entry] : entries_) {
+      if (!entry.path.has_relative_path()) {
+        roots.push_back(entry.path);
+      }
+    }
+    return roots;
+  }
+
  private:
   void insert(const fs::path& path, os::EntryKind kind, Bytes size, WallTime touched) {
     clean::Entry entry{.path = path,
@@ -122,6 +138,7 @@ class MemoryTree final : public clean::IFileTree {
   }
 
   std::map<std::wstring, clean::Entry> entries_;
+  std::optional<std::vector<fs::path>> fixed_volumes_;
   std::uint64_t next_id_ = 0;
 };
 
@@ -217,6 +234,17 @@ void read_machine(const Fields& root, Machine& machine) {
     for (const std::string& path : fields.required_strings("roots")) {
       machine.workspaces.roots.push_back(from_utf8(path));
     }
+  }
+  if (root.table().contains("volumes")) {
+    std::vector<fs::path> volumes;
+    for (const std::string& volume : root.required_strings("volumes")) {
+      const fs::path path = from_utf8(volume);
+      if (!path.has_root_name() || !path.has_root_directory() || path != path.root_path()) {
+        root.fail("volumes", "must hold volume roots such as 'C:\\', not '" + volume + "'");
+      }
+      volumes.push_back(path);
+    }
+    machine.tree.set_fixed_volumes(std::move(volumes));
   }
   int number = 0;
   for (const toml::table* table : root.tables("entry")) {
@@ -389,7 +417,7 @@ std::vector<std::string> run_fixture(const Pack& pack, std::string_view text,
   try {
     const toml::table root = detail::parse_document(text, file);
     const Fields fields(root, utf8(file));
-    fields.only({"env", "workspace", "entry", "expect"});
+    fields.only({"env", "workspace", "volumes", "entry", "expect"});
     Machine machine;
     read_machine(fields, machine);
     const std::vector<const toml::table*> expects = fields.tables("expect");

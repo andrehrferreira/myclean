@@ -30,8 +30,26 @@ reclaim  = { kind = "manual-review", note = "Epic Games launcher > Settings > Ed
 
 [[area]]
 id       = "project-output"
-paths    = ['%USERPROFILE%\Documents\Unreal Projects\*\Intermediate', '%USERPROFILE%\Documents\Unreal Projects\*\DerivedDataCache',
-            '%USERPROFILE%\Documents\Unreal Projects\*\Binaries']
+paths    = ['%USERPROFILE%\Documents\Unreal Projects\*\Intermediate', '%USERPROFILE%\Documents\Unreal Projects\*\DerivedDataCache']
 category = "build-artifacts"
 label    = "Unreal project build output and derived data"
 reclaim  = { kind = "clean-rule", ref = "project-artifacts" }
+
+[[area]]
+id       = "project-binaries"
+paths    = ['%USERPROFILE%\Documents\Unreal Projects\*\Binaries']
+category = "build-artifacts"
+label    = "Unreal project binaries"
+reclaim  = { kind = "clean-rule", ref = "project-binaries" }
+
+# Quixel Bridge's local library (the folder set in Bridge > Settings > Local Library Path):
+# Downloaded\UAssets\<asset id>\Tier<n> holds the Unreal assets Bridge downloaded; adding one to
+# a project copies it into the project's Content\Megascans. Observed on reference machine:
+# G:\UE\Megascans Library, 26.96 GiB, every file of 1 MiB or more also in a project
+# (G:\UnderTheShadow\Content\Megascans 25.73 GiB).
+[[area]]
+id       = "megascans-library"
+paths    = ['%USERPROFILE%\Documents\Megascans Library', '?:\Megascans Library', '?:\*\Megascans Library']
+category = "dev-caches"
+label    = "Quixel Bridge (Megascans) local library"
+reclaim  = { kind = "manual-review", note = "Assets a project already holds are copies here; Bridge adds them to the next project from this folder, and downloading them again depends on your Fab/Quixel account." }

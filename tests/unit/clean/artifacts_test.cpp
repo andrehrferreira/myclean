@@ -182,6 +182,71 @@ TEST_F(ArtifactScanTest, WithoutGitNothingIsProposed) {
   EXPECT_EQ(dropped_at(evaluation, R"(F:\loose\target)")->reason, "not_in_git");
 }
 
+// require.outside_git: a cache only a tool writes may go from a project outside git, on the other
+// guards; inside a work tree git must still vouch for it.
+TEST_F(ArtifactScanTest, OutsideGitRuleQualifiesProjectsWithoutGitAndStillAsksGitInsideOne) {
+  const CleaningRule cache{.id = "ipch",
+                           .category = "test",
+                           .tier = Tier::automatic,
+                           .scope = ExecutionContext::user,
+                           .strategy = rules::Strategy::remove,
+                           .targets = {R"(.vs\*\v17\ipch)"},
+                           .project_marker = "*.sln",
+                           .require = {.git_ignored = true,
+                                       .outside_git = true,
+                                       .not_in_use = true,
+                                       .inactive_days = 7,
+                                       .min_age_days = 7}};
+  CleaningRule output = cache;
+  output.id = "bin";
+  output.targets = {"bin"};
+  output.require.outside_git = false;
+  // Outside git: idle, active, and busy.
+  tree().add_file(R"(F:\ToS\Client\Client.sln)", 1_KiB, days_ago(200));
+  tree().add_file(R"(F:\ToS\Client\.vs\Client\v17\ipch\a.ipch)", 1_MiB, days_ago(200));
+  tree().add_file(R"(F:\ToS\Client\.vs\Client\v17\.suo)", 1_KiB, days_ago(200));
+  tree().add_file(R"(F:\ToS\Client\bin\Client.exe)", 1_MiB, days_ago(200));
+  tree().add_file(R"(F:\Fresh\Fresh.sln)", 1_KiB, days_ago(200));
+  tree().add_file(R"(F:\Fresh\Program.cs)", 1_KiB, days_ago(2));
+  tree().add_file(R"(F:\Fresh\.vs\Fresh\v17\ipch\a.ipch)", 1_MiB, days_ago(200));
+  tree().add_file(R"(F:\Busy\Busy.sln)", 1_KiB, days_ago(200));
+  tree().add_file(R"(F:\Busy\.vs\Busy\v17\ipch\a.ipch)", 1_MiB, days_ago(200));
+  usage().lock(R"(F:\Busy\.vs\Busy\v17\ipch\a.ipch)");
+  // Inside a work tree that does not ignore .vs.
+  add_project(R"(F:\Repo)", "Repo.sln", 200);
+  tree().add_file(R"(F:\Repo\.vs\Repo\v17\ipch\a.ipch)", 1_MiB, days_ago(200));
+
+  const std::vector<CleaningRule> rules = {cache, output};
+  const Evaluation evaluation = engine().scan_artifacts(rules, workspaces(), git(), now);
+
+  EXPECT_EQ(paths_of(evaluation), (std::vector<fs::path>{R"(F:\ToS\Client\.vs\Client\v17\ipch)"}));
+  EXPECT_EQ(dropped_at(evaluation, R"(F:\ToS\Client\bin)")->reason, "not_in_git");
+  EXPECT_EQ(dropped_at(evaluation, R"(F:\Busy\.vs\Busy\v17\ipch)")->reason, "in_use");
+  EXPECT_EQ(dropped_at(evaluation, R"(F:\Repo\.vs\Repo\v17\ipch)")->reason, "not_ignored");
+  EXPECT_EQ(dropped_at(evaluation, R"(F:\Fresh\.vs\Fresh\v17\ipch)"), nullptr);
+}
+
+// Cleaning spec, "Idle terminal in a project": a rule acting inside active projects
+// (inactive_days 0) is blocked only by a process inside its own item; a whole-artifact rule of
+// the same project still is by one anywhere in the project.
+TEST_F(ArtifactScanTest, ProcessInTheProjectBlocksWholeArtifactsButNotStaleIncrementalFolders) {
+  add_project(R"(F:\engine)", "Cargo.toml", 30);
+  const fs::path incremental = R"(F:\engine\target\debug\incremental)";
+  tree().add_file(incremental / "engine-a" / "s-1" / "dep-graph.bin", 1_MiB, days_ago(30));
+  tree().add_file(incremental / "engine-b" / "s-2" / "dep-graph.bin", 1_MiB, days_ago(30));
+  git().ignore(R"(F:\engine\target)");
+  git().ignore(incremental / "engine-a");
+  git().ignore(incremental / "engine-b");
+  usage().add_process_folder(R"(F:\engine\src)");  // a terminal left open in the project
+  usage().add_process_folder(incremental / "engine-b" / "s-2");
+
+  const Evaluation evaluation = scan();
+
+  EXPECT_EQ(paths_of(evaluation), (std::vector<fs::path>{incremental / "engine-a"}));
+  EXPECT_EQ(dropped_at(evaluation, R"(F:\engine\target)")->reason, "in_use");
+  EXPECT_EQ(dropped_at(evaluation, incremental / "engine-b")->reason, "in_use");
+}
+
 TEST_F(ArtifactScanTest, GitFailureProposesNothingFromThatRepository) {
   add_project(R"(F:\app)", "package.json", 45);
   tree().add_file(R"(F:\app\node_modules\x\index.js)", 1_MiB, days_ago(45));

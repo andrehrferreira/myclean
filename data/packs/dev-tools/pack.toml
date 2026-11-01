@@ -1,5 +1,5 @@
 id          = "dev-tools"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "Developer folders and SDKs"
 description = "Where source code projects, SDKs and toolchains and the shared developer cache folder (~/.cache) are (for review or uninstall), Trivy's downloaded Java database (cleaned), and what Git's processes are."
 sources     = [
@@ -7,6 +7,7 @@ sources     = [
   "https://trivy.dev/latest/docs/configuration/db/ (Trivy's databases, the Java DB among them, are fetched and maintained automatically as needed)",
   "observed on reference machine: %LOCALAPPDATA%\\java-db\\trivy-java.db (1.5 GiB) and metadata.json, beside Trivy's fanal cache in %LOCALAPPDATA%\\fanal",
   "observed on reference machine: bash.exe and git.exe of Git for Windows, their image paths and signers",
+  "observed on reference machine: LLVM installed at F:\\LLVM (3.9 GiB)",
 ]
 min_myclean = "0.1.0"
 

@@ -1,0 +1,16 @@
+id          = "databases"
+version     = "1.0.0"
+title       = "Database servers"
+description = "Where MongoDB and PostgreSQL servers and pgAdmin are installed, for review or uninstall. Never cleaned: their data folders hold the owner's databases."
+sources     = [
+  "https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-windows/ (default %ProgramFiles%\\MongoDB\\Server\\<version>, with bin, data and log)",
+  "https://www.postgresql.org/download/windows/ (EDB installer: %ProgramFiles%\\PostgreSQL\\<major>, optionally with pgAdmin 4 inside)",
+  "https://www.pgadmin.org/download/pgadmin-4-windows/ (standalone pgAdmin 4 installer)",
+  "observed on reference machine: F:\\MongoDB\\Server\\8.0 (2.9 GiB: mongod.pdb and mongos.pdb 1.8, mongod.log 0.5, service stopped), F:\\PostgreSQL\\18 (1.0 GiB, with its own pgAdmin 4, service postgresql-x64-18) and a second, standalone F:\\pgAdmin 4 (pgAdmin 4 version 9.9)",
+]
+min_myclean = "0.1.0"
+
+[applies_when]
+any = [{ app_installed = '^(MongoDB \d|PostgreSQL \d|pgAdmin 4)' }, { process_image = "mongod.exe" },
+       { process_image = "postgres.exe" }, { path_exists = '%ProgramFiles%\MongoDB\Server' },
+       { path_exists = '%ProgramFiles%\PostgreSQL' }, { path_exists = '%ProgramFiles%\pgAdmin 4' }]

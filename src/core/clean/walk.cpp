@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <functional>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -77,8 +78,25 @@ Matches resolve(const IFileTree& tree, const fs::path& base, const fs::path& pat
   return matches;
 }
 
+bool on_every_volume(const fs::path& pattern) {
+  const std::wstring& text = pattern.native();
+  return text.size() >= 3 && text[0] == L'?' && text[1] == L':' &&
+         (text[2] == L'\\' || text[2] == L'/');
+}
+
 Matches resolve(const IFileTree& tree, const fs::path& pattern) {
-  return resolve(tree, pattern.root_path(), pattern.relative_path());
+  if (!on_every_volume(pattern)) {
+    return resolve(tree, pattern.root_path(), pattern.relative_path());
+  }
+  // std::filesystem does not take "?:" for a drive, so the rest is cut from the text.
+  const fs::path rest{pattern.native().substr(3)};
+  Matches matches;
+  for (const fs::path& volume : tree.fixed_volumes()) {
+    Matches found = resolve(tree, volume, rest);
+    std::ranges::move(found.entries, std::back_inserter(matches.entries));
+    std::ranges::move(found.links, std::back_inserter(matches.links));
+  }
+  return matches;
 }
 
 WalkEnd walk(const IFileTree& tree, const fs::path& root,

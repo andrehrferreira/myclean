@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Rule Catalog as Data
-The system SHALL load cleaning rules from data files covering Windows temp, caches and dumps, browsers, Electron apps, IDEs, GPU shader caches, game launchers and package managers, where each rule declares its targets, tier and strategy (delete, quarantine, native or handler), and MUST reject an invalid rule without applying any part of it.
+The system SHALL load cleaning rules from data files covering Windows temp, caches and dumps, browsers, Electron apps, IDEs, GPU shader caches, game launchers and package managers, where each rule declares its targets, tier and strategy (delete, quarantine, native or handler), and MUST reject an invalid rule without applying any part of it. A target is an absolute path under a `%VARIABLE%`, a drive or `?:\` (the same path on every local fixed volume), or, for a project rule, a path relative to the project root; a target that could never match (relative without a project, absolute with one, or with a `..` component) makes the rule invalid.
 
 #### Scenario: User temp rule
 Given the built-in rule for the user `%TEMP%` folder
@@ -22,6 +22,11 @@ When the catalog is loaded
 Then the rule's tier is `auto` (the driver rebuilds a shader cache; the cost is a one-time stutter, never lost work)
 And a cache a running game holds open is skipped
 
+#### Scenario: Any-drive target
+Given a rule targeting `?:\Python3*\Lib\site-packages\~*` and fixed volumes C: and F:, and a USB stick H:
+When the rule is evaluated
+Then `F:\Python313\Lib\site-packages\~orch` can be selected and nothing on H: is
+
 #### Scenario: Invalid rule rejected
 Given a rule file containing a rule with an unknown strategy value
 When the catalog is loaded
@@ -29,7 +34,7 @@ Then that rule is rejected and reported
 And no target of that rule is ever selected
 
 ### Requirement: Developer Artifact Qualification
-The system SHALL find project roots by marker files under the configured workspace roots (default D:, E:, F:, G: and W:) and SHALL propose an artifact folder only if all of the following hold: it matches the rule for that project type; inside a git repository `git check-ignore` reports it as ignored; no process has its current directory or an open file inside it; and the project has been inactive for at least the rule's inactive-days (default 14, 30 for `auto`-tier rules), where activity is the newest of the last commit and the newest source-file modification time. An `auto`-tier rule MUST wait at least 7 days, either for the project (inactive-days) or for the artifact itself (min-age-days, the newest write inside it). A Cargo project's target goes after 7 inactive days (what `cargo clean` removes; the next build compiles again), and the incremental crate folders no build wrote for 7 days go even while the project is active.
+The system SHALL find project roots by marker files under the configured workspace roots (default D:, E:, F:, G: and W:) and SHALL propose an artifact folder only if all of the following hold: it matches the rule for that project type; inside a git repository `git check-ignore` reports it as ignored; no process has its current directory or an open file inside it; and the project has been inactive for at least the rule's inactive-days (default 14, 30 for `auto`-tier rules), where activity is the newest of the last commit and the newest source-file modification time. An `auto`-tier rule MUST wait at least 7 days, either for the project (inactive-days) or for the artifact itself (min-age-days, the newest write inside it). A Cargo project's target goes after 7 inactive days (what `cargo clean` removes; the next build compiles again), and the incremental crate folders no build wrote for 7 days go even while the project is active; for such a rule (inactive-days 0) only a process with its current directory or an open file inside the item itself keeps it, while a process folder anywhere in the project keeps every other artifact of it. A Zig project's `.zig-cache` goes after 7 inactive days (the Zig build-system guide: it can be deleted at any time; the next build compiles again). An `auto`-tier rule whose targets are pure caches written only by a tool, never a folder a person names by hand (Visual Studio's IntelliSense, browse-database, Copilot and search caches inside `.vs`), MAY set `outside_git`: a project outside any git repository is then offered on the other conditions, with the cache itself unchanged for at least 7 days; inside a repository git must still report it ignored and tracking nothing.
 
 #### Scenario: Ignored artifact of an inactive project
 Given `F:\app\package.json` exists, `F:\app\node_modules` is ignored by git, no process uses it, and the last commit and newest source change are 45 days old
@@ -55,6 +60,16 @@ Then none of its artifact folders are proposed
 Given `F:\engine\src\lib.rs` was modified yesterday, `F:\engine\target` is ignored by git and no process uses the project, and `target\debug\incremental` holds `engine-a` last written 12 days ago and `engine-b` written yesterday
 When the developer-artifact scanner runs
 Then only `F:\engine\target\debug\incremental\engine-a` is proposed, and `target` as a whole is not
+
+#### Scenario: Idle terminal in a project
+Given a terminal has had `F:\engine\src` as its current directory for days, `F:\engine\target` is ignored by git, and `target\debug\incremental\engine-a` was last written 30 days ago
+When the developer-artifact scanner runs
+Then `target\debug\incremental\engine-a` is proposed, and `F:\engine\target` as a whole is not (in use)
+
+#### Scenario: Tool cache of a solution outside git
+Given `G:\ToS\Client\Client.sln` is in no git repository, its newest source change is 200 days old, no process uses it, and `.vs\Client\v17\ipch` was last written 200 days ago next to `.vs\Client\v17\.suo` and `bin`
+When the developer-artifact scanner runs
+Then `.vs\Client\v17\ipch` is proposed (auto), and `.suo` and `bin` are not
 
 #### Scenario: Unreal Saved folder
 Given an Unreal project with `Saved\Logs`, `Saved\Crashes` and `Saved\Config`
