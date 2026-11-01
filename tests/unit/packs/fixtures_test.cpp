@@ -47,7 +47,7 @@ category = "dev-caches"
 tier     = "ask"
 scope    = "user"
 strategy = "native"
-command  = "tool prune"
+command  = "pnpm store prune"
 targets  = ['%LOCALAPPDATA%\tool\store']
 
 [[rule]]

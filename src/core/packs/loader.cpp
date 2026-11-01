@@ -15,6 +15,7 @@
 
 #include <toml++/toml.hpp>
 
+#include "core/cleanup/native_command.hpp"
 #include "core/map/attribution.hpp"
 #include "core/model/enum_names.hpp"
 #include "core/model/result.hpp"
@@ -213,6 +214,25 @@ Result<void> check_no_caps(std::string_view text, const fs::path& file) {
   }
 }
 
+// A native rule may name only a command the tray runs (cleanup::find_native_tool); the tray
+// refuses any other, so such a rule would only ever fail.
+Result<std::vector<rules::CleaningRule>> check_native_commands(
+    Result<std::vector<rules::CleaningRule>> rules, const fs::path& file) {
+  if (!rules) {
+    return rules;
+  }
+  for (const rules::CleaningRule& rule : *rules) {
+    if (rule.strategy == rules::Strategy::native &&
+        cleanup::find_native_tool(rule.command) == nullptr) {
+      return fail(Errc::invalid_data, utf8(file) + ": rule '" + rule.id +
+                                          "': field 'command' is not a native command MyClean "
+                                          "runs: '" +
+                                          rule.command + "'");
+    }
+  }
+  return rules;
+}
+
 // Reads one content file into `pack`.
 Result<void> load_content(Pack& pack, std::string_view name, const std::string& text,
                           const fs::path& file) {
@@ -225,7 +245,7 @@ Result<void> load_content(Pack& pack, std::string_view name, const std::string& 
     return namespace_ids(entries, id, file);
   };
   if (name == "clean.toml") {
-    return into(pack.clean, rules::parse_rule_file(text, file));
+    return into(pack.clean, check_native_commands(rules::parse_rule_file(text, file), file));
   }
   if (name == "attribution.toml") {
     return into(pack.attribution, map::parse_attribution_file(text, file));

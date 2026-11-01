@@ -18,6 +18,7 @@ myclean_add_library(packs
     schema.hpp
   DEPENDS
     myclean::clean
+    myclean::cleanup
     myclean::map
     myclean::rules
     tomlplusplus::tomlplusplus)

@@ -161,7 +161,9 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
         return std::make_unique<platform::Win32Machine>(std::wstring(owner.begin(), owner.end()));
       },
       .owner_packs = owner_packs};
-  const std::filesystem::path root = std::filesystem::path(drive.empty() ? "C:" : drive) / "";
+  // "C:" / "" stays "C:" (a drive-relative path); the handlers need the volume root "C:\".
+  const std::filesystem::path root =
+      std::filesystem::path((drive.empty() ? std::string("C:") : drive) + "\\");
   return std::make_unique<svc::CleaningComponent>(
       std::move(sources), files,
       svc::CleaningMode{.console = options.mode == svc::Mode::console,

@@ -158,6 +158,24 @@ TEST(LoadPack, RejectsBadCaseIdsAndRefs) {
   expect_error(load(files, "tool"), "names a case of another pack");
 }
 
+// The tray runs only the native commands it knows; a pack naming another one would only fail.
+TEST(LoadPack, RejectsANativeCommandMyCleanDoesNotRun) {
+  FakePackFiles files;
+  files.put(builtin / "tool" / "pack.toml", manifest("tool"));
+  const auto native = [](std::string_view command) {
+    return "[[rule]]\nid = \"prune\"\ncategory = \"package-managers\"\ntier = \"ask\"\n"
+           "scope = \"user\"\nstrategy = \"native\"\ncommand = \"" +
+           std::string(command) + "\"\n";
+  };
+  files.put(builtin / "tool" / "clean.toml", native("docker system prune --force"));
+  expect_error(load(files, "tool"),
+               "rule 'prune': field 'command' is not a native command MyClean runs: "
+               "'docker system prune --force'");
+
+  files.put(builtin / "tool" / "clean.toml", native("docker system prune"));
+  EXPECT_TRUE(load(files, "tool").has_value());
+}
+
 TEST(LoadPack, RejectsJobCapsInClasses) {
   FakePackFiles files;
   files.put(builtin / "tool" / "pack.toml", manifest("tool"));
