@@ -6,7 +6,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%2011-0078D6.svg)
 ![Toolchain](https://img.shields.io/badge/MSVC-CMake%20%2B%20Ninja%20%2B%20vcpkg-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Status](https://img.shields.io/badge/status-planning-lightgrey.svg)
+![Status](https://img.shields.io/badge/status-pre--release-yellow.svg)
 
 [What is MyClean?](#-what-is-myclean) • [Features](#-key-features) • [Architecture](#%EF%B8%8F-architecture) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Roadmap](#%EF%B8%8F-roadmap) • [Contributing](#-contributing)
 
@@ -34,9 +34,10 @@ On those machines the real problems are:
 - **Small freezes**, such as a stall on Ctrl+C / Ctrl+V, leave no trace in
   any log.
 
-> **Status: planning.** The requirements, architecture, roadmap, work
-> breakdown and specs are done; implementation starts with milestone M0.
-> Nothing here is usable yet.
+> **Status: pre-release.** Monitoring (M1), freeing C: (M2) and the
+> machine-wide scan are code complete and run on the reference machine; their
+> acceptance runs are still open. The resource governor (M3) is in progress.
+> There is no installer before v1.0.
 
 ## ✨ Key Features
 
@@ -169,8 +170,6 @@ tested by replaying recorded fixtures. Win32 sits behind small interfaces in
 
 ## 🚀 Quick Start
 
-> Nothing is runnable until milestone M1. These are the commands the
-> project is built around.
 
 ### Requirements
 - **Windows 11** (x64)
@@ -193,6 +192,19 @@ pwsh -File tools\deploy\deploy.ps1 -Uninstall
 Builds are installed side by side under `C:\Program Files\MyClean\versions\`,
 and a `current` junction points at the active one. A failed health check
 rolls back automatically. See [docs/deploy.md](docs/deploy.md).
+
+### Look at your drives
+
+```powershell
+myclean map C:                  # where C:'s space went, and how to get it back
+myclean scan-all                # one report for every fixed drive
+myclean scan-all --drives C:,D: --budget-minutes 5 --json
+myclean packs list              # loaded knowledge packs
+myclean packs validate <path>   # run a pack's fixtures
+```
+
+These commands only read. Changes are made through plans that you approve in
+the tray.
 
 ### Use from Claude Code (MCP)
 
@@ -251,6 +263,9 @@ fixes that you approve in the tray.
 - [Initial analysis](docs/analysis/myclean-planning/README.md): measurements and findings F-001 … F-043
 
 ### Development
+- [Development guide](docs/development.md): layout, modules, conventions, quality gate
+- [Knowledge packs](docs/packs.md): how to add cleaning, relocation and compression cases as data
+- [Spikes](docs/spikes/): X1–X8 findings from real hardware
 - [Local deployment](docs/deploy.md): `deploy.ps1` and the binary contracts
 - [Rulebook tasks](.rulebook/tasks/): one task per milestone, with specs
 
@@ -258,11 +273,12 @@ fixes that you approve in the tray.
 
 | Milestone | Delivers | Status |
 |---|---|---|
-| **M0 Foundation** | Build, CI gate, safety core, storage, action framework, scheduler | 📋 Planned |
-| **M1 See everything** | Service, tray, dashboard, telemetry, disk health, input watchdog, CLI, MCP read tools | 📋 Planned |
-| **M2 Free C:** | Space analysis, cleaning tiers, quarantine, relocation, approval inbox | 📋 Planned |
-| **M3 Never freeze** | Resource governor with game protection | 📋 Planned |
-| **M4 Optimize** | Startup, drive maintenance, NTFS index, placement advisor, verify loop | 📋 Planned |
+| **M0 Foundation** | Build, CI gate, safety core, storage, action framework, scheduler | ✅ Done |
+| **M1 See everything** | Service, tray, dashboard, telemetry, disk health, input watchdog, CLI, MCP read tools | 🧪 Code complete, acceptance open |
+| **M2 Free C:** | Space analysis, cleaning tiers, quarantine, relocation, approval inbox | 🧪 Code complete, acceptance open |
+| **M2b Machine-wide scan** | NTFS index, `map`, `scan-all`, drive maintenance, compression, knowledge packs | 🧪 Code complete, acceptance open |
+| **M3 Never freeze** | Resource governor with game protection | 🔄 In progress |
+| **M4 Optimize** | Startup, indexer scope, leak detector, verify loop (NTFS index and drive maintenance came with M2b) | 📋 Planned |
 | **M5 Guard** | Intruder scan, unused apps, backup check | 📋 Planned |
 | **M6 v1.0** | Monthly report, full acceptance suite | 📋 Planned |
 
