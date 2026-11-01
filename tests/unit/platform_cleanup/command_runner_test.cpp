@@ -1,6 +1,9 @@
 #include "core/cleanup/command_runner.hpp"
 
+#include <array>
 #include <chrono>
+#include <cstddef>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <stop_token>
@@ -34,6 +37,7 @@ class CommandRunnerTest : public ::testing::Test {
     write("report-tool.cmd", "@echo off\r\necho [%1] [%2]\r\necho problem 1>&2\r\nexit /b 3\r\n");
     write("slow-tool.cmd", "@echo off\r\nping -n 30 127.0.0.1 >nul\r\n");
     write("ask-tool.cmd", "@echo off\r\nset /p answer=Continue? \r\necho got[%answer%]\r\n");
+    write("where-tool.cmd", "@echo off\r\ncd\r\n");
   }
 
   void TearDown() override {
@@ -72,6 +76,24 @@ TEST_F(CommandRunnerTest, RunsAnAbsoluteProgram) {
 
   ASSERT_TRUE(output) << output.error().message;
   EXPECT_EQ(output->out, "[] []\r\n");
+}
+
+// pnpm picks its store by the current drive, so a command must not inherit the folder the tray
+// happened to start in.
+TEST_F(CommandRunnerTest, ACommandStartsInTheProfileFolderNotInTheCurrentOne) {
+  Win32CommandRunner tools = runner();
+  const fs::path before = fs::current_path();
+  fs::current_path(sandbox());
+
+  const Result<CommandOutput> output = tools.run(Command{.program = "where-tool"}, {});
+
+  fs::current_path(before);
+  ASSERT_TRUE(output) << output.error().message;
+  std::size_t length = 0;
+  std::array<char, 512> profile{};
+  ASSERT_EQ(::getenv_s(&length, profile.data(), profile.size(), "USERPROFILE"), 0);
+  ASSERT_GT(length, 0U);
+  EXPECT_EQ(output->out, std::string(profile.data()) + "\r\n");
 }
 
 TEST_F(CommandRunnerTest, InputIsEndOfFile) {

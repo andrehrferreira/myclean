@@ -13,7 +13,8 @@ namespace myclean::platform {
 // Runs commands as hidden child processes with this process's token: in the tray that is the
 // owner's token, in the service LocalSystem. Each child runs in a job object, so a timeout or a
 // cancel ends its whole tree, and any process it leaves behind is ended when it exits. Standard
-// input is NUL, so a tool that asks a question reads end of file.
+// input is NUL, so a tool that asks a question reads end of file. Every child starts in the
+// profile folder of this process's user (%USERPROFILE%), never in this process's own folder.
 class Win32CommandRunner final : public cleanup::ICommandRunner {
  public:
   // `search_path`: the folders searched for a bare program name, in order; empty means the

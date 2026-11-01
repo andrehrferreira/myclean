@@ -87,6 +87,18 @@ fs::path system_directory() {
   return {std::wstring_view(buffer.data(), length)};
 }
 
+// Where every command starts: the profile folder of this process's user, never the folder this
+// process happened to start in. Tools that pick a cache by the current drive (pnpm puts a store
+// at the root of the drive when the profile is elsewhere) then act on the owner's real cache.
+fs::path working_folder() {
+  const DWORD size = ::GetEnvironmentVariableW(L"USERPROFILE", nullptr, 0);
+  std::wstring value(size, L'\0');
+  value.resize(::GetEnvironmentVariableW(L"USERPROFILE", value.data(), size));
+  const fs::path profile{value};
+  std::error_code error;
+  return profile.is_absolute() && fs::is_directory(profile, error) ? profile : system_directory();
+}
+
 std::vector<fs::path> path_folders() {
   const DWORD size = ::GetEnvironmentVariableW(L"PATH", nullptr, 0);
   std::wstring value(size, L'\0');
@@ -265,10 +277,11 @@ Result<CommandOutput> Win32CommandRunner::run(const Command& command, std::stop_
   }
 
   std::wstring& text = line->second;
+  const fs::path folder = working_folder();
   wil::unique_process_information process;
   if (::CreateProcessW(line->first.c_str(), text.data(), nullptr, nullptr, TRUE,
                        CREATE_NO_WINDOW | CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT, nullptr,
-                       nullptr, &startup.StartupInfo, &process) == FALSE) {
+                       folder.c_str(), &startup.StartupInfo, &process) == FALSE) {
     return tl::unexpected(win32_error("CreateProcess " + command.program, ::GetLastError()));
   }
   if (::AssignProcessToJobObject(job.get(), process.hProcess) == FALSE) {
