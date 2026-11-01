@@ -40,16 +40,16 @@ When the ladder selects a tree
 Then the `svchost.exe` tree is skipped and the heaviest non-protected tree is selected instead
 
 ### Requirement: Proactive Build and Test Jobs
-When a process classified `build` or `test` starts, the governor MUST assign it, on the ETW process-start event, to the named job object `Global\MyClean.Job.<class>` configured with a CPU hard cap (`JobObjectCpuRateControlInformation` with hard cap; default 75 % of the machine) and a whole-tree commit cap (`JOB_OBJECT_LIMIT_JOB_MEMORY`; default 96 GB for `build`, 64 GB for `test`), plus notification limits at 80 % of each hard cap. Both caps SHALL be configurable per class.
+When a process classified `build` or `test` starts and its parent is not already in a MyClean job, the governor MUST assign it, on the ETW process-start event, to a job object of its own tree (one job per tree root, spike X4 §5.1), configured with a CPU hard cap (`JobObjectCpuRateControlInformation` with hard cap; default 75 % of the machine) and a whole-tree commit cap (`JOB_OBJECT_LIMIT_JOB_MEMORY`; default 96 GB for `build`, 64 GB for `test`), plus a commit notification limit at 80 % of the commit cap. A root that is in no job SHALL first be assigned to its class's parent job, which carries the same caps for all such trees together, so the tree job nests under it; a root already in a foreign job (an IDE's) SHALL get a tree job only, which nests under the foreign job. The tree's processes SHALL also run at priority class `BELOW_NORMAL`. Both caps SHALL be configurable per class. Every job MUST be created without `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, `BREAKAWAY_OK` or `SILENT_BREAKAWAY_OK`. CPU use of a job SHALL be judged from its accounting over at least 2 s, since the hard cap is enforced as an average over a cycle of about 0.6 s.
 
 #### Scenario: Build tree capped from launch
 Given default caps
 When `cargo build` starts and spawns 32 `rustc` processes
-Then `cargo` and every `rustc` are members of `Global\MyClean.Job.build`
-And the job's total CPU never exceeds 75 % of the machine
+Then `cargo` and every `rustc` are members of one `build` tree job
+And the job's CPU averaged over 2 s never exceeds 75 % of the machine
 
 #### Scenario: Commit cap stops the tree, not the machine
-Given a `test` tree in `Global\MyClean.Job.test` whose allocations approach 64 GB committed
+Given a `test` tree whose job allocations approach 64 GB committed
 When it tries to commit beyond 64 GB
 Then the allocation fails inside the test tree
 And system commit charge stays below the system commit limit
@@ -57,15 +57,26 @@ And system commit charge stays below the system commit limit
 #### Scenario: Early warning at 80 %
 Given a `build` job with a 96 GB commit cap
 When the job's committed memory passes 76.8 GB
-Then a notification-limit event is recorded in `governor_event` for that job
+Then one notification-limit event is recorded in `governor_event` for that job
+And the job's notification limit is cleared until its commit falls below 70 % of the cap, then set again
 
 #### Scenario: Process already in an IDE job
 Given `msbuild.exe` started by Visual Studio inside Visual Studio's own job
-When the governor assigns it to `Global\MyClean.Job.build`
+When the governor assigns it to a `build` tree job
 Then the assignment succeeds as a nested job and the build cap applies
 
+#### Scenario: Trees from different job hierarchies
+Given a `cargo build` started from a terminal and an `msbuild.exe` started inside Visual Studio's job
+When both are assigned
+Then each tree is capped in its own tree job and neither assignment fails
+
+#### Scenario: Child of a capped tree
+Given `cargo` is in a `build` tree job
+When it starts `rustc.exe`
+Then `rustc.exe` is not given a job of its own and is a member of `cargo`'s tree job
+
 ### Requirement: Tree Membership Tracking
-The governor MUST track job tree membership from the job completion port's new-process and exit-process messages, and MUST validate parent links by process creation time so that a reused PID is never treated as a member of an older tree.
+The governor MUST track job tree membership from the job completion port's new-process and exit-process messages, and, for a job whose port is lost (a job re-adopted after a crash), from `JobObjectBasicProcessIdList` in the 1 s loop, and MUST validate parent links by process creation time so that a reused PID is never treated as a member of an older tree. A tree job whose root exited while members remain (`mspdbsrv`, Gradle daemon, `VBCSCompiler`) is a normal state; the job SHALL be released when its last member exits.
 
 #### Scenario: Child membership from the completion port
 Given a `build` job
@@ -78,7 +89,7 @@ When the governor builds process trees
 Then PID 4120 is not attached to the exited parent's tree
 
 ### Requirement: Pressure Detection
-The governor MUST evaluate pressure once per second from total CPU, available memory, commit charge and hard faults per second, and SHALL enter the pressure state when total CPU stays above 90 % for 15 s, available memory falls below 8 GB, commit charge exceeds 90 % of the commit limit, or hard faults per second exceed the configured threshold.
+The governor MUST evaluate pressure once per second from total CPU, available memory, commit charge and hard faults per second, and SHALL enter the pressure state when total CPU stays above 90 % for 15 s, available memory falls below 8 GB, commit charge exceeds 90 % of the commit limit, or hard faults per second stay above the configured threshold (default 1000) for 15 s. Thresholds and dwell times SHALL be read from `data/governor.toml`; a malformed file MUST be rejected whole, keeping the previous policy.
 
 #### Scenario: Sustained CPU enters pressure
 Given total CPU above 90 % for 14 consecutive seconds
@@ -101,7 +112,7 @@ When the sample is evaluated
 Then the governor enters the pressure state with reason `commit`
 
 ### Requirement: Pressure Clear Hysteresis
-The governor MUST leave the pressure state only after every pressure signal has stayed below its exit threshold for 60 continuous seconds.
+The governor MUST leave the pressure state only after every pressure signal has stayed below its exit threshold for 60 continuous seconds. The default exit thresholds SHALL be total CPU at most 80 %, available memory at least 10 GB, commit charge at most 85 % of the commit limit and hard faults at most half their entry threshold.
 
 #### Scenario: Pressure clears after 60 s
 Given the governor is in the pressure state
@@ -114,7 +125,7 @@ When CPU rises above 90 % again for 15 s
 Then the pressure state does not clear and the 60 s clear timer restarts once all signals are below their exit thresholds again
 
 ### Requirement: Escalation Ladder
-While under pressure the governor MUST act on the heaviest non-protected process tree (CPU and memory summed over a root and its descendants), applying one step at a time with at least 10 s between steps on the same tree: (1) priority class `BELOW_NORMAL` and memory priority `MEMORY_PRIORITY_LOW`; (2) EcoQoS execution-speed throttling; (3) assignment to a cap job with a 50 % CPU hard cap and a memory cap at current usage plus 10 %; (4) suspend of the whole tree with an owner notification; (5) kill, only when kill is enabled for the tree's class. Kill SHALL be disabled for every class by default.
+While under pressure the governor MUST act on the heaviest non-protected process tree (CPU and memory summed over a root and its descendants), applying one step at a time with at least 10 s between steps on the same tree: (1) priority class `BELOW_NORMAL` and memory priority `MEMORY_PRIORITY_LOW`; (2) EcoQoS execution-speed throttling; (3) assignment to a cap job with a 50 % CPU hard cap and a commit cap at the tree's current commit plus 25 % (never less than 64 MB above it; spike X4 §5.3); (4) suspend of the whole tree with an owner notification; (5) kill, only when kill is enabled for the tree's class. Kill SHALL be disabled for every class by default.
 
 #### Scenario: Ladder escalates with cooldown
 Given pressure persists and tree T is the heaviest non-protected tree
@@ -166,25 +177,40 @@ And `action_log` has the matching `GovernorStep` entry with actor `governor`
 On a clean service stop the governor MUST lift every cap it set, remove limits from its named jobs, restore every ladder step and resume every tree it suspended, before the service reports `SERVICE_STOPPED` within 30 s (deploy contract C3).
 
 #### Scenario: Stop releases everything
-Given a `build` tree capped at 75 % in `Global\MyClean.Job.build` and a suspended `default` tree
+Given a `build` tree capped at 75 % in its tree job and a suspended `default` tree
 When the SCM stops the `MyClean` service
 Then the build tree runs without a CPU or commit cap
 And the suspended tree is resumed
 And the service reports `SERVICE_STOPPED` within 30 s
 
 ### Requirement: Crash Recovery and Job Re-Adoption
-Job objects MUST be created without `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, every suspend MUST be persisted before it is applied, and a service restarted after a crash MUST reopen its named jobs `Global\MyClean.Job.<class>`, reconcile their limits with the current policy, and resume every suspended tree it cannot account for.
+Job objects MUST be created without `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` as permanent named objects (`OBJ_PERMANENT`, so a job outlives the service's handles; spike X4 §5.5) under `Global\MyClean.Job.<class>.<nonce>`, where the nonce is random and persisted with the job, and MUST be made temporary again (`NtMakeTemporaryObject`) when released. Opening a job by name MUST verify that its owner is SYSTEM and treat any other owner as hostile (spike X4 §5.6). Every suspend MUST be persisted, as (PID, creation time, count), before it is applied. A service restarted after a crash MUST reopen its persisted jobs, reconcile their limits with the current policy, release those whose members are gone, and resume only the recorded (PID, creation time) pairs, exactly as many times as recorded, that it cannot account for; it MUST NOT resume any other suspended process. Native APIs (`NtSuspendProcess`, `NtResumeProcess`, `NtCreateJobObject`, `NtMakeTemporaryObject`) MUST be resolved at run time, not imported statically (spike X4 §5.10).
 
 #### Scenario: Crash does not kill the build
-Given a running `build` tree in `Global\MyClean.Job.build`
+Given a running `build` tree in its tree job
 When the service process is terminated abnormally
 Then every process in the build tree keeps running
 
 #### Scenario: Restarted service re-adopts jobs
-Given the service crashed while `Global\MyClean.Job.build` held a running tree
+Given the service crashed while a `build` tree job held a running tree
 When the SCM restarts the service within 5 s
-Then the service reopens `Global\MyClean.Job.build` instead of creating a new job
+Then the service reopens that job by its persisted name instead of creating a new job
 And the job's limits match the current class policy
+
+#### Scenario: Job still reachable before the restart
+Given the service was killed while a `build` tree job held a running tree
+When no MyClean process has been started again yet
+Then the job still exists under its persisted name and its caps can be lifted by opening it
+
+#### Scenario: Squatted job name
+Given a job object under a persisted MyClean job name whose owner is not SYSTEM
+When the restarted service opens it
+Then the service does not adopt it and records a `governor_event` with reason `untrusted_job`
+
+#### Scenario: Process suspended by someone else
+Given a process created suspended by a debugger, with no persisted suspend record
+When the restarted service reconciles
+Then that process is not resumed
 
 #### Scenario: Orphaned suspend resumed
 Given a tree suspended by the governor whose persisted suspend record does not match the state after restart
@@ -197,15 +223,25 @@ When the service is killed and the SCM restarts it
 Then after reconciliation no process remains suspended or capped by a limit the current policy does not call for
 
 ### Requirement: Game Detection
-The governor MUST classify a process as a game when it is on the owner's game list, its image lives under a known library root (`steamapps\common`, Epic, GOG, Xbox `WindowsApps` or `XboxGames`, or an owner-defined root such as `E:\Games`), it is registered in `HKCU\System\GameConfigStore`, or it owns the foreground window while `SHQueryUserNotificationState` reports `QUNS_RUNNING_D3D_FULL_SCREEN` or `QUNS_BUSY` and it shows sustained GPU use.
+The governor MUST classify a process as a game when it is on the owner's game list, its image lives under a known library root, it has a path-matched (Type 1) entry in the owner's `GameConfigStore` whose `MatchedExeFullPath` equals its image path (read as `HKU\<owner SID>\System\GameConfigStore`), or it owns the foreground window while `SHQueryUserNotificationState` reports `QUNS_RUNNING_D3D_FULL_SCREEN` or `QUNS_BUSY` and it shows sustained GPU use (its 3D engine utilization, summed per adapter and taking the busiest adapter, at least 2 % on average over 10 s; spike X5 §4). Library roots SHALL be: the existing `path` entries of Steam's `libraryfolders.vdf` plus `\steamapps\common`; the `InstallLocation` of Epic manifests whose `AppCategories` contain `games` and none of `engines` or `plugins`; GOG install folders; `<drive>:\XboxGames` folders; and owner-defined roots. `WindowsApps` MUST NOT be a library root, and GameConfigStore entries that are not path-matched (Type 2, packaged) MUST be ignored, because they include Store Python and winget (spike X5 §1–2). `SHQueryUserNotificationState` SHALL be read by the tray in the owner's session and sent to the service, and GPU use SHALL be sampled only while a foreground fullscreen candidate exists.
 
 #### Scenario: Game detected from library root
-Given `E:\Games` is an owner-defined library root
-When `E:\Games\Title\title.exe` starts
+Given `E:\Jogos` is an owner-defined library root
+When `E:\Jogos\Title\title.exe` starts
 Then it is classified `game`
 
+#### Scenario: Store Python is not a game
+Given Store Python runs from `WindowsApps` and has a packaged (Type 2) GameConfigStore entry
+When it starts
+Then it is not classified `game`
+
+#### Scenario: Unreal Engine is not a game
+Given an Epic manifest for Unreal Engine whose `AppCategories` contain `engines`
+When `UnrealEditor.exe` starts from its install location
+Then it is not classified `game`
+
 #### Scenario: Fullscreen with GPU use
-Given an unlisted process owns the foreground window in exclusive fullscreen with sustained GPU engine utilization
+Given an unlisted process owns the foreground window in exclusive or borderless fullscreen with sustained GPU engine utilization
 When detection runs
 Then the process is classified `game`
 
@@ -215,12 +251,12 @@ When detection runs
 Then the process is not classified `game`
 
 ### Requirement: Game Mode
-While a game runs (or the tray override is `on`) the governor MUST enter game mode, which protects the game and its descendants, lowers the `build` job CPU cap to 40 % by default and applies the stricter game-mode ladder to every other non-protected tree; the tray override `auto` / `on` / `off` SHALL take precedence over detection, and a detected game SHALL remain protected in every override state.
+While a game runs (or the tray override is `on`) the governor MUST enter game mode, which protects the game and its descendants, lowers the CPU cap of every `build` job to 40 % by default and applies the stricter game-mode ladder (the ladder acts after 5 s of pressure instead of 15 s, with a 5 s cooldown between steps) to every other non-protected tree; the tray override `auto` / `on` / `off` SHALL take precedence over detection, and a detected game SHALL remain protected in every override state.
 
 #### Scenario: Game starts during a build
 Given a `build` tree capped at 75 %
 When a game is detected
-Then the `build` job's CPU cap becomes 40 %
+Then the CPU cap of every `build` job becomes 40 %
 And it returns to 75 % when the last game exits
 
 #### Scenario: Override off

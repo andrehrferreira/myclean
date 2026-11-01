@@ -2,7 +2,7 @@
 - [ ] 1.1 X4 spike: job CPU hard cap and JOB_OBJECT_LIMIT_JOB_MEMORY on real MSVC/Cargo/Gradle builds, nesting under IDE jobs, NtSuspendProcess on trees; note in docs/spikes/X4-jobs.md
 - [ ] 1.2 X5 spike: GameConfigStore, SHQueryUserNotificationState and PDH GPU counters on 3+ installed games including one on the USB SSD; note in docs/spikes/X5-games.md
 - [ ] 1.3 G1: process classes from data/classes.toml (system, game, allow, build, test, default; image + command-line + path + signer matching, first match wins)
-- [ ] 1.4 G1: proactive named jobs Global\MyClean.Job.<class>: build/test starts assigned on the ETW start event; CPU hard cap (default 75 %), commit cap (default 96 GB build / 64 GB test), notification limits at 80 %; completion-port tree tracking
+- [ ] 1.4 G1: proactive per-tree jobs (permanent, SYSTEM-owned, nested under a class parent job or a foreign IDE job): build/test roots assigned on the ETW start event; CPU hard cap (default 75 %), commit cap (default 96 GB build / 64 GB test), notification limits at 80 %; completion-port tree tracking
 - [ ] 1.5 G2: pressure detection (CPU > 90 % 15 s, available RAM < 8 GB, commit > 90 %, hard faults) with 60 s clear hysteresis
 - [ ] 1.6 G2: escalation ladder per heaviest non-protected tree with 10 s cooldown: priority + memory priority -> EcoQoS -> cap job -> suspend -> kill (opt-in per class, off by default); rollback of steps 1-4 when pressure clears
 - [ ] 1.7 G2: fail-open: clean stop lifts caps and resumes suspends; restarted service re-adopts named jobs and resumes orphaned suspends; every step in governor_event + action_log
