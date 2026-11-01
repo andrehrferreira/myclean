@@ -138,14 +138,14 @@ TEST_F(InboxPollerTest, ApprovalSendsTheSelectionRefreshesAndTakesTheUserTask) {
 TEST_F(InboxPollerTest, RejectUndoRestoreScanAndProposeSendTheirParameters) {
   (void)poll_at(start, true);
   for (const char* method : {"plans.reject", "plans.undo", "quarantine.restore", "cleaning.scan",
-                             "plans.propose_cleanup"}) {
+                             "plans.propose_cleanup", "quarantine.purge"}) {
     link().on(method, [](const Json&) -> Result<Json> { return Json::object(); });
   }
   link().clear_calls();
-  (void)poll_at(
-      start + 1, true,
-      {RejectPlan{.id = 7}, UndoPlan{.id = 5}, RestoreQuarantine{.plan = 3},
-       RestoreQuarantine{.plan = 3, .item = 31}, ScanNow{}, ProposeCleanup{.candidates = {701}}});
+  (void)poll_at(start + 1, true,
+                {RejectPlan{.id = 7}, UndoPlan{.id = 5}, RestoreQuarantine{.plan = 3},
+                 RestoreQuarantine{.plan = 3, .item = 31}, ScanNow{},
+                 ProposeCleanup{.candidates = {701}}, PurgeQuarantine{.plan = 4}});
   EXPECT_EQ(link().calls_of("plans.reject")[0].params, (Json{{"id", 7}}));
   EXPECT_EQ(link().calls_of("plans.undo")[0].params, (Json{{"id", 5}}));
   const std::vector<FakeLink::Call> restores = link().calls_of("quarantine.restore");
@@ -155,6 +155,7 @@ TEST_F(InboxPollerTest, RejectUndoRestoreScanAndProposeSendTheirParameters) {
   EXPECT_EQ(link().calls_of("cleaning.scan").size(), 1U);
   EXPECT_EQ(link().calls_of("plans.propose_cleanup")[0].params,
             (Json{{"candidates", {{"ids", {701}}}}}));
+  EXPECT_EQ(link().calls_of("quarantine.purge")[0].params, (Json{{"plan", 4}}));
 }
 
 TEST_F(InboxPollerTest, ARefusedDecisionIsShownWithItsReason) {

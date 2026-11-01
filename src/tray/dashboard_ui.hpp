@@ -27,6 +27,8 @@ struct UiState {
   // The plans whose details are shown, and the items the owner ticked in each (none at first).
   std::set<std::int64_t> open_plans;
   std::map<std::int64_t, std::set<std::int64_t>> selected;
+  // The quarantine run whose "Delete now" waits for the owner's confirmation.
+  std::optional<std::int64_t> confirm_purge;
   // The Space list shown, the volume of its largest items, and the lists (with their volume)
   // already asked for, so that showing one loads it once.
   tray_model::SpaceList space = tray_model::SpaceList::top;

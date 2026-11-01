@@ -32,9 +32,11 @@ TEST(CleaningRepliesTest, CleaningStatusWhileScanningAndIdle) {
   EXPECT_EQ(scanning->candidates, 42);
   EXPECT_EQ(scanning->bytes, Bytes{5'000'000'000ULL});
   EXPECT_EQ(scanning->next_auto_run, from_unix_seconds(1'050'000));
+  EXPECT_EQ(scanning->purging, (std::vector<std::int64_t>{3}));
   EXPECT_TRUE(scanning->unavailable.empty());
 
   Json never = testing::cleaning_status_json(false);
+  never.erase("purging");  // a service older than quarantine.purge
   never["last_completed"] = nullptr;
   never["unavailable"] = "the service runs without its store";
   const Result<CleaningStatus> idle = parse_cleaning_status(never);
@@ -42,6 +44,7 @@ TEST(CleaningRepliesTest, CleaningStatusWhileScanningAndIdle) {
   EXPECT_FALSE(idle->scanning);
   EXPECT_FALSE(idle->last_completed);
   EXPECT_EQ(idle->unavailable, "the service runs without its store");
+  EXPECT_TRUE(idle->purging.empty());
 
   never["state"] = "busy";
   EXPECT_FALSE(parse_cleaning_status(never).has_value());

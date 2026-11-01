@@ -68,6 +68,9 @@ struct RestoreQuarantine {
   std::int64_t plan = 0;
   std::optional<std::int64_t> item;  // nullopt: every item of the plan
 };
+struct PurgeQuarantine {
+  std::int64_t plan = 0;  // the run whose held items are deleted now
+};
 struct LoadSpace {
   SpaceList list = SpaceList::top;
   std::string volume;    // space.top: "C:"
@@ -78,7 +81,7 @@ struct ProposeCleanup {
 };
 using Request = std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange, ScanNow,
                              OpenPlan, ClosePlan, ApprovePlan, RejectPlan, UndoPlan,
-                             RestoreQuarantine, LoadSpace, ProposeCleanup>;
+                             RestoreQuarantine, PurgeQuarantine, LoadSpace, ProposeCleanup>;
 
 // The tray's executor of user-scope plans, as the poller drives it: the poller takes a task
 // (user_tasks.next) only from a reachable service and only while the runner is idle, and

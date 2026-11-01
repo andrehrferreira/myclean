@@ -267,20 +267,54 @@ void draw_plan(const PlanRow& plan, const CleanupView& cleanup, const std::chron
   ImGui::PopID();
 }
 
+// "Delete now" of one quarantine run, with a confirmation; "Deleting..." while it runs.
+void draw_purge(const tray_model::QuarantineRun& run, bool purging, bool reachable,
+                UiState& state) {
+  if (purging) {
+    colored_text(color::accent, "Deleting " + size_text(run.bytes) + " permanently...");
+    return;
+  }
+  ImGui::BeginDisabled(!reachable);
+  if (state.confirm_purge != run.plan) {
+    if (ImGui::Button(std::format("Delete now (frees {})", size_text(run.bytes)).c_str())) {
+      state.confirm_purge = run.plan;
+    }
+  } else {
+    wrapped_text(color::warning,
+                 std::format("Delete these {} permanently? They can no longer be "
+                             "restored.",
+                             plural(static_cast<std::int64_t>(run.items.size()), "item")));
+    if (ImGui::Button("Delete permanently")) {
+      state.requests.emplace_back(tray_model::PurgeQuarantine{.plan = run.plan});
+      state.confirm_purge.reset();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      state.confirm_purge.reset();
+    }
+  }
+  ImGui::EndDisabled();
+}
+
 void draw_quarantine(const std::vector<tray_model::QuarantineRun>& runs,
-                     const std::chrono::time_zone& zone, bool reachable, UiState& state) {
+                     const std::vector<std::int64_t>& purging, const std::chrono::time_zone& zone,
+                     bool reachable, UiState& state) {
   if (runs.empty()) {
     muted_text("Nothing is in quarantine.");
     return;
   }
-  muted_text("Quarantined items are moved aside, not deleted, until their purge date.");
+  muted_text(
+      "Quarantined items are moved aside, not deleted, until their purge date. Delete now "
+      "frees their space at once.");
   for (const tray_model::QuarantineRun& run : runs) {
     ImGui::PushID(std::to_string(run.plan).c_str());
     const std::string header =
         std::format("Plan {}  -  {}  -  {}  -  purged after {}###run", run.plan,
                     plural(static_cast<std::int64_t>(run.items.size()), "item"),
                     size_text(run.bytes), local_date_time(zone, run.purge_after));
-    if (ImGui::CollapsingHeader(header.c_str())) {
+    const bool open = ImGui::CollapsingHeader(header.c_str());
+    draw_purge(run, std::ranges::find(purging, run.plan) != purging.end(), reachable, state);
+    if (open) {
       muted_text("Moved " + local_date_time(zone, run.moved_at));
       ImGui::BeginDisabled(!reachable);
       if (ImGui::Button("Restore all")) {
@@ -561,7 +595,9 @@ void draw_cleanup(const DashboardModel& model, const std::chrono::time_zone& zon
   }
   ImGui::SeparatorText("Quarantine");
   if (const auto& quarantine = cleanup.quarantine()) {
-    draw_quarantine(*quarantine, zone, reachable, state);
+    const auto& status = cleanup.status();
+    draw_quarantine(*quarantine, status ? status->purging : std::vector<std::int64_t>{}, zone,
+                    reachable, state);
   } else {
     muted_text("Quarantine: " + std::string(tray_model::not_available));
   }

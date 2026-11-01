@@ -130,6 +130,8 @@ class Executor {
   [[nodiscard]] Result<std::size_t> restore(PlanId run, std::optional<PlanItemId> item);
   // Purges the quarantine runs older than 7 days; how many items.
   [[nodiscard]] Result<std::size_t> purge();
+  // Purges every held item of run `run` now, for the owner; how many items.
+  [[nodiscard]] Result<std::size_t> purge_run(PlanId run);
 
  private:
   // What the rules select now, the system-area handlers sized; a handler that cannot be sized

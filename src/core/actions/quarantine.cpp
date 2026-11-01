@@ -195,16 +195,21 @@ struct Folder {
 };
 
 // The quarantine folders of every run whose items have all expired at `now`, one per volume.
-std::map<fs::path, Folder> expired_folders(const std::vector<QuarantineRecord>& held,
-                                           WallTime now) {
+// The run folders to purge: of every run whose items all passed their expiry, or of run `only`
+// whatever its expiry.
+std::map<fs::path, Folder> purge_folders(const std::vector<QuarantineRecord>& held, WallTime now,
+                                         std::optional<PlanId> only) {
   std::map<std::int64_t, std::vector<const QuarantineRecord*>> runs;
   for (const QuarantineRecord& record : held) {
-    runs[record.run.value()].push_back(&record);
+    if (!only || record.run == *only) {
+      runs[record.run.value()].push_back(&record);
+    }
   }
   std::map<fs::path, Folder> folders;
   for (const auto& [run, records] : runs) {
-    if (std::ranges::any_of(
-            records, [&](const QuarantineRecord* record) { return record->purge_after > now; })) {
+    if (!only && std::ranges::any_of(records, [&](const QuarantineRecord* record) {
+          return record->purge_after > now;
+        })) {
       continue;
     }
     for (const QuarantineRecord* record : records) {
@@ -387,16 +392,19 @@ Result<void> Quarantine::restore(PlanId run, std::span<const PlanItemId> items,
   return {};
 }
 
-Result<std::size_t> Quarantine::purge(const Actor& actor) {
+Result<std::size_t> Quarantine::purge(const Actor& actor, std::optional<PlanId> run) {
   if (actor.kind() == Actor::Kind::mcp) {
     return fail(Errc::refused, actor.to_string() + " may not purge the quarantine");
+  }
+  if (run && actor.kind() != Actor::Kind::owner) {
+    return fail(Errc::refused, "only the owner may purge a run before its expiry");
   }
   const Result<std::vector<QuarantineRecord>> held = load(*environment_.store, std::nullopt);
   if (!held) {
     return tl::unexpected(held.error());
   }
   const WallTime now = environment_.clock->now();
-  const std::map<fs::path, Folder> folders = expired_folders(*held, now);
+  const std::map<fs::path, Folder> folders = purge_folders(*held, now, run);
 
   // A folder that is already gone needs no plan.
   std::vector<std::int64_t> purged;

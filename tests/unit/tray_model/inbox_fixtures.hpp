@@ -77,6 +77,7 @@ inline InboxJson cleaning_status_json(bool scanning, std::int64_t last_completed
                    {"candidates", 42},
                    {"bytes", 5'000'000'000LL},
                    {"next_auto_run", 1'050'000},
+                   {"purging", InboxJson::array({3})},
                    {"unavailable", nullptr}};
 }
 

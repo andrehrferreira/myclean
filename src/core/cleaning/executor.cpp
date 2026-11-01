@@ -1065,4 +1065,8 @@ Result<std::size_t> Executor::purge() {
   return quarantine_->purge(Actor::scheduler());
 }
 
+Result<std::size_t> Executor::purge_run(PlanId run) {
+  return quarantine_->purge(Actor::owner(), run);
+}
+
 }  // namespace myclean::cleaning

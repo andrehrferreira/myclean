@@ -171,6 +171,10 @@ class CleaningService {
                                                           const std::stop_token& stop);
   [[nodiscard]] Result<nlohmann::json> analyze_duplicates(const std::stop_token& stop);
   [[nodiscard]] nlohmann::json request_scan();
+  // Queues an early purge of quarantine run `run` for the cleaning worker.
+  [[nodiscard]] Result<nlohmann::json> request_purge(PlanId run);
+  // Purges the runs the owner asked to purge early (the cleaning worker only).
+  void run_purges();
   [[nodiscard]] Result<nlohmann::json> space_top(const nlohmann::json& params);
   // `work` on the executor, or the reason cleaning is unavailable.
   [[nodiscard]] Result<nlohmann::json> on_executor(
@@ -200,6 +204,7 @@ class CleaningService {
   std::vector<std::string> problems_;
   std::vector<packs::RelocationRecipe> recipes_;  // of registry_
   std::vector<ipc::PackStatus> pack_status_;
+  std::vector<PlanId> purges_;  // runs to purge early, oldest request first; the first runs now
   bool scan_requested_ = false;
   bool scanning_ = false;
   double progress_ = 0.0;

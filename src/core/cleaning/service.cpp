@@ -313,8 +313,64 @@ void CleaningService::work(const std::stop_token& stop) {
     run_scan(false, stop);
   }
   if (settings_.execute && executor() != nullptr && !stop.stop_requested()) {
+    run_purges();
     run_approved();
   }
+}
+
+void CleaningService::run_purges() {
+  for (;;) {
+    PlanId run{};
+    {
+      const std::scoped_lock lock(mutex_);
+      if (purges_.empty()) {
+        return;
+      }
+      run = purges_.front();
+    }
+    if (Result<std::size_t> purged = executor()->purge_run(run); !purged) {
+      note("quarantine run " + std::to_string(run.value()) + ": " + purged.error().message);
+    }
+    const std::scoped_lock lock(mutex_);
+    purges_.erase(purges_.begin());
+  }
+}
+
+Result<Json> CleaningService::request_purge(PlanId run) {
+  if (!settings_.execute) {
+    return fail(Errc::invalid_state, "this service does not execute plans");
+  }
+  Result<Executor*> ready = require_executor();
+  if (!ready) {
+    return tl::unexpected(ready.error());
+  }
+  Result<std::vector<actions::QuarantineRecord>> records = fail(Errc::io_error, "not read");
+  if (Result<void> read = sources_.store->read([&](store::Database& db) -> Result<void> {
+        records = actions::quarantine_records(db, run);
+        return {};
+      });
+      !read) {
+    return tl::unexpected(read.error());
+  }
+  if (!records) {
+    return tl::unexpected(records.error());
+  }
+  if (std::ranges::none_of(*records, [](const actions::QuarantineRecord& record) {
+        return record.state == actions::QuarantineState::held;
+      })) {
+    return fail(Errc::not_found,
+                "quarantine run " + std::to_string(run.value()) + " holds no item");
+  }
+  {
+    const std::scoped_lock lock(mutex_);
+    if (std::ranges::find(purges_, run) == purges_.end()) {
+      purges_.push_back(run);
+    }
+  }
+  if (wake_) {
+    wake_();
+  }
+  return Json{{"queued", true}};
 }
 
 void CleaningService::run_approved() {
@@ -400,6 +456,10 @@ Json CleaningService::status() const {
   if (scanning_) {
     progress = progress_;
   }
+  Json purging = Json::array();
+  for (const PlanId run : purges_) {
+    purging.push_back(run.value());
+  }
   return Json{{"state", scanning_ || scan_requested_ ? "scanning" : "idle"},
               {"progress", progress},
               {"last_completed",
@@ -407,6 +467,7 @@ Json CleaningService::status() const {
               {"candidates", totals ? totals->count : 0},
               {"bytes", totals ? totals->bytes.count() : 0},
               {"next_auto_run", next},
+              {"purging", purging},
               {"unavailable", reason ? Json(*reason) : Json(nullptr)}};
 }
 
@@ -904,6 +965,11 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
           return Json{{"restored", *restored}};
         });
       },
+      Access::tray));
+  added.push_back(add(
+      ipc::quarantine_purge_method,
+      {Param{.name = "plan", .type = ParamType::integer, .required = true}},
+      [this](const Json& params) { return request_purge(plan_param(params, "plan")); },
       Access::tray));
   added.push_back(add(ipc::space_top_method,
                       {Param{.name = "path", .type = ParamType::token, .required = true},

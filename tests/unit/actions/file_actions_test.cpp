@@ -255,6 +255,25 @@ TEST_F(FileActionsTest, QuarantinePurgedAfterExpiryThroughSafeRemove) {
   EXPECT_EQ(quarantine().purge(Actor::scheduler()).value(), 0U);
 }
 
+TEST_F(FileActionsTest, TheOwnerPurgesOneRunBeforeItsExpiry) {
+  const Plan first = quarantined();
+  const Plan second = quarantined();
+  clock().advance(std::chrono::days{1});
+  EXPECT_EQ(quarantine().purge(Actor::scheduler(), first.id).error().code, Errc::refused);
+  EXPECT_EQ(quarantine().purge(Actor::mcp("claude-code").value(), first.id).error().code,
+            Errc::refused);
+  EXPECT_EQ(records(first.id)[0].state, QuarantineState::held);
+
+  EXPECT_EQ(quarantine().purge(Actor::owner(), first.id).value(), 2U);
+  EXPECT_FALSE(fs().exists(path{L"F:\\.myclean-quarantine"} / std::to_string(first.id.value())));
+  for (const QuarantineRecord& record : records(first.id)) {
+    EXPECT_EQ(record.state, QuarantineState::purged);
+  }
+  // The other run keeps its items until its own expiry.
+  EXPECT_TRUE(fs().exists(records(second.id)[0].location));
+  EXPECT_EQ(records(second.id)[0].state, QuarantineState::held);
+}
+
 TEST_F(FileActionsTest, OnlyTheOwnerRollsBackAVerifiedPlan) {
   const Plan plan = quarantined();
   QuarantineItems action{environment(), quarantine(), plan.id, Actor::owner()};

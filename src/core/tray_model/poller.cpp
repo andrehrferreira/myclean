@@ -222,6 +222,10 @@ bool Poller::handle_cleanup(const Request& request, PollResult& result) {
     return decide("Restore", ipc::quarantine_restore_method,
                   quarantine_restore_params(restore->plan, restore->item));
   }
+  if (const auto* purge = std::get_if<PurgeQuarantine>(&request)) {
+    return decide("Deleting the quarantine", ipc::quarantine_purge_method,
+                  Json{{"plan", purge->plan}});
+  }
   if (const auto* propose = std::get_if<ProposeCleanup>(&request)) {
     return decide("Proposing a cleanup", ipc::plans_propose_cleanup_method,
                   propose_cleanup_params(propose->candidates));

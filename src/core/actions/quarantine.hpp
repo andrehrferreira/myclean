@@ -95,9 +95,12 @@ class Quarantine {
   [[nodiscard]] Result<void> restore(PlanId run, std::span<const PlanItemId> items,
                                      const Actor& actor);
 
-  // Deletes the quarantine folder of every run whose items all passed their expiry. Returns how
-  // many records were purged. Fails with refused for an `mcp:*` actor.
-  [[nodiscard]] Result<std::size_t> purge(const Actor& actor);
+  // Deletes the quarantine folder of every run whose items all passed their expiry, or, with
+  // `run`, the folders of that run now (the owner frees the space before the expiry). Returns
+  // how many records were purged. Fails with refused for an `mcp:*` actor, and for a `run`
+  // purge by anyone but the owner.
+  [[nodiscard]] Result<std::size_t> purge(const Actor& actor,
+                                          std::optional<PlanId> run = std::nullopt);
 
  private:
   // Stores `plan` for `actor` and moves it to applying.

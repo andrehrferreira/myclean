@@ -50,6 +50,7 @@ inline constexpr std::string_view cleaning_scan_method = "cleaning.scan";
 // No parameters.
 //   {"state": "idle"|"scanning", "progress": number 0..1, "last_completed": int|null,
 //    "candidates": int, "bytes": int (of those candidates), "next_auto_run": int|null,
+//    "purging": [int] (quarantine runs queued by quarantine.purge, the first being deleted),
 //    "unavailable": string|null (why scans or executions cannot run now)}
 inline constexpr std::string_view cleaning_status_method = "cleaning.status";
 
@@ -173,6 +174,14 @@ inline constexpr std::string_view quarantine_list_method = "quarantine.list";
 // item; every held item of the run when absent). {"restored": int}. Fails with io_error when
 // an item could not be moved back (it stays in quarantine).
 inline constexpr std::string_view quarantine_restore_method = "quarantine.restore";
+
+// TRAY ONLY. Parameters: plan (integer, required: the run). Queues the permanent deletion of
+// every held item of the run now, before its purge date: the owner frees the space (a
+// quarantine on a nearly full volume frees nothing until then). The cleaning worker purges it
+// before the next approved plan; cleaning.status lists it under "purging" until done, and
+// quarantine.list then no longer has it. {"queued": true}. Fails with not_found when the run
+// holds no item.
+inline constexpr std::string_view quarantine_purge_method = "quarantine.purge";
 
 // ---- space.* (read-only analyses, run by the service in the background) -----------------------
 //

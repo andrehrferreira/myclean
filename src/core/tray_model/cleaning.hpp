@@ -27,7 +27,8 @@ struct CleaningStatus {
   std::int64_t candidates = 0;
   Bytes bytes;
   std::optional<WallTime> next_auto_run;
-  std::string unavailable;  // why scans or executions cannot run now; empty when they can
+  std::vector<std::int64_t> purging;  // quarantine runs being deleted now or queued for it
+  std::string unavailable;            // why scans or executions cannot run now; empty when they can
 
   friend bool operator==(const CleaningStatus&, const CleaningStatus&) = default;
 };

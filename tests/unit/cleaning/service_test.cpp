@@ -153,7 +153,8 @@ TEST_F(CleaningServiceTest, TrayOnlyMethodsRefuseEveryOtherCaller) {
       {"plans.recycle", Json{{"candidates", {{"ids", {1}}}}}},
       {"user_tasks.next", Json::object()},
       {"user_tasks.report", Json{{"id", id}, {"result", {{"state", "verified"}}}}},
-      {"quarantine.restore", Json{{"plan", id}}}};
+      {"quarantine.restore", Json{{"plan", id}}},
+      {"quarantine.purge", Json{{"plan", id}}}};
   for (const auto& [method, params] : calls) {
     const Json error = error_of(method, params, false);
     ASSERT_FALSE(error.is_null()) << method;
@@ -194,6 +195,26 @@ TEST_F(CleaningServiceTest, ApprovingSomeItemsQuarantinesOnlyThoseOnTheirVolume)
   EXPECT_EQ(call("quarantine.restore", Json{{"plan", id}}), (Json{{"restored", 1}}));
   EXPECT_TRUE(fs().exists(L"F:\\cache\\s1.bin"));
   EXPECT_EQ(call("quarantine.list").at("runs"), Json::array());
+}
+
+TEST_F(CleaningServiceTest, DeleteNowPurgesARunBeforeItsExpiry) {
+  add_targets();
+  start();
+  scan();
+  const std::int64_t id = plan_titled("shader-caches").at("id").get<std::int64_t>();
+  const std::int64_t first = get(id).at("items")[0].at("id").get<std::int64_t>();
+  approve_all(id);
+  work();
+  ASSERT_TRUE(fs().exists(quarantined(L"F:\\", id, first, L"s1.bin")));
+
+  EXPECT_EQ(call("quarantine.purge", Json{{"plan", id}}), (Json{{"queued", true}}));
+  EXPECT_EQ(call("cleaning.status").at("purging"), Json::array({id}));
+  work();
+  EXPECT_FALSE(fs().exists(quarantined(L"F:\\", id, first, L"s1.bin")));
+  EXPECT_EQ(call("cleaning.status").at("purging"), Json::array());
+  EXPECT_EQ(call("quarantine.list").at("runs"), Json::array());
+  EXPECT_EQ(error_of("quarantine.purge", Json{{"plan", id}}, true).at("data").at("errc"),
+            "not_found");
 }
 
 TEST_F(CleaningServiceTest, ItemsOfALowSpaceVolumeGoToTheOverflowVolumeAndUndoBringsThemBack) {

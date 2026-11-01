@@ -51,6 +51,15 @@ std::optional<std::string> optional_text(const Json& object, const char* name) {
   return found->get<std::string>();
 }
 
+// cleaning.status "purging"; absent from a service older than quarantine.purge.
+std::vector<std::int64_t> purging_of(const Json& reply) {
+  const auto found = reply.find("purging");
+  if (found == reply.end() || found->is_null()) {
+    return {};
+  }
+  return found->get<std::vector<std::int64_t>>();
+}
+
 // A PlanSummary; in a plans.get answer "items" is the item list and "items_total" the count.
 PlanRow parse_plan(const Json& plan) {
   const Json& items = plan.at("items");
@@ -177,6 +186,7 @@ Result<CleaningStatus> parse_cleaning_status(const Json& reply) {
                           .candidates = reply.at("candidates").get<std::int64_t>(),
                           .bytes = bytes_of(reply, "bytes"),
                           .next_auto_run = optional_time(reply, "next_auto_run"),
+                          .purging = purging_of(reply),
                           .unavailable = optional_text(reply, "unavailable").value_or("")};
   });
 }
