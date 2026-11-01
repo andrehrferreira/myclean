@@ -45,7 +45,10 @@ jobs:
         run: ctest --preset ${{ matrix.preset }}
 
   lint:
-    runs-on: windows-latest
+    # clang-tidy 19 (the local Visual Studio 2022 major) cannot parse the STL of the Visual Studio
+    # 18 that windows-latest now ships ("STL1000: expected Clang 20 or newer"); lint against the
+    # Visual Studio 2022 headers like the local toolchain does.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v5
 
