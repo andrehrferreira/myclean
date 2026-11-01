@@ -223,10 +223,12 @@ void draw_detail(const PlanDetail& detail, bool reachable, UiState& state) {
   }
   wrapped_text(color::muted,
                "Undo: " + (detail.undo.empty() ? std::string("not possible") : detail.undo));
-  draw_items(detail, waiting, state.selected[plan.id]);
+  // The decision comes before the items, which can be thousands of rows long.
   if (waiting) {
     draw_decision(detail, reachable, state);
-  } else if (tray_model::undoable(plan)) {
+  }
+  draw_items(detail, waiting, state.selected[plan.id]);
+  if (!waiting && tray_model::undoable(plan)) {
     ImGui::BeginDisabled(!reachable);
     if (ImGui::Button("Undo")) {
       state.requests.emplace_back(tray_model::UndoPlan{.id = plan.id});
@@ -530,6 +532,22 @@ void draw_cleanup(const DashboardModel& model, const std::chrono::time_zone& zon
   } else {
     text("Reclaimable by tier: " + totals_text(tray_model::pending_bytes_by_tier(*plans)));
     text("By kind: " + totals_text(tray_model::pending_bytes_by_kind(*plans)));
+    Bytes total{};
+    for (const PlanRow* plan : waiting) {
+      total += plan->bytes;
+    }
+    ImGui::BeginDisabled(!reachable);
+    if (ImGui::Button(std::format("Approve every plan ({}, {})",
+                                  plural(static_cast<std::int64_t>(waiting.size()), "plan"),
+                                  size_text(total))
+                          .c_str())) {
+      for (const PlanRow* plan : waiting) {
+        state.requests.emplace_back(
+            tray_model::ApprovePlan{.id = plan->id, .selection = tray_model::select_all()});
+        state.selected.erase(plan->id);
+      }
+    }
+    ImGui::EndDisabled();
     for (const PlanRow* plan : waiting) {
       draw_plan(*plan, cleanup, zone, reachable, state);
     }

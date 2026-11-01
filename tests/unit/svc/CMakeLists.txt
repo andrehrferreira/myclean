@@ -16,6 +16,8 @@ myclean_add_test(svc
     svc_test_support.hpp
     telemetry_component_test.cpp
     trust_component_test.cpp
+    ../platform_fs/sandbox.cpp
+    ../platform_fs/sandbox.hpp
   DEPENDS
     myclean::svc
     myclean::fakes)

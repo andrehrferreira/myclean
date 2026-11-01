@@ -1,6 +1,7 @@
 #include "svc/owner_session.hpp"
 
 #include <cstdint>
+#include <cstring>
 #include <cwctype>
 #include <filesystem>
 #include <map>
@@ -123,6 +124,27 @@ std::optional<fs::path> downloads_of(HANDLE token) {
   return fs::path(path.get());
 }
 
+// The volume and file id of `path`, following links: one file reached through a junction (the
+// deploy's `current` folder) and through its final path has one identity.
+std::optional<FILE_ID_INFO> file_identity(const fs::path& path) {
+  const wil::unique_hfile file(::CreateFileW(
+      path.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+      nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+  FILE_ID_INFO identity{};
+  if (!file || ::GetFileInformationByHandleEx(file.get(), FileIdInfo, &identity,
+                                              sizeof(identity)) == FALSE) {
+    return std::nullopt;
+  }
+  return identity;
+}
+
+bool same_file(const fs::path& left, const fs::path& right) {
+  const std::optional<FILE_ID_INFO> a = file_identity(left);
+  const std::optional<FILE_ID_INFO> b = file_identity(right);
+  return a && b && a->VolumeSerialNumber == b->VolumeSerialNumber &&
+         std::memcmp(a->FileId.Identifier, b->FileId.Identifier, sizeof(a->FileId.Identifier)) == 0;
+}
+
 }  // namespace
 
 Result<cleaning::OwnerContext> owner_context(std::string_view owner_sid) {
@@ -173,7 +195,10 @@ bool is_owner_tray(std::uint32_t pid, std::string_view owner_sid, const fs::path
     return false;
   }
   image.resize(size);
-  if (::CompareStringOrdinal(image.c_str(), -1, tray_image.c_str(), -1, TRUE) != CSTR_EQUAL) {
+  // The image name is the final path, with junctions resolved, while `tray_image` may name the
+  // same file through one; so the files are compared, not the texts.
+  if (::CompareStringOrdinal(image.c_str(), -1, tray_image.c_str(), -1, TRUE) != CSTR_EQUAL &&
+      !same_file(image, tray_image)) {
     return false;
   }
   DWORD session = 0;

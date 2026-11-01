@@ -24,6 +24,7 @@
 #include "phase1_fakes.hpp"
 #include "platform/ipc/pipe_client.hpp"
 #include "platform/ipc/security.hpp"
+#include "platform_fs/sandbox.hpp"
 #include "svc/owner_session.hpp"
 #include "svc/service.hpp"
 #include "svc_test_support.hpp"
@@ -104,6 +105,22 @@ TEST(OwnerTrayTest, OnlyTheConfiguredImageOfTheOwnerInAnInteractiveSessionIsTheT
     GTEST_SKIP() << "the tests run in session 0, where no tray runs";
   }
   EXPECT_TRUE(is_owner_tray(self, *owner, this_executable()));
+}
+
+// The deploy starts the tray through C:\Program Files\MyClean\current, a junction to the
+// version folder, while Windows reports the image under the version folder itself.
+TEST(OwnerTrayTest, TheTrayImageMayBeNamedThroughAJunction) {
+  const Result<std::string> owner = platform::current_user_sid();
+  ASSERT_TRUE(owner.has_value());
+  if (!interactive_session()) {
+    GTEST_SKIP() << "the tests run in session 0, where no tray runs";
+  }
+  const platform::Sandbox sandbox;
+  const fs::path current = sandbox.root() / "current";
+  ASSERT_TRUE(platform::make_junction(current, this_executable().parent_path()));
+  const std::uint32_t self = ::GetCurrentProcessId();
+  EXPECT_TRUE(is_owner_tray(self, *owner, current / this_executable().filename()));
+  EXPECT_FALSE(is_owner_tray(self, *owner, current / "myclean-tray.exe"));
 }
 
 class PipeGuardTest : public ::testing::Test {

@@ -18,9 +18,9 @@ namespace myclean::svc {
 // Fails with not_found while the owner is not logged on.
 [[nodiscard]] Result<cleaning::OwnerContext> owner_context(std::string_view owner_sid);
 
-// True when process `pid` runs the image `tray_image` (compared case-insensitively as a full
-// path), as the user `owner_sid`, in an interactive session (not session 0). False when any of
-// it cannot be read.
+// True when process `pid` runs the image `tray_image` (the same file, also when one of the paths
+// goes through a junction), as the user `owner_sid`, in an interactive session (not session 0).
+// False when any of it cannot be read.
 [[nodiscard]] bool is_owner_tray(std::uint32_t pid, std::string_view owner_sid,
                                  const std::filesystem::path& tray_image);
 
