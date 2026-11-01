@@ -6,6 +6,8 @@ myclean_add_library(fakes
     fake_clock.hpp
     fake_file_system.cpp
     fake_file_system.hpp
+    fake_jobs.cpp
+    fake_jobs.hpp
   DEPENDS
     myclean::os
   INCLUDE_ROOT

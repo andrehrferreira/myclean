@@ -5,5 +5,8 @@ myclean_add_library(os
     clock.cpp
     clock.hpp
     file_system.hpp
+    jobs.cpp
+    jobs.hpp
+    process_control.hpp
   DEPENDS
     myclean::model)

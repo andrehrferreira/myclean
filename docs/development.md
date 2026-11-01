@@ -48,7 +48,8 @@ folder of the repository in `data/` (contract C2).
 ```
 src/core/<module>/      pure C++20 libraries; no Win32 header (checked on every build)
 src/core/model/         shared vocabulary: ids, units, Result, Finding, Plan, Action, Actor
-src/core/os/            interfaces to the OS (IFileSystem, IClock) + the portable SystemClock
+src/core/os/            interfaces to the OS (IFileSystem, IClock, IJobControl, IProcessControl)
+                        + the portable SystemClock
 src/core/store/         SQLite store: migrations, synchronous and batched writes, time series
 src/core/safety/        SafeRemove and its hard deny-list: the only code that deletes or moves
 src/core/actions/       plan state machine, action_log/undo_blob/quarantine, DeleteItems,
@@ -78,6 +79,8 @@ src/core/health/        disk health: NVMe log / SMART interpretation, assessment
 src/core/alerts/        alert rules (data/alerts.toml) and the engine: thresholds, changes,
                         rate limit, snooze, badge
 src/core/trust/         trust signal: signature, signer, path class, knowledge-base match
+src/core/games/         game detection for the governor: launcher library roots, the owner's
+                        GameConfigStore, fullscreen foreground with sustained GPU use
 src/core/input/         copy/paste freeze watchdog logic, mechanism classifier, incident store,
                         the incident record sent over the pipe
 src/core/ipc/           frames, the JSON-RPC dispatcher with typed parameters, the method
@@ -91,7 +94,7 @@ src/core/user_tasks/    the user-scope plans the tray runs under the owner's tok
                         commands, user-profile cleanup handlers, relocations; their reports
 src/platform/<module>/  Win32 implementations of src/core interfaces (proc, perf, disk,
                         disk_health, etw, trust, input, ipc, fs, service, scan, clean, git,
-                        cleanup, settings, ntfs, compress, defrag, packs)
+                        cleanup, settings, ntfs, compress, defrag, packs, jobs, games)
 src/svc/                myclean-svc: host, Service and its components (see below)
 src/tray/               myclean-tray: tray icon, toasts, dashboard (approval inbox, Space),
                         input watchdog, the worker that runs user tasks
@@ -188,7 +191,7 @@ Win32 header) fails the build with the file and line.
 - **Time:** `WallTime` for stored timestamps, `MonoTime` for intervals, both from an injected
   `os::IClock`; tests use `fakes::FakeClock` and never sleep.
 - **OS access** from core only through `src/core/os` interfaces; tests use the fakes. Platform
-  interfaces for later phases (process table, jobs, registry, clipboard) are added with the
+  interfaces for later phases (process table, registry, clipboard) are added with the
   phase that needs them.
 
 ### Wiring the store, SafeRemove, actions and scheduler
