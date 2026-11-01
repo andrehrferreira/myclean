@@ -36,6 +36,7 @@
 #include "core/packs/loader.hpp"
 #include "core/packs/registry.hpp"
 #include "core/packs/schema.hpp"
+#include "core/safety/deny_list.hpp"
 #include "core/safety/safe_remove.hpp"
 #include "core/sched/schedule_repository.hpp"
 #include "core/space/downloads.hpp"
@@ -721,6 +722,10 @@ Result<Json> CleaningService::analyze_top(const std::string& key, const std::sto
   Json json = top;
   for (std::size_t index = 0; index < found.size(); ++index) {
     json["files"][index]["id"] = found[index].id;
+    if (const std::optional<std::string_view> denied =
+            safety::denied_by(found[index].path, owner_->locations)) {
+      json["files"][index]["protected"] = std::string(*denied);
+    }
   }
   json["path"] = utf8(root);
   return json;

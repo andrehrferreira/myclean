@@ -712,7 +712,8 @@ Result<std::vector<PlanItem>> Executor::items_of(std::span<const std::int64_t> i
     const Result<os::FileStat> status = environment_.file_system->stat(candidate.path);
     if (!status) {
       return fail(Errc::not_found, "candidate " + std::to_string(candidate.id) + " (" +
-                                       utf8(candidate.path) + ") is gone");
+                                       utf8(candidate.path) +
+                                       ") is gone since the list was made; refresh the list");
     }
     items.push_back(
         PlanItem{.path = candidate.path, .identity = status->identity, .size = candidate.size});

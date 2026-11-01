@@ -453,6 +453,25 @@ TEST_F(CleaningServiceTest, TheHourlyPurgeDeletesAQuarantineOnAVolumeShortOfSpac
             1);
 }
 
+// A largest file the deny list refuses is listed with the entry that refuses it, so the tray
+// shows why instead of a proposal that would fail.
+TEST_F(CleaningServiceTest, ALargestFileTheDenyListRefusesSaysWhy) {
+  start();
+  work();
+  fs().add_file(L"F:\\big.iso", 5_GiB);
+  fs().add_file(L"F:\\pagefile.sys", 9_GiB);
+  reader().listings[path(L"F:\\")] = {space::testing::file("big.iso", 5ULL << 30U, 1),
+                                      space::testing::file("pagefile.sys", 9ULL << 30U, 2)};
+  call("space.top", Json{{"path", "F"}, {"refresh", true}});
+  work_space();
+  const Json files = call("space.top", Json{{"path", "F"}}).at("files");
+  ASSERT_EQ(files.size(), 2U);
+  EXPECT_EQ(files[0].at("path"), "F:\\pagefile.sys");
+  EXPECT_EQ(files[0].at("protected"), "page_file");
+  EXPECT_EQ(files[1].at("path"), "F:\\big.iso");
+  EXPECT_FALSE(files[1].contains("protected"));
+}
+
 TEST_F(CleaningServiceTest, AnMcpProposalWaitsForTheOwnerAndCannotBeApprovedByAnotherCaller) {
   start();
   work();

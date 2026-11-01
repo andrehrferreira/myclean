@@ -114,6 +114,7 @@ struct TopFileRow {
   std::string path;
   Bytes size_on_disk;
   WallTime modified;
+  std::string protected_by;  // the deny-list entry that refuses it; empty when it can be proposed
 };
 struct TopFolderRow {
   std::string path;
@@ -147,6 +148,9 @@ struct UsedInstallerRow {
 
 // The copy to keep: the oldest, most likely the original.
 [[nodiscard]] const DuplicateFileRow* keep_hint(const DuplicateGroupRow& group);
+
+// Why a largest file is not proposed, from its deny-list entry (TopFileRow::protected_by).
+[[nodiscard]] std::string_view protected_text(std::string_view rule);
 
 // What the owner can ask for in the Space view.
 enum class SpaceList { top, old_downloads, duplicates, used_installers };

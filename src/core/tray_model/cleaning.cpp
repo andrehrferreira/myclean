@@ -126,10 +126,12 @@ Result<T> parsed(std::string_view method, const Parse& parse) {
 
 void parse_top(const Json& answer, SpaceReply& reply) {
   for (const Json& file : answer.at("files")) {
-    reply.top_files.push_back(TopFileRow{.id = file.at("id").get<std::int64_t>(),
-                                         .path = file.at("path").get<std::string>(),
-                                         .size_on_disk = bytes_of(file, "size_on_disk"),
-                                         .modified = time_of(file, "modified")});
+    reply.top_files.push_back(
+        TopFileRow{.id = file.at("id").get<std::int64_t>(),
+                   .path = file.at("path").get<std::string>(),
+                   .size_on_disk = bytes_of(file, "size_on_disk"),
+                   .modified = time_of(file, "modified"),
+                   .protected_by = optional_text(file, "protected").value_or("")});
   }
   for (const Json& folder : answer.at("folders")) {
     reply.top_folders.push_back(TopFolderRow{.path = folder.at("path").get<std::string>(),
@@ -413,6 +415,31 @@ Result<void> parse_space(const Json& answer, SpaceReply& reply) {
 const DuplicateFileRow* keep_hint(const DuplicateGroupRow& group) {
   const auto oldest = std::ranges::min_element(group.files, {}, &DuplicateFileRow::modified);
   return oldest == group.files.end() ? nullptr : &*oldest;
+}
+
+std::string_view protected_text(std::string_view rule) {
+  if (rule == "page_file") {
+    return "Windows' page or hibernation file: see System space";
+  }
+  if (rule == "system_volume_information") {
+    return "restore points and shadow copies: Windows manages them";
+  }
+  if (rule == "program_files") {
+    return "an installed program: uninstall it to free this";
+  }
+  if (rule == "user_known_folder") {
+    return "in your Documents, Desktop or Downloads: yours to delete";
+  }
+  if (rule == "git") {
+    return "inside a git repository";
+  }
+  if (rule == "other_profile") {
+    return "another user's profile";
+  }
+  if (rule == "myclean") {
+    return "MyClean's own files";
+  }
+  return "a Windows system file";
 }
 
 bool pending(const PlanRow& plan) {

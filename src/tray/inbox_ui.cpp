@@ -425,7 +425,11 @@ void draw_top(const tray_model::SpaceReply& reply, const std::chrono::time_zone&
       ImGui::TableNextColumn();
       muted_text(local_date_time(zone, file.modified));
       ImGui::TableNextColumn();
-      propose_button({file.id}, "Propose cleanup", reachable, state);
+      if (file.protected_by.empty()) {
+        propose_button({file.id}, "Propose cleanup", reachable, state);
+      } else {
+        muted_text(tray_model::protected_text(file.protected_by));
+      }
       ImGui::PopID();
     }
     ImGui::EndTable();

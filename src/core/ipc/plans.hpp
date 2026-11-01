@@ -205,8 +205,11 @@ inline constexpr std::string_view quarantine_purge_method = "quarantine.purge";
 
 // Parameters: path (token, required): a drive letter ("C") or "downloads" or "profile" (the
 // owner's); n (integer 1..100, optional, default 20); refresh (boolean, optional).
-//   {..., "path": string, "files": [{"id", "path", "size_on_disk", "size", "modified"}],
-//    "folders": [{"path", "size_on_disk", "size", "files"}]}
+//   {..., "path": string, "files": [{"id", "path", "size_on_disk", "size", "modified",
+//    "protected"?}], "folders": [{"path", "size_on_disk", "size", "files"}]}
+// "protected" names the deny-list entry that refuses the file (core/safety/deny_list.hpp, such
+// as "page_file" or "system_volume_information"); a plan of it would be refused, so it is shown
+// but not proposed.
 inline constexpr std::string_view space_top_method = "space.top";
 
 // Parameters: refresh (boolean, optional). Files of the owner's Downloads folder created and

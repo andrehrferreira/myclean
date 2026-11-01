@@ -111,7 +111,8 @@ inline InboxJson space_top_json(std::string_view state = "ready") {
                                                 {"path", R"(C:\hiberfil.sys)"},
                                                 {"size_on_disk", 54'653'000'000LL},
                                                 {"size", 54'653'000'000LL},
-                                                {"modified", 998'000}}});
+                                                {"modified", 998'000},
+                                                {"protected", "page_file"}}});
   answer["folders"] = InboxJson::array({InboxJson{{"path", R"(C:\Windows)"},
                                                   {"size_on_disk", 40'000'000'000LL},
                                                   {"size", 41'000'000'000LL},

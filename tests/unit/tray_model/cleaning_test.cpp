@@ -219,6 +219,15 @@ TEST(CleaningRepliesTest, QuarantineRunsWithPurgeDates) {
   EXPECT_EQ(run.items[1].bytes, Bytes{1000});
 }
 
+TEST(CleaningRepliesTest, AProtectedFileSaysWhoFreesIt) {
+  EXPECT_EQ(protected_text("page_file"), "Windows' page or hibernation file: see System space");
+  EXPECT_EQ(protected_text("system_volume_information"),
+            "restore points and shadow copies: Windows manages them");
+  EXPECT_EQ(protected_text("user_known_folder"),
+            "in your Documents, Desktop or Downloads: yours to delete");
+  EXPECT_EQ(protected_text("windir"), "a Windows system file");
+}
+
 TEST(CleaningRepliesTest, SpaceListsWithCandidateIds) {
   SpaceReply top{.list = SpaceList::top, .volume = "C:"};
   ASSERT_TRUE(parse_space(testing::space_top_json(), top).has_value());
@@ -226,6 +235,7 @@ TEST(CleaningRepliesTest, SpaceListsWithCandidateIds) {
   EXPECT_EQ(top.scanned_at, from_unix_seconds(999'000));
   ASSERT_EQ(top.top_files.size(), 1U);
   EXPECT_EQ(top.top_files[0].id, 501);
+  EXPECT_EQ(top.top_files[0].protected_by, "page_file");
   EXPECT_EQ(top.top_folders[0].files, 300'000U);
 
   SpaceReply downloads{.list = SpaceList::old_downloads};
