@@ -1,6 +1,7 @@
 #include "core/tray_model/cleaning.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -19,6 +20,7 @@
 #include "core/ipc/plans.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/tray_model/format.hpp"
 #include "core/tray_model/replies.hpp"
 
 namespace myclean::tray_model {
@@ -58,6 +60,27 @@ std::vector<std::int64_t> purging_of(const Json& reply) {
     return {};
   }
   return found->get<std::vector<std::int64_t>>();
+}
+
+// cleaning.status "applying"; absent from a service older than the progress of plans.
+std::optional<ApplyingRow> applying_of(const Json& reply) {
+  const auto found = reply.find("applying");
+  if (found == reply.end() || found->is_null()) {
+    return std::nullopt;
+  }
+  const Json& applying = *found;
+  const Json& plan = applying.at("plan");
+  return ApplyingRow{
+      .kind = applying.at("kind").get<std::string>(),
+      .plan = plan.is_null() ? std::nullopt : std::optional(plan.get<std::int64_t>()),
+      .title = applying.at("title").get<std::string>(),
+      .started_at = time_of(applying, "started_at"),
+      .items_done = applying.at("items_done").get<std::int64_t>(),
+      .items_total = applying.at("items_total").get<std::int64_t>(),
+      .bytes_done = bytes_of(applying, "bytes_done"),
+      .bytes_total = bytes_of(applying, "bytes_total"),
+      .files_done = applying.at("files_done").get<std::int64_t>(),
+      .current = optional_text(applying, "current").value_or("")};
 }
 
 // A PlanSummary; in a plans.get answer "items" is the item list and "items_total" the count.
@@ -187,8 +210,46 @@ Result<CleaningStatus> parse_cleaning_status(const Json& reply) {
                           .bytes = bytes_of(reply, "bytes"),
                           .next_auto_run = optional_time(reply, "next_auto_run"),
                           .purging = purging_of(reply),
+                          .applying = applying_of(reply),
                           .unavailable = optional_text(reply, "unavailable").value_or("")};
   });
+}
+
+double applied_share(const ApplyingRow& applying) {
+  if (applying.bytes_total.count() > 0) {
+    return std::clamp(static_cast<double>(applying.bytes_done.count()) /
+                          static_cast<double>(applying.bytes_total.count()),
+                      0.0, 1.0);
+  }
+  if (applying.items_total > 0) {
+    return std::clamp(
+        static_cast<double>(applying.items_done) / static_cast<double>(applying.items_total), 0.0,
+        1.0);
+  }
+  return 0.0;
+}
+
+std::string applying_text(const ApplyingRow& applying) {
+  std::string text = "Applying " + applying.title + ": " + std::to_string(applying.items_done) +
+                     " of " + std::to_string(applying.items_total) + " items, " +
+                     format_bytes(static_cast<double>(applying.bytes_done.count())) + " of " +
+                     format_bytes(static_cast<double>(applying.bytes_total.count()));
+  if (!applying.current.empty()) {
+    text += " - " + applying.current;
+  }
+  return text;
+}
+
+std::string applying_elapsed(const ApplyingRow& applying, WallTime now) {
+  const auto seconds = std::max<std::int64_t>(
+      0, std::chrono::duration_cast<std::chrono::seconds>(now - applying.started_at).count());
+  if (seconds < 60) {
+    return std::to_string(seconds) + " s";
+  }
+  if (seconds < 3600) {
+    return std::to_string(seconds / 60) + " min " + std::to_string(seconds % 60) + " s";
+  }
+  return std::to_string(seconds / 3600) + " h " + std::to_string(seconds % 3600 / 60) + " min";
 }
 
 Result<std::vector<PlanRow>> parse_plans_list(const Json& reply) {

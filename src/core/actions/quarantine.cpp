@@ -158,6 +158,20 @@ Result<void> write_ahead(store::Store& store,
   });
 }
 
+// A folder copied to another volume: its record (written ahead) points at the complete copy
+// before the source goes, so a crash in between leaves a record of where the item is.
+void record_copies(store::Store& store, std::vector<safety::MoveRequest>& requests,
+                   const std::vector<std::optional<QuarantineRecord>>& records) {
+  for (std::size_t index = 0; index < requests.size(); ++index) {
+    if (const std::optional<QuarantineRecord>& record = records[index]) {
+      requests[index].on_copied = [store = &store, id = record->id](const FileIdentity& copy) {
+        return store->write(
+            [&](store::Database& db) { return set_quarantine_identity(db, id, copy); });
+      };
+    }
+  }
+}
+
 // The record of item `item` of stored plan `plan` moved to `location` at `now`; nullopt when the
 // plan has no such item (SafeRemove refuses it).
 std::optional<QuarantineRecord> record_of(const Plan& plan, PlanItemId item,
@@ -194,11 +208,10 @@ struct Folder {
   Bytes size;
 };
 
-// The quarantine folders of every run whose items have all expired at `now`, one per volume.
-// The run folders to purge: of every run whose items all passed their expiry, or of run `only`
-// whatever its expiry.
+// The run folders to purge, one per run and volume: of every run whose items all passed their
+// expiry and every one `early` accepts, or of run `only` whatever its expiry.
 std::map<fs::path, Folder> purge_folders(const std::vector<QuarantineRecord>& held, WallTime now,
-                                         std::optional<PlanId> only) {
+                                         std::optional<PlanId> only, const PurgeEarly& early) {
   std::map<std::int64_t, std::vector<const QuarantineRecord*>> runs;
   for (const QuarantineRecord& record : held) {
     if (!only || record.run == *only) {
@@ -207,14 +220,16 @@ std::map<fs::path, Folder> purge_folders(const std::vector<QuarantineRecord>& he
   }
   std::map<fs::path, Folder> folders;
   for (const auto& [run, records] : runs) {
-    if (!only && std::ranges::any_of(records, [&](const QuarantineRecord* record) {
-          return record->purge_after > now;
-        })) {
-      continue;
-    }
+    const bool expired = only || std::ranges::none_of(records, [&](const QuarantineRecord* record) {
+                           return record->purge_after > now;
+                         });
     for (const QuarantineRecord* record : records) {
       // <root>\.myclean-quarantine\<run>\<item>\<name>: the run's folder.
-      Folder& folder = folders[record->location.parent_path().parent_path()];
+      const fs::path path = record->location.parent_path().parent_path();
+      if (!expired && !(early && early(path))) {
+        continue;
+      }
+      Folder& folder = folders[path];
       folder.records.push_back(record->id);
       folder.size += record->size;
     }
@@ -330,8 +345,8 @@ Result<void> Quarantine::finish(PlanId plan, std::span<const LogEntry> entries,
   return engine_->transition(plan, kept == 0 ? PlanState::applied : PlanState::failed, actor);
 }
 
-Result<void> Quarantine::restore(PlanId run, std::span<const PlanItemId> items,
-                                 const Actor& actor) {
+Result<void> Quarantine::restore(PlanId run, std::span<const PlanItemId> items, const Actor& actor,
+                                 safety::IProgress* progress) {
   if (actor.kind() == Actor::Kind::mcp) {
     return fail(Errc::refused, actor.to_string() + " may not restore quarantined items");
   }
@@ -364,7 +379,7 @@ Result<void> Quarantine::restore(PlanId run, std::span<const PlanItemId> items,
     requests.push_back({.item = stored->items[index].id, .destination = records[index].original});
   }
   const std::vector<safety::ItemOutcome> outcomes =
-      environment_.safe_remove->move(stored->id, requests);
+      environment_.safe_remove->move(stored->id, requests, progress);
 
   std::vector<LogEntry> entries;
   std::vector<std::int64_t> restored;
@@ -392,7 +407,8 @@ Result<void> Quarantine::restore(PlanId run, std::span<const PlanItemId> items,
   return {};
 }
 
-Result<std::size_t> Quarantine::purge(const Actor& actor, std::optional<PlanId> run) {
+Result<std::size_t> Quarantine::purge(const Actor& actor, std::optional<PlanId> run,
+                                      const PurgeEarly& early, safety::IProgress* progress) {
   if (actor.kind() == Actor::Kind::mcp) {
     return fail(Errc::refused, actor.to_string() + " may not purge the quarantine");
   }
@@ -404,7 +420,7 @@ Result<std::size_t> Quarantine::purge(const Actor& actor, std::optional<PlanId> 
     return tl::unexpected(held.error());
   }
   const WallTime now = environment_.clock->now();
-  const std::map<fs::path, Folder> folders = purge_folders(*held, now, run);
+  const std::map<fs::path, Folder> folders = purge_folders(*held, now, run, early);
 
   // A folder that is already gone needs no plan.
   std::vector<std::int64_t> purged;
@@ -440,7 +456,7 @@ Result<std::size_t> Quarantine::purge(const Actor& actor, std::optional<PlanId> 
     ids.push_back(item.id);
   }
   const std::vector<safety::ItemOutcome> outcomes =
-      environment_.safe_remove->remove(stored->id, ids);
+      environment_.safe_remove->remove(stored->id, ids, progress);
   std::vector<LogEntry> entries;
   std::size_t kept = 0;
   for (std::size_t index = 0; index < outcomes.size(); ++index) {
@@ -503,9 +519,10 @@ Result<Undo> QuarantineItems::apply(const Preview& preview) {
   if (Result<void> written = write_ahead(*environment().store, records); !written) {
     return tl::unexpected(written.error());
   }
+  record_copies(*environment().store, requests, records);
 
   const std::vector<safety::ItemOutcome> outcomes =
-      environment().safe_remove->move(plan_id(), requests);
+      environment().safe_remove->move(plan_id(), requests, progress());
   std::vector<LogEntry> entries;
   std::vector<std::int64_t> unmoved;
   std::vector<std::pair<std::int64_t, FileIdentity>> moved_away;  // to another volume
@@ -555,7 +572,7 @@ Result<void> QuarantineItems::undo(const Undo& undo) {
   if (items.empty()) {
     return {};
   }
-  return quarantine_->restore(plan_id(), items, actor());
+  return quarantine_->restore(plan_id(), items, actor(), progress());
 }
 
 }  // namespace myclean::actions

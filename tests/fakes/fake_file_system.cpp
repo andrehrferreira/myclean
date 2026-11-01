@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -76,12 +77,13 @@ FileIdentity FakeFileSystem::next_identity(const fs::path& path) {
   return identity;
 }
 
-std::optional<Errc> FakeFileSystem::injected_failure(const fs::path& path) const {
+std::optional<Errc> FakeFileSystem::injected_failure(const fs::path& path,
+                                                     OperationKind kind) const {
   const auto found = failures_.find(key_of(path));
-  if (found == failures_.end()) {
+  if (found == failures_.end() || (found->second.only && *found->second.only != kind)) {
     return std::nullopt;
   }
-  return found->second;
+  return found->second.code;
 }
 
 std::vector<const FakeFileSystem::Node*> FakeFileSystem::children_of(
@@ -170,8 +172,8 @@ void FakeFileSystem::set_short_name(const fs::path& path, const std::wstring& sh
   found->second.short_name = short_name;
 }
 
-void FakeFileSystem::fail_on(const fs::path& path, Errc code) {
-  failures_[key_of(path)] = code;
+void FakeFileSystem::fail_on(const fs::path& path, Errc code, std::optional<OperationKind> only) {
+  failures_[key_of(path)] = Failure{.code = code, .only = only};
 }
 
 void FakeFileSystem::erase(const fs::path& path) {
@@ -259,7 +261,7 @@ Result<void> FakeFileSystem::remove_entry(const fs::path& path, const FileIdenti
     on_remove_(path);
   }
   operations_.push_back({.kind = OperationKind::remove, .from = path});
-  if (auto code = injected_failure(path)) {
+  if (auto code = injected_failure(path, OperationKind::remove)) {
     return fail(*code, "injected failure: " + narrow(path));
   }
   auto status = stat(path);
@@ -280,7 +282,7 @@ Result<void> FakeFileSystem::remove_entry(const fs::path& path, const FileIdenti
 Result<void> FakeFileSystem::rename(const fs::path& from, const fs::path& to) {
   operations_.push_back({.kind = OperationKind::rename, .from = from, .to = to});
   for (const fs::path* path : {&from, &to}) {
-    if (auto code = injected_failure(*path)) {
+    if (auto code = injected_failure(*path, OperationKind::rename)) {
       return fail(*code, "injected failure: " + narrow(*path));
     }
     if (auto absolute = require_absolute(*path); !absolute) {
@@ -329,7 +331,7 @@ Result<void> FakeFileSystem::rename(const fs::path& from, const fs::path& to) {
 Result<void> FakeFileSystem::move_file(const fs::path& from, const fs::path& to) {
   operations_.push_back({.kind = OperationKind::move_file, .from = from, .to = to});
   for (const fs::path* path : {&from, &to}) {
-    if (auto code = injected_failure(*path)) {
+    if (auto code = injected_failure(*path, OperationKind::move_file)) {
       return fail(*code, "injected failure: " + narrow(*path));
     }
     if (auto absolute = require_absolute(*path); !absolute) {
@@ -360,9 +362,58 @@ Result<void> FakeFileSystem::move_file(const fs::path& from, const fs::path& to)
   return {};
 }
 
+Result<os::FileStat> FakeFileSystem::copy_file(const fs::path& from, const fs::path& to,
+                                               const FileIdentity& expected) {
+  operations_.push_back({.kind = OperationKind::copy_file, .from = from, .to = to});
+  for (const fs::path* path : {&from, &to}) {
+    if (auto code = injected_failure(*path, OperationKind::copy_file)) {
+      return fail(*code, "injected failure: " + narrow(*path));
+    }
+    if (auto absolute = require_absolute(*path); !absolute) {
+      return tl::unexpected(absolute.error());
+    }
+  }
+  const auto found = tree_.find(key_of(from));
+  if (found == tree_.end()) {
+    return fail(Errc::not_found, "no such entry: " + narrow(from));
+  }
+  const os::FileStat source = found->second.stat;
+  if (source.identity != expected) {
+    return fail(Errc::refused, "entry changed identity: " + narrow(from));
+  }
+  if (source.kind != os::EntryKind::file || source.attributes.reparse_point ||
+      source.attributes.cloud_placeholder()) {
+    return fail(Errc::invalid_argument, "not a regular local file: " + narrow(from));
+  }
+  if (exists(to)) {
+    return fail(Errc::already_exists, "destination exists: " + narrow(to));
+  }
+  if (auto parent = check_parent(to); !parent) {
+    return tl::unexpected(parent.error());
+  }
+  insert(to, source);
+  return tree_.at(key_of(to)).stat;
+}
+
+Result<void> FakeFileSystem::flush(std::span<const fs::path> files) {
+  if (files.empty()) {
+    return {};
+  }
+  operations_.push_back({.kind = OperationKind::flush, .from = files.front()});
+  for (const fs::path& file : files) {
+    if (auto code = injected_failure(file, OperationKind::flush)) {
+      return fail(*code, "injected failure: " + narrow(file));
+    }
+    if (!exists(file)) {
+      return fail(Errc::not_found, "no such entry: " + narrow(file));
+    }
+  }
+  return {};
+}
+
 Result<void> FakeFileSystem::create_directories(const fs::path& path) {
   operations_.push_back({.kind = OperationKind::create_directories, .from = path});
-  if (auto code = injected_failure(path)) {
+  if (auto code = injected_failure(path, OperationKind::create_directories)) {
     return fail(*code, "injected failure: " + narrow(path));
   }
   if (auto absolute = require_absolute(path); !absolute) {

@@ -89,7 +89,7 @@ struct ServiceSources {
 
 struct ServiceSettings {
   ExecutorOptions executor;
-  std::string auto_schedule = "0 3 * * *";    // the auto run: daily at 03:00, with catch-up
+  std::string auto_schedule = "0 * * * *";    // the auto run: hourly, with catch-up
   std::string purge_schedule = "15 * * * *";  // the quarantine purge: hourly
   // False: no recurring job and no execution (a console run without a sandbox). Scans,
   // proposals, approvals and the read side still work.

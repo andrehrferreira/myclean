@@ -40,6 +40,9 @@ class ItemAction : public Action {
   // Metric "bytes_at_original_paths": before is the stored size of each item in `undo`, after
   // what is on disk at its path now. Less is better.
   [[nodiscard]] Result<Verification> verify(const Undo& undo) override;
+  // Tells `progress` (null: nobody) what apply and undo do as they go. It must outlive the
+  // action.
+  void observe(safety::IProgress* progress) { progress_ = progress; }
 
  protected:
   ItemAction(const Environment& environment, PlanId plan, Actor actor);
@@ -63,6 +66,7 @@ class ItemAction : public Action {
   [[nodiscard]] const Environment& environment() const { return environment_; }
   [[nodiscard]] PlanId plan_id() const { return plan_; }
   [[nodiscard]] const Actor& actor() const { return actor_; }
+  [[nodiscard]] safety::IProgress* progress() const { return progress_; }
 
  private:
   [[nodiscard]] Result<Plan> load_plan() const;
@@ -70,6 +74,7 @@ class ItemAction : public Action {
   Environment environment_;
   PlanId plan_;
   Actor actor_;
+  safety::IProgress* progress_ = nullptr;
 };
 
 }  // namespace myclean::actions

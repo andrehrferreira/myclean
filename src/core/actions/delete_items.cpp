@@ -35,7 +35,7 @@ Result<Undo> DeleteItems::apply(const Preview& preview) {
     ids.push_back(item.id);
   }
   const std::vector<safety::ItemOutcome> outcomes =
-      environment().safe_remove->remove(plan_id(), ids);
+      environment().safe_remove->remove(plan_id(), ids, progress());
 
   Undo undo{.not_reversible = "regenerates"};
   const Result<void> logged = environment().store->write([&](store::Database& db) -> Result<void> {

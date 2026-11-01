@@ -5,6 +5,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -21,12 +22,12 @@ namespace myclean::fakes {
 // outside changes with erase(); every mutating IFileSystem call is recorded in operations().
 class FakeFileSystem final : public os::IFileSystem {
  public:
-  enum class OperationKind { remove, rename, move_file, create_directories };
+  enum class OperationKind { remove, rename, move_file, copy_file, flush, create_directories };
 
   struct Operation {
     OperationKind kind;
-    std::filesystem::path from;
-    std::filesystem::path to;  // empty for remove and create_directories
+    std::filesystem::path from;  // flush: the first file
+    std::filesystem::path to;    // empty for remove, flush and create_directories
 
     friend bool operator==(const Operation&, const Operation&) = default;
   };
@@ -41,8 +42,10 @@ class FakeFileSystem final : public os::IFileSystem {
                         os::FileAttributes attributes = {});
   // Gives the last component of `path` an 8.3 alias such as "PROGRA~1".
   void set_short_name(const std::filesystem::path& path, const std::wstring& short_name);
-  // Makes every later remove, rename, move_file or create_directories that names `path` fail.
-  void fail_on(const std::filesystem::path& path, Errc code);
+  // Makes every later remove, rename, move_file, copy_file, flush or create_directories that
+  // names `path` fail; with `only`, just the operations of that kind.
+  void fail_on(const std::filesystem::path& path, Errc code,
+               std::optional<OperationKind> only = std::nullopt);
   // Removes `path` and everything below it without recording an operation: a change made by
   // someone else. Throws std::logic_error when `path` does not exist.
   void erase(const std::filesystem::path& path);
@@ -67,6 +70,10 @@ class FakeFileSystem final : public os::IFileSystem {
                                     const std::filesystem::path& to) override;
   [[nodiscard]] Result<void> move_file(const std::filesystem::path& from,
                                        const std::filesystem::path& to) override;
+  [[nodiscard]] Result<os::FileStat> copy_file(const std::filesystem::path& from,
+                                               const std::filesystem::path& to,
+                                               const FileIdentity& expected) override;
+  [[nodiscard]] Result<void> flush(std::span<const std::filesystem::path> files) override;
   [[nodiscard]] Result<void> create_directories(const std::filesystem::path& path) override;
 
  private:
@@ -80,7 +87,8 @@ class FakeFileSystem final : public os::IFileSystem {
   [[nodiscard]] static std::wstring key_of(const std::filesystem::path& path);
   [[nodiscard]] static std::wstring child_prefix(const std::wstring& key);
   [[nodiscard]] static std::uint64_t volume_serial_of(const std::filesystem::path& path);
-  [[nodiscard]] std::optional<Errc> injected_failure(const std::filesystem::path& path) const;
+  [[nodiscard]] std::optional<Errc> injected_failure(const std::filesystem::path& path,
+                                                     OperationKind kind) const;
   [[nodiscard]] bool has_children(const std::wstring& key) const;
   [[nodiscard]] std::vector<const Node*> children_of(const std::wstring& key) const;
   // Fails unless the parent of `path` exists as a directory that is not a reparse point.
@@ -93,7 +101,11 @@ class FakeFileSystem final : public os::IFileSystem {
                                           const FileIdentity* expected);
 
   Tree tree_;
-  std::map<std::wstring, Errc> failures_;
+  struct Failure {
+    Errc code = Errc::io_error;
+    std::optional<OperationKind> only;
+  };
+  std::map<std::wstring, Failure> failures_;
   std::vector<Operation> operations_;
   std::function<void(const std::filesystem::path&)> on_remove_;
   std::uint64_t next_file_id_ = 1;

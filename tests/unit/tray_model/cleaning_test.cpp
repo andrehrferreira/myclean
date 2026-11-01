@@ -13,6 +13,7 @@
 #include "core/ipc/plans.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/tray_model/format.hpp"
 #include "core/tray_model/replies.hpp"
 #include "inbox_fixtures.hpp"
 
@@ -48,6 +49,54 @@ TEST(CleaningRepliesTest, CleaningStatusWhileScanningAndIdle) {
 
   never["state"] = "busy";
   EXPECT_FALSE(parse_cleaning_status(never).has_value());
+}
+
+TEST(CleaningRepliesTest, ApplyingShowsTheProgressOfThePlanAndIsAbsentFromAnOlderService) {
+  Json status = testing::cleaning_status_json(false);
+  const Result<CleaningStatus> older = parse_cleaning_status(status);  // no "applying" member
+  ASSERT_TRUE(older.has_value()) << older.error().message;
+  EXPECT_FALSE(older->applying);
+  status["applying"] = nullptr;
+  EXPECT_FALSE(parse_cleaning_status(status)->applying);
+
+  status["applying"] = {{"kind", "plan"},
+                        {"plan", 7},
+                        {"title", "Quarantine dev-caches"},
+                        {"started_at", 1'000'000},
+                        {"items_done", 3},
+                        {"items_total", 12},
+                        {"bytes_done", 1'500'000'000},
+                        {"bytes_total", 6'000'000'000},
+                        {"files_done", 812},
+                        {"current", R"(C:\zig\cache\o\1f2e)"}};
+  const Result<CleaningStatus> running = parse_cleaning_status(status);
+  ASSERT_TRUE(running.has_value()) << running.error().message;
+  ASSERT_TRUE(running->applying);
+  const ApplyingRow& applying = *running->applying;
+  EXPECT_EQ(applying.plan, 7);
+  EXPECT_EQ(applying.files_done, 812);
+  EXPECT_DOUBLE_EQ(applied_share(applying), 0.25);
+  EXPECT_EQ(applying_text(applying), "Applying Quarantine dev-caches: 3 of 12 items, " +
+                                         format_bytes(1.5e9) + " of " + format_bytes(6e9) +
+                                         R"( - C:\zig\cache\o\1f2e)");
+  EXPECT_EQ(applying_elapsed(applying, from_unix_seconds(1'000'045)), "45 s");
+  EXPECT_EQ(applying_elapsed(applying, from_unix_seconds(1'000'725)), "12 min 5 s");
+  EXPECT_EQ(applying_elapsed(applying, from_unix_seconds(1'003'780)), "1 h 3 min");
+
+  status["applying"] = {{"kind", "purge"},   {"plan", nullptr},  {"title", "Purge the quarantine"},
+                        {"started_at", 1},   {"items_done", 0},  {"items_total", 2},
+                        {"bytes_done", 0},   {"bytes_total", 0}, {"files_done", 0},
+                        {"current", nullptr}};
+  const Result<CleaningStatus> purging = parse_cleaning_status(status);
+  ASSERT_TRUE(purging.has_value()) << purging.error().message;
+  ASSERT_TRUE(purging->applying);
+  const ApplyingRow& scheduled = *purging->applying;
+  EXPECT_FALSE(scheduled.plan.has_value());
+  EXPECT_TRUE(scheduled.current.empty());
+  EXPECT_DOUBLE_EQ(applied_share(scheduled), 0.0);
+
+  status["applying"].erase("title");
+  EXPECT_FALSE(parse_cleaning_status(status).has_value());
 }
 
 // Approvals spec, "Pending plan shown".

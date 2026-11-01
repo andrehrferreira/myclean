@@ -21,6 +21,7 @@
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/safety/safe_remove.hpp"
 #include "core/store/database.hpp"
 
 namespace myclean::actions {
@@ -29,7 +30,8 @@ namespace myclean::actions {
 // the item's own volume root (or the overflow volume, see QuarantineRoot), <run> the id of the
 // plan that quarantined the item and <item> its plan item id, so two items with the same name
 // never collide. On the item's own volume the move is a rename: the item keeps its identity and
-// nothing is copied; a file moved to another volume gets the identity it has there.
+// nothing is copied. An item moved to another volume (a file, or a folder copied entry by entry)
+// gets the identity it has there; for a folder it is recorded before its source is removed.
 inline constexpr std::string_view quarantine_folder = ".myclean-quarantine";
 
 // Where `original`, item `item` of run `run`, is kept while quarantined below `root` (its own
@@ -42,6 +44,10 @@ inline constexpr std::string_view quarantine_folder = ".myclean-quarantine";
 // reason it must stay where it is: the item is then skipped with that reason.
 using QuarantineRoot =
     std::function<tl::expected<std::filesystem::path, std::string>(const PlanItem& item)>;
+
+// Whether the quarantine folder of a run on one volume (<root>\.myclean-quarantine\<run>) is
+// purged now, before its expiry: its volume needs the space.
+using PurgeEarly = std::function<bool(const std::filesystem::path& folder)>;
 
 enum class QuarantineState { held, restored, purged };
 
@@ -92,15 +98,19 @@ class Quarantine {
   // Moves the held items `items` of run `run` (every held item when empty) back to their
   // original paths. Fails with io_error, naming the count, when some item stays in quarantine,
   // and with refused for an `mcp:*` actor.
+  // `progress` (optional) is told as the items move.
   [[nodiscard]] Result<void> restore(PlanId run, std::span<const PlanItemId> items,
-                                     const Actor& actor);
+                                     const Actor& actor, safety::IProgress* progress = nullptr);
 
-  // Deletes the quarantine folder of every run whose items all passed their expiry, or, with
-  // `run`, the folders of that run now (the owner frees the space before the expiry). Returns
-  // how many records were purged. Fails with refused for an `mcp:*` actor, and for a `run`
-  // purge by anyone but the owner.
+  // Deletes the quarantine folder of every run whose items all passed their expiry, and every
+  // run folder `early` accepts; or, with `run`, the folders of that run now (the owner frees the
+  // space before the expiry). Returns how many records were purged. Fails with refused for an
+  // `mcp:*` actor, and for a `run` purge by anyone but the owner. `progress` (optional) is told
+  // as the folders are deleted.
   [[nodiscard]] Result<std::size_t> purge(const Actor& actor,
-                                          std::optional<PlanId> run = std::nullopt);
+                                          std::optional<PlanId> run = std::nullopt,
+                                          const PurgeEarly& early = {},
+                                          safety::IProgress* progress = nullptr);
 
  private:
   // Stores `plan` for `actor` and moves it to applying.

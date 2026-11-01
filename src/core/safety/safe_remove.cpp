@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -33,6 +34,27 @@ constexpr std::array<std::string_view, 6> disposition_names = {
 
 std::string deny_reason(std::string_view rule) {
   return "deny_list:" + std::string(rule);
+}
+
+// The progress of a caller that wants none.
+class Quiet final : public IProgress {
+ public:
+  Quiet() = default;
+  void begin(std::size_t /*items*/, Bytes /*bytes*/) override {}
+  void item_started(const PlanItem& /*item*/) override {}
+  void file_done(Bytes /*bytes*/) override {}
+  void item_finished(const ItemOutcome& /*outcome*/) override {}
+};
+
+// Item `id` of `plan` as stored; only the id when the plan has none such.
+PlanItem stored_item(const Result<Plan>& plan, PlanItemId id) {
+  if (plan) {
+    if (const auto found = std::ranges::find(plan->items, id, &PlanItem::id);
+        found != plan->items.end()) {
+      return *found;
+    }
+  }
+  return PlanItem{.id = id};
 }
 
 }  // namespace
@@ -74,22 +96,46 @@ SafeRemove::SafeRemove(os::IFileSystem& file_system, const IPlanSource& plans,
                        ProtectedLocations locations)
     : file_system_(&file_system), plans_(&plans), locations_(std::move(locations)) {}
 
-std::vector<ItemOutcome> SafeRemove::remove(PlanId plan, std::span<const PlanItemId> items) {
+std::vector<ItemOutcome> SafeRemove::remove(PlanId plan, std::span<const PlanItemId> items,
+                                            IProgress* progress) {
   const Run run = begin(plan);
+  Quiet quiet;
+  IProgress& report = progress != nullptr ? *progress : quiet;
+  std::vector<PlanItem> stored;
+  stored.reserve(items.size());
+  Bytes bytes;
+  for (const PlanItemId item : items) {
+    bytes += stored.emplace_back(stored_item(run.plan, item)).size;
+  }
+  report.begin(items.size(), bytes);
   std::vector<ItemOutcome> outcomes;
   outcomes.reserve(items.size());
-  for (const PlanItemId item : items) {
-    outcomes.push_back(remove_item(run, item));
+  for (std::size_t index = 0; index < items.size(); ++index) {
+    report.item_started(stored[index]);
+    outcomes.push_back(remove_item(run, items[index], report));
+    report.item_finished(outcomes.back());
   }
   return outcomes;
 }
 
-std::vector<ItemOutcome> SafeRemove::move(PlanId plan, std::span<const MoveRequest> requests) {
+std::vector<ItemOutcome> SafeRemove::move(PlanId plan, std::span<const MoveRequest> requests,
+                                          IProgress* progress) {
   const Run run = begin(plan);
+  Quiet quiet;
+  IProgress& report = progress != nullptr ? *progress : quiet;
+  std::vector<PlanItem> stored;
+  stored.reserve(requests.size());
+  Bytes bytes;
+  for (const MoveRequest& request : requests) {
+    bytes += stored.emplace_back(stored_item(run.plan, request.item)).size;
+  }
+  report.begin(requests.size(), bytes);
   std::vector<ItemOutcome> outcomes;
   outcomes.reserve(requests.size());
-  for (const MoveRequest& request : requests) {
-    outcomes.push_back(move_item(run, request));
+  for (std::size_t index = 0; index < requests.size(); ++index) {
+    report.item_started(stored[index]);
+    outcomes.push_back(move_item(run, requests[index], report));
+    report.item_finished(outcomes.back());
   }
   return outcomes;
 }
@@ -290,7 +336,8 @@ std::optional<SafeRemove::Verdict> SafeRemove::remove_checked(const fs::path& pa
   return source_failure(removed.error());
 }
 
-SafeRemove::Tally SafeRemove::remove_contents(const Run& run, const fs::path& folder) {
+SafeRemove::Tally SafeRemove::remove_contents(const Run& run, const fs::path& folder,
+                                              IProgress& progress) {
   // Depth first with an explicit stack, so that no folder depth can exhaust the call stack.
   struct Frame {
     fs::path folder;
@@ -342,6 +389,7 @@ SafeRemove::Tally SafeRemove::remove_contents(const Run& run, const fs::path& fo
       if (!kept) {
         tally.freed += status->size_on_disk;
         ++tally.removed;
+        progress.file_done(status->size_on_disk);
       }
     }
     if (tally.keep(std::move(kept))) {
@@ -351,7 +399,7 @@ SafeRemove::Tally SafeRemove::remove_contents(const Run& run, const fs::path& fo
   return tally;
 }
 
-ItemOutcome SafeRemove::remove_item(const Run& run, PlanItemId id) {
+ItemOutcome SafeRemove::remove_item(const Run& run, PlanItemId id, IProgress& progress) {
   ItemOutcome outcome{.item = id};
   const auto settle = [&outcome](Verdict verdict) {
     outcome.disposition = verdict.disposition;
@@ -372,7 +420,7 @@ ItemOutcome SafeRemove::remove_item(const Run& run, PlanItemId id) {
 
   std::optional<Verdict> kept;
   if (target->stat.kind == os::EntryKind::directory && !target->stat.attributes.reparse_point) {
-    Tally tally = remove_contents(run, target->path);
+    Tally tally = remove_contents(run, target->path, progress);
     outcome.freed = tally.freed;
     if (!tally.first_kept) {
       // A folder that vanished meanwhile counts as removed.
@@ -386,6 +434,7 @@ ItemOutcome SafeRemove::remove_item(const Run& run, PlanItemId id) {
     kept = remove_checked(target->path, target->stat.identity);  // a file, or a link as the link
     if (!kept) {
       outcome.freed = target->stat.size_on_disk;
+      progress.file_done(target->stat.size_on_disk);
     }
   }
   if (kept) {
@@ -395,7 +444,7 @@ ItemOutcome SafeRemove::remove_item(const Run& run, PlanItemId id) {
   return outcome;
 }
 
-ItemOutcome SafeRemove::move_item(const Run& run, const MoveRequest& request) {
+ItemOutcome SafeRemove::move_item(const Run& run, const MoveRequest& request, IProgress& progress) {
   ItemOutcome outcome{.item = request.item};
   const auto settle = [&outcome](Verdict verdict) {
     outcome.disposition = verdict.disposition;
@@ -424,19 +473,246 @@ ItemOutcome SafeRemove::move_item(const Run& run, const MoveRequest& request) {
   if (auto status = current_stat(target->path, target->stat.identity); !status) {
     return settle(std::move(status).error());
   }
-  const bool regular_file =
-      target->stat.kind == os::EntryKind::file && !target->stat.attributes.reparse_point;
+  const bool link = target->stat.attributes.reparse_point;
+  if (target->stat.kind == os::EntryKind::directory && !link) {
+    // A folder is renamed on its own volume and copied to another one.
+    const Result<os::FileStat> parent = file_system_->stat(destination->parent_path());
+    if (!parent) {
+      return settle(failure(parent.error()));
+    }
+    if (parent->identity.volume_serial != target->stat.identity.volume_serial) {
+      if (std::optional<Verdict> kept =
+              move_across(run, *target, *destination, request, progress, outcome.freed)) {
+        return settle(*std::move(kept));
+      }
+      outcome.disposition = Disposition::moved;
+      return outcome;
+    }
+  }
+  const bool regular_file = target->stat.kind == os::EntryKind::file && !link;
   const Result<void> moved = regular_file ? file_system_->move_file(target->path, *destination)
                                           : file_system_->rename(target->path, *destination);
   if (!moved) {
     return settle(failure(moved.error()));
   }
   outcome.disposition = Disposition::moved;
+  if (regular_file) {
+    progress.file_done(target->stat.size_on_disk);
+  }
   const Result<os::FileStat> arrived = file_system_->stat(*destination);
   if (arrived && arrived->identity.volume_serial != target->stat.identity.volume_serial) {
     outcome.freed = target->stat.size_on_disk;
   }
   return outcome;
+}
+
+tl::expected<std::vector<SafeRemove::Entry>, SafeRemove::Verdict> SafeRemove::walk(
+    const Run& run, const fs::path& folder) const {
+  std::vector<Entry> entries;
+  std::vector<fs::path> pending = {fs::path{}};  // folders still to list, relative to `folder`
+  while (!pending.empty()) {
+    const fs::path relative = std::move(pending.back());
+    pending.pop_back();
+    Result<std::vector<os::DirEntry>> listed =
+        file_system_->enumerate(relative.empty() ? folder : folder / relative);
+    if (!listed && !relative.empty() && listed.error().code == Errc::not_found) {
+      continue;  // a folder inside, removed by someone else meanwhile
+    }
+    if (!listed) {
+      return tl::unexpected(failure(listed.error()));
+    }
+    for (const os::DirEntry& child : *listed) {
+      tl::expected<os::FileStat, Verdict> status = check_entry(run, child);
+      if (!status && status.error().reason == "not_found") {
+        continue;  // removed by someone else meanwhile
+      }
+      if (!status) {
+        return tl::unexpected(std::move(status).error());
+      }
+      if (status->attributes.reparse_point) {
+        return tl::unexpected(Verdict{.disposition = Disposition::refused,
+                                      .reason = "reparse_point_inside",
+                                      .detail = to_utf8(child.path)});
+      }
+      const fs::path name = relative / child.path.filename();
+      if (status->kind == os::EntryKind::directory) {
+        pending.push_back(name);
+      }
+      entries.push_back(Entry{.relative = name, .stat = *status, .copy = std::nullopt});
+    }
+  }
+  return entries;
+}
+
+std::optional<SafeRemove::Verdict> SafeRemove::move_across(const Run& run, const Target& source,
+                                                           const fs::path& destination,
+                                                           const MoveRequest& request,
+                                                           IProgress& progress, Bytes& freed) {
+  tl::expected<std::vector<Entry>, Verdict> walked = walk(run, source.path);
+  if (!walked) {
+    return std::move(walked).error();
+  }
+  std::vector<Entry>& entries = *walked;
+  const tl::expected<FileIdentity, Verdict> root = create_destination(destination);
+  if (!root) {
+    return root.error();
+  }
+
+  // The copy, durable before the first source entry goes; then the caller records where the
+  // item is, and the source is checked again: copying took time.
+  std::optional<Verdict> broken = copy_entries(source.path, destination, entries, progress);
+  if (!broken && request.on_copied) {
+    if (Result<void> told = request.on_copied(*root); !told) {
+      broken = failure(told.error());
+    }
+  }
+  if (!broken) {
+    if (auto status = current_stat(source.path, source.stat.identity); !status) {
+      broken = std::move(status).error();
+    }
+  }
+  if (broken) {
+    if (!discard(destination, *root, entries)) {
+      broken->detail += "; part of the copy stays at " + to_utf8(destination);
+    }
+    return broken;
+  }
+
+  std::size_t kept = 0;
+  broken = remove_source(source, entries, kept);
+  if (!broken) {
+    for (const Entry& entry : entries) {
+      if (entry.copy && entry.stat.kind == os::EntryKind::file) {
+        freed += entry.stat.size_on_disk;
+      }
+    }
+    return std::nullopt;
+  }
+  // Undo the part removed: copy it back, then drop the destination.
+  if (!put_back(source.path, destination, std::span<const Entry>(entries).subspan(kept))) {
+    broken->detail += "; the item stays complete at " + to_utf8(destination);
+  } else if (!discard(destination, *root, entries)) {
+    broken->detail += "; part of the copy stays at " + to_utf8(destination);
+  }
+  return broken;
+}
+
+tl::expected<FileIdentity, SafeRemove::Verdict> SafeRemove::create_destination(
+    const fs::path& destination) {
+  const Result<os::FileStat> there = file_system_->stat(destination);
+  if (there) {
+    return tl::unexpected(Verdict{.disposition = Disposition::failed,
+                                  .reason = "already_exists",
+                                  .detail = "destination " + to_utf8(destination)});
+  }
+  if (there.error().code != Errc::not_found) {
+    return tl::unexpected(failure(there.error()));
+  }
+  if (Result<void> made = file_system_->create_directories(destination); !made) {
+    return tl::unexpected(failure(made.error()));
+  }
+  const Result<os::FileStat> root = file_system_->stat(destination);
+  if (!root) {
+    return tl::unexpected(failure(root.error()));
+  }
+  return root->identity;
+}
+
+std::optional<SafeRemove::Verdict> SafeRemove::copy_entries(const fs::path& source,
+                                                            const fs::path& destination,
+                                                            std::vector<Entry>& entries,
+                                                            IProgress& progress) {
+  std::vector<fs::path> copies;
+  for (Entry& entry : entries) {
+    const fs::path to = destination / entry.relative;
+    if (entry.stat.kind == os::EntryKind::directory) {
+      const Result<void> made = file_system_->create_directories(to);
+      const Result<os::FileStat> status =
+          made ? file_system_->stat(to) : Result<os::FileStat>(tl::unexpected(made.error()));
+      if (!status) {
+        return failure(status.error());
+      }
+      entry.copy = status->identity;
+      continue;
+    }
+    const Result<os::FileStat> copy =
+        file_system_->copy_file(source / entry.relative, to, entry.stat.identity);
+    if (!copy && copy.error().code == Errc::not_found) {
+      continue;  // removed by someone else meanwhile: nothing to move
+    }
+    if (!copy && copy.error().code == Errc::refused) {
+      return Verdict{.disposition = Disposition::refused,
+                     .reason = "changed_since_plan",
+                     .detail = copy.error().message};
+    }
+    if (!copy) {
+      return failure(copy.error());
+    }
+    entry.copy = copy->identity;
+    copies.push_back(to);
+    progress.file_done(entry.stat.size_on_disk);
+  }
+  // One flush for the whole item, never one per file.
+  if (Result<void> flushed = file_system_->flush(copies); !flushed) {
+    return failure(flushed.error());
+  }
+  return std::nullopt;
+}
+
+std::optional<SafeRemove::Verdict> SafeRemove::remove_source(const Target& source,
+                                                             std::span<const Entry> entries,
+                                                             std::size_t& kept) {
+  // Deepest first (walk order reversed), through the guarded delete. An entry someone else
+  // removed meanwhile is gone either way.
+  const auto stays = [](const std::optional<Verdict>& verdict) {
+    return verdict && verdict->reason != "not_found";
+  };
+  for (kept = entries.size(); kept > 0; --kept) {
+    const Entry& entry = entries[kept - 1];
+    if (!entry.copy) {
+      continue;
+    }
+    std::optional<Verdict> verdict =
+        remove_checked(source.path / entry.relative, entry.stat.identity);
+    if (stays(verdict)) {
+      return verdict;
+    }
+  }
+  const std::optional<Verdict> verdict = remove_checked(source.path, source.stat.identity);
+  return stays(verdict) ? verdict : std::nullopt;
+}
+
+bool SafeRemove::discard(const fs::path& root, const FileIdentity& identity,
+                         std::span<const Entry> entries) {
+  bool clean = true;
+  for (const Entry& entry : std::views::reverse(entries)) {
+    if (entry.copy && !file_system_->remove(root / entry.relative, *entry.copy)) {
+      clean = false;
+    }
+  }
+  return file_system_->remove(root, identity).has_value() && clean;
+}
+
+bool SafeRemove::put_back(const fs::path& source, const fs::path& copy,
+                          std::span<const Entry> entries) {
+  std::vector<fs::path> restored;
+  for (const Entry& entry : entries) {
+    if (!entry.copy) {
+      continue;
+    }
+    const fs::path to = source / entry.relative;
+    if (entry.stat.kind == os::EntryKind::directory) {
+      if (!file_system_->create_directories(to)) {
+        return false;
+      }
+      continue;
+    }
+    if (!file_system_->copy_file(copy / entry.relative, to, *entry.copy)) {
+      return false;
+    }
+    restored.push_back(to);
+  }
+  return file_system_->flush(restored).has_value();
 }
 
 }  // namespace myclean::safety

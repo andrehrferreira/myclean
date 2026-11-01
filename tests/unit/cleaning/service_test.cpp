@@ -1,6 +1,7 @@
 // The cleaning service over fakes: scans by tier, the tray-only methods, quarantine (own volume,
-// overflow, unhealthy target, purge, restore), the scheduled auto run (03:00, busy volume,
-// catch-up) with its manifest, MCP proposals, user tasks of the tray and system settings.
+// overflow, unhealthy target, purge, early purge on a volume short of space, restore), auto-tier
+// plans run after every scan, the hourly auto run (busy volume, catch-up) with its manifest, MCP
+// proposals, user tasks of the tray and system settings.
 
 #include "core/cleaning/service.hpp"
 
@@ -88,7 +89,7 @@ class CleaningServiceTest : public testing::CleaningFixture {
   }
 };
 
-TEST_F(CleaningServiceTest, ScanPlansAskGroupsAndKeepsAutoAndReportItemsAsCandidates) {
+TEST_F(CleaningServiceTest, ScanPlansAskGroupsDeletesAutoItemsAtOnceAndOnlyShowsReportItems) {
   add_targets();
   start();
   scan();
@@ -108,8 +109,14 @@ TEST_F(CleaningServiceTest, ScanPlansAskGroupsAndKeepsAutoAndReportItemsAsCandid
   EXPECT_EQ(handler.at("kind"), "handler");
   EXPECT_EQ(handler.at("scope"), "service");
   EXPECT_EQ(handler.at("bytes"), (7_GiB).count());
-  // Auto-tier items are deleted only by the scheduled run; report-tier items only shown.
-  EXPECT_EQ(plans().size(), 3U);
+  // Auto-tier items are deleted at once, without approval; report-tier items only shown.
+  const Json automatic = plan_titled("regenerable");
+  EXPECT_EQ(automatic.at("tier"), "auto");
+  EXPECT_EQ(automatic.at("state"), "verified");
+  EXPECT_FALSE(fs().exists(L"F:\\temp\\a.tmp"));
+  EXPECT_FALSE(fs().exists(L"F:\\temp\\b.tmp"));
+  EXPECT_TRUE(fs().exists(L"F:\\logs\\old.log"));
+  EXPECT_EQ(plans().size(), 4U);
   EXPECT_EQ(count("SELECT COUNT(*) FROM finding WHERE kind = 'clean.report'"), 1);
 
   const Json status = call("cleaning.status");
@@ -120,7 +127,7 @@ TEST_F(CleaningServiceTest, ScanPlansAskGroupsAndKeepsAutoAndReportItemsAsCandid
 
   // A group whose plan is still open is not proposed again.
   scan();
-  EXPECT_EQ(plans().size(), 3U);
+  EXPECT_EQ(plans().size(), 4U);
 }
 
 TEST_F(CleaningServiceTest, PlanGetShowsItemsCommandsAndUndo) {
@@ -162,7 +169,9 @@ TEST_F(CleaningServiceTest, TrayOnlyMethodsRefuseEveryOtherCaller) {
     EXPECT_EQ(error.at("data").at("errc"), "refused") << method;
   }
   EXPECT_EQ(get(id).at("state"), "awaiting_approval");
-  EXPECT_EQ(count("SELECT COUNT(*) FROM action_log WHERE to_state = 'approved'"), 0);
+  EXPECT_EQ(count("SELECT COUNT(*) FROM action_log WHERE to_state = 'approved' AND plan_id = " +
+                  std::to_string(id)),
+            0);
 }
 
 TEST_F(CleaningServiceTest, ApprovingSomeItemsQuarantinesOnlyThoseOnTheirVolume) {
@@ -236,6 +245,101 @@ TEST_F(CleaningServiceTest, ItemsOfALowSpaceVolumeGoToTheOverflowVolumeAndUndoBr
   EXPECT_FALSE(fs().exists(quarantined(L"L:\\", id, item, L"big.iso")));
 }
 
+TEST_F(CleaningServiceTest, AFolderOfALowSpaceVolumeMovesToTheOverflowVolumeAndBack) {
+  fs().add_file(L"C:\\cache\\zig\\o\\a.bin", 3_MiB);  // C: has 8 % free
+  fs().add_file(L"C:\\cache\\zig\\b.bin", 1_MiB);
+  start();
+  scan();
+  const std::int64_t id = plan_titled("c-caches").at("id").get<std::int64_t>();
+  const std::int64_t item = get(id).at("items")[0].at("id").get<std::int64_t>();
+  approve_all(id);
+  work();
+  EXPECT_EQ(get(id).at("state"), "verified");
+  EXPECT_FALSE(fs().exists(L"C:\\cache\\zig"));
+  EXPECT_FALSE(fs().exists(L"C:\\.myclean-quarantine"));
+  const path held = quarantined(L"L:\\", id, item, L"zig");
+  EXPECT_EQ(fs().stat(held / L"o\\a.bin")->size, 3_MiB);
+  EXPECT_EQ(fs().stat(held / L"b.bin")->size, 1_MiB);
+  EXPECT_EQ(get(id).at("freed"), (4_MiB).count());  // freed on C: at once
+
+  EXPECT_EQ(call("quarantine.restore", Json{{"plan", id}}), (Json{{"restored", 1}}));
+  EXPECT_EQ(fs().stat(L"C:\\cache\\zig\\o\\a.bin")->size, 3_MiB);
+  EXPECT_TRUE(fs().exists(L"C:\\cache\\zig\\b.bin"));
+  EXPECT_FALSE(fs().exists(held));
+}
+
+TEST_F(CleaningServiceTest, AFolderQuarantinedOnTheOverflowVolumeIsPurgedThere) {
+  fs().add_file(L"C:\\cache\\zig\\o\\a.bin", 3_MiB);
+  start();
+  scan();
+  const std::int64_t id = plan_titled("c-caches").at("id").get<std::int64_t>();
+  approve_all(id);
+  work();
+  const path run = path(L"L:\\.myclean-quarantine") / std::to_wstring(id);
+  ASSERT_TRUE(fs().exists(run));
+  EXPECT_EQ(call("quarantine.purge", Json{{"plan", id}}), (Json{{"queued", true}}));
+  work();
+  EXPECT_FALSE(fs().exists(run));
+  EXPECT_FALSE(fs().exists(L"C:\\cache\\zig"));
+  EXPECT_EQ(call("quarantine.list").at("runs"), Json::array());
+}
+
+TEST_F(CleaningServiceTest, StatusShowsTheProgressOfARunningPlanAndNullOnceDone) {
+  add_targets();
+  start();
+  work();
+  EXPECT_TRUE(call("cleaning.status").at("applying").is_null());
+  std::vector<Json> seen;  // "applying" as each file is about to be deleted
+  fs().on_remove([&](const path&) { seen.push_back(call("cleaning.status").at("applying")); });
+  EXPECT_EQ(call("cleaning.scan"), (Json{{"started", true}}));
+  work();  // the scan, then its auto-tier plan
+  fs().on_remove({});
+
+  ASSERT_EQ(seen.size(), 2U);
+  const std::int64_t id = plan_titled("regenerable").at("id").get<std::int64_t>();
+  for (const Json& applying : seen) {
+    ASSERT_TRUE(applying.is_object());
+    EXPECT_EQ(applying.at("kind"), "plan");
+    EXPECT_EQ(applying.at("plan"), id);
+    EXPECT_EQ(applying.at("title"), "Delete regenerable files");
+    EXPECT_EQ(applying.at("items_total"), 2);
+    EXPECT_EQ(applying.at("bytes_total"), (3_MiB).count());
+    EXPECT_EQ(
+        applying.at("started_at"),
+        std::chrono::duration_cast<std::chrono::seconds>(testing::noon.time_since_epoch()).count());
+    EXPECT_TRUE(applying.at("current").get<std::string>().starts_with("F:\\temp\\"));
+  }
+  EXPECT_EQ(seen[0].at("items_done"), 0);
+  EXPECT_EQ(seen[0].at("bytes_done"), 0);
+  EXPECT_EQ(seen[0].at("files_done"), 0);
+  EXPECT_EQ(seen[1].at("items_done"), 1);
+  EXPECT_EQ(seen[1].at("files_done"), 1);
+  EXPECT_GT(seen[1].at("bytes_done").get<std::int64_t>(), 0);
+  EXPECT_NE(seen[0].at("current"), seen[1].at("current"));
+  EXPECT_TRUE(call("cleaning.status").at("applying").is_null());
+}
+
+TEST_F(CleaningServiceTest, StatusShowsTheQuarantineRunBeingDeleted) {
+  add_targets();
+  start();
+  scan();
+  const std::int64_t id = plan_titled("shader-caches").at("id").get<std::int64_t>();
+  approve_all(id);
+  work();
+  EXPECT_EQ(call("quarantine.purge", Json{{"plan", id}}), (Json{{"queued", true}}));
+  std::vector<Json> seen;
+  fs().on_remove([&](const path&) { seen.push_back(call("cleaning.status").at("applying")); });
+  work();
+  fs().on_remove({});
+  ASSERT_FALSE(seen.empty());
+  EXPECT_EQ(seen.front().at("kind"), "purge");
+  EXPECT_EQ(seen.front().at("plan"), id);
+  EXPECT_EQ(seen.front().at("items_total"), 1);  // the run's folder on F:
+  EXPECT_EQ(seen.front().at("bytes_total"), (7_MiB).count());
+  EXPECT_EQ(seen.back().at("files_done"), 2);  // both files gone, the folders next
+  EXPECT_TRUE(call("cleaning.status").at("applying").is_null());
+}
+
 TEST_F(CleaningServiceTest, ItemsAreNeverMovedOntoAnUnhealthyOverflowVolume) {
   fs().add_file(L"C:\\cache\\big.iso", 4_MiB);
   drives().at(L"L:\\").healthy = false;
@@ -250,16 +354,16 @@ TEST_F(CleaningServiceTest, ItemsAreNeverMovedOntoAnUnhealthyOverflowVolume) {
   EXPECT_TRUE(logged(id, "apply", "skipped", "quarantine volume health degraded"));
 }
 
-TEST_F(CleaningServiceTest, AutoRunAtThreeDeletesAutoItemsAndWritesItsManifest) {
+TEST_F(CleaningServiceTest, HourlyAutoRunDeletesAutoItemsAndWritesItsManifest) {
   add_targets();
   start();
   work();
   EXPECT_TRUE(fs().exists(L"F:\\temp\\a.tmp"));
-  const WallTime three = std::chrono::sys_days{std::chrono::November / 1 / 2026} + 3h;
+  const WallTime next_hour = testing::noon + 1h;
   EXPECT_EQ(call("cleaning.status").at("next_auto_run"),
-            std::chrono::duration_cast<std::chrono::seconds>(three.time_since_epoch()).count());
+            std::chrono::duration_cast<std::chrono::seconds>(next_hour.time_since_epoch()).count());
 
-  clock().set_wall(three + 10s);
+  clock().set_wall(next_hour + 10s);
   work();
   EXPECT_FALSE(fs().exists(L"F:\\temp\\a.tmp"));
   EXPECT_FALSE(fs().exists(L"F:\\temp\\b.tmp"));
@@ -324,6 +428,29 @@ TEST_F(CleaningServiceTest, TheQuarantineIsPurgedSevenDaysLater) {
   work();
   EXPECT_FALSE(fs().exists(run));
   EXPECT_EQ(call("quarantine.list").at("runs"), Json::array());
+}
+
+TEST_F(CleaningServiceTest, TheHourlyPurgeDeletesAQuarantineOnAVolumeShortOfSpaceAtOnce) {
+  add_targets();
+  start();
+  scan();
+  const std::int64_t id = plan_titled("shader-caches").at("id").get<std::int64_t>();
+  approve_all(id);
+  work();
+  const path run = path(L"F:\\.myclean-quarantine") / std::to_wstring(id);
+  ASSERT_TRUE(fs().exists(run));
+  clock().advance(2h);
+  work();
+  EXPECT_TRUE(fs().exists(run));  // F: has 13 % free: the run keeps its 7 days
+
+  drives().at(L"F:\\").free = Bytes{93ULL << 30U};  // 5 % of 1863 GB
+  clock().advance(1h);
+  work();
+  EXPECT_FALSE(fs().exists(run));
+  EXPECT_EQ(call("quarantine.list").at("runs"), Json::array());
+  EXPECT_EQ(count("SELECT COUNT(*) FROM action_log WHERE event = 'purge' AND actor = "
+                  "'scheduler' AND outcome = 'removed'"),
+            1);
 }
 
 TEST_F(CleaningServiceTest, AnMcpProposalWaitsForTheOwnerAndCannotBeApprovedByAnotherCaller) {

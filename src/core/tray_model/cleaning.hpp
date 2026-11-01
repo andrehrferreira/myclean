@@ -19,6 +19,29 @@
 // core/ipc/plans.hpp): the approval inbox (approvals spec, "Approval Inbox") and the Space view.
 namespace myclean::tray_model {
 
+// cleaning.status "applying": the plan or quarantine purge the service applies now.
+struct ApplyingRow {
+  std::string kind;                  // plan, or purge (a quarantine purge)
+  std::optional<std::int64_t> plan;  // the plan, or the quarantine run deleted; none: scheduled
+  std::string title;
+  WallTime started_at;
+  std::int64_t items_done = 0;
+  std::int64_t items_total = 0;
+  Bytes bytes_done;
+  Bytes bytes_total;
+  std::int64_t files_done = 0;
+  std::string current;  // the item handled now; empty between items
+
+  friend bool operator==(const ApplyingRow&, const ApplyingRow&) = default;
+};
+
+// The share of `applying` done, 0 to 1: by bytes, or by items when they have no size.
+[[nodiscard]] double applied_share(const ApplyingRow& applying);
+// "Applying <title>: N of M items, X of Y - <current item>".
+[[nodiscard]] std::string applying_text(const ApplyingRow& applying);
+// How long `applying` has run at `now`: "45 s", "12 min 5 s", "1 h 3 min".
+[[nodiscard]] std::string applying_elapsed(const ApplyingRow& applying, WallTime now);
+
 // cleaning.status.
 struct CleaningStatus {
   bool scanning = false;
@@ -27,8 +50,9 @@ struct CleaningStatus {
   std::int64_t candidates = 0;
   Bytes bytes;
   std::optional<WallTime> next_auto_run;
-  std::vector<std::int64_t> purging;  // quarantine runs being deleted now or queued for it
-  std::string unavailable;            // why scans or executions cannot run now; empty when they can
+  std::vector<std::int64_t> purging;    // quarantine runs being deleted now or queued for it
+  std::optional<ApplyingRow> applying;  // nullopt when nothing runs, or from an older service
+  std::string unavailable;  // why scans or executions cannot run now; empty when they can
 
   friend bool operator==(const CleaningStatus&, const CleaningStatus&) = default;
 };

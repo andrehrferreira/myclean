@@ -1,11 +1,15 @@
 #include "platform/fs/win32_file_system.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <wil/resource.h>
 #include <windows.h>
 
 #include "core/model/file_identity.hpp"
@@ -100,6 +104,17 @@ TEST_F(Win32FileSystemTest, DirectorySymlinkRemovedAsTheLink) {
   EXPECT_TRUE(entry_exists(root() / L"target\\keep.txt"));
 }
 
+TEST_F(Win32FileSystemTest, RemoveDeletesAReadOnlyFile) {
+  // Git object files are read-only: a cache folder holding a clone must still be removable.
+  const path file = root() / L"pack.idx";
+  write_file(file, 10);
+  ASSERT_NE(::SetFileAttributesW(file.c_str(), FILE_ATTRIBUTE_READONLY), FALSE);
+  const FileIdentity identity = fs().stat(file)->identity;
+  const Result<void> removed = fs().remove(file, identity);
+  EXPECT_TRUE(removed.has_value()) << removed.error().message;
+  EXPECT_FALSE(entry_exists(file));
+}
+
 TEST_F(Win32FileSystemTest, RemoveRefusesAFolderThatHasEntries) {
   write_file(root() / L"dir\\a.txt", 1);
   EXPECT_EQ(fs().remove(root() / L"dir").error().code, Errc::not_empty);
@@ -177,6 +192,112 @@ TEST_F(Win32FileSystemTest, MoveFileMovesOnlyRegularFiles) {
   EXPECT_EQ(fs().move_file(root() / L"dir", root() / L"dir2").error().code, Errc::invalid_argument);
   EXPECT_EQ(fs().move_file(root() / L"link", root() / L"link2").error().code,
             Errc::invalid_argument);
+}
+
+// The bytes of `path`.
+std::string content_of(const path& file) {
+  std::ifstream stream(file, std::ios::binary);
+  return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+}
+
+FILETIME filetime(std::uint64_t ticks) {
+  return FILETIME{.dwLowDateTime = static_cast<DWORD>(ticks & 0xFFFFFFFFU),
+                  .dwHighDateTime = static_cast<DWORD>(ticks >> 32U)};
+}
+
+TEST_F(Win32FileSystemTest, CopyFileKeepsContentAttributesAndTimes) {
+  const path source = root() / L"src\\data.bin";
+  std::filesystem::create_directories(source.parent_path());
+  {
+    std::ofstream stream(source, std::ios::binary);
+    for (int index = 0; index < 300'000; ++index) {
+      stream.put(static_cast<char>(index % 251));
+    }
+  }
+  {
+    // 2020-01-01 as creation, 2021-01-01 as last write.
+    const wil::unique_hfile file{::CreateFileW(source.c_str(), FILE_WRITE_ATTRIBUTES, 0, nullptr,
+                                               OPEN_EXISTING, 0, nullptr)};
+    const FILETIME created = filetime(132'223'104'000'000'000ULL);
+    const FILETIME written = filetime(132'539'328'000'000'000ULL);
+    ASSERT_NE(::SetFileTime(file.get(), &created, nullptr, &written), FALSE);
+  }
+  ASSERT_NE(::SetFileAttributesW(source.c_str(), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_READONLY),
+            FALSE);
+  const os::FileStat before = fs().stat(source).value();
+  std::filesystem::create_directories(root() / L"dst");
+  const path target = root() / L"dst\\data.bin";
+
+  const Result<os::FileStat> copy = fs().copy_file(source, target, before.identity);
+  ASSERT_TRUE(copy.has_value()) << copy.error().message;
+  EXPECT_NE(copy->identity, before.identity);
+  EXPECT_EQ(copy->size, before.size);
+  EXPECT_EQ(content_of(target), content_of(source));
+  EXPECT_EQ(::GetFileAttributesW(target.c_str()) &
+                (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_ARCHIVE),
+            ::GetFileAttributesW(source.c_str()) &
+                (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_ARCHIVE));
+  WIN32_FILE_ATTRIBUTE_DATA from{};
+  WIN32_FILE_ATTRIBUTE_DATA to{};
+  ASSERT_NE(::GetFileAttributesExW(source.c_str(), GetFileExInfoStandard, &from), FALSE);
+  ASSERT_NE(::GetFileAttributesExW(target.c_str(), GetFileExInfoStandard, &to), FALSE);
+  EXPECT_EQ(::CompareFileTime(&from.ftCreationTime, &to.ftCreationTime), 0);
+  EXPECT_EQ(::CompareFileTime(&from.ftLastWriteTime, &to.ftLastWriteTime), 0);
+  EXPECT_TRUE(entry_exists(source));  // a copy: the source stays
+
+  // Durable, whether this process may flush the whole volume or only the file; a read-only
+  // copy keeps its attribute.
+  const std::vector<path> copies = {target};
+  const Result<void> flushed = fs().flush(copies);
+  EXPECT_TRUE(flushed.has_value()) << flushed.error().message;
+  EXPECT_NE(::GetFileAttributesW(target.c_str()) & FILE_ATTRIBUTE_READONLY, 0U);
+  for (const path& file : {source, target}) {
+    static_cast<void>(::SetFileAttributesW(file.c_str(), FILE_ATTRIBUTE_NORMAL));
+  }
+}
+
+TEST_F(Win32FileSystemTest, CopyFileCopiesOnlyTheExpectedRegularLocalFile) {
+  write_file(root() / L"a.bin", 10);
+  write_file(root() / L"taken.bin", 10);
+  std::filesystem::create_directories(root() / L"dir");
+  ASSERT_TRUE(make_junction(root() / L"link", root() / L"dir"));
+  write_file(root() / L"cloud.bin", 10);
+  ASSERT_NE(::SetFileAttributesW((root() / L"cloud.bin").c_str(), FILE_ATTRIBUTE_OFFLINE), FALSE);
+  const auto identity = [&](const wchar_t* name) { return fs().stat(root() / name)->identity; };
+
+  EXPECT_EQ(
+      fs().copy_file(root() / L"a.bin", root() / L"b.bin", identity(L"taken.bin")).error().code,
+      Errc::refused);
+  EXPECT_EQ(
+      fs().copy_file(root() / L"a.bin", root() / L"taken.bin", identity(L"a.bin")).error().code,
+      Errc::already_exists);
+  EXPECT_EQ(fs().copy_file(root() / L"dir", root() / L"d2", identity(L"dir")).error().code,
+            Errc::invalid_argument);
+  EXPECT_EQ(fs().copy_file(root() / L"link", root() / L"l2", identity(L"link")).error().code,
+            Errc::invalid_argument);
+  EXPECT_EQ(fs().copy_file(root() / L"cloud.bin", root() / L"c2.bin", identity(L"cloud.bin"))
+                .error()
+                .code,
+            Errc::invalid_argument);
+  EXPECT_EQ(
+      fs().copy_file(root() / L"gone.bin", root() / L"g2.bin", identity(L"a.bin")).error().code,
+      Errc::not_found);
+  for (const wchar_t* name : {L"b.bin", L"d2", L"l2", L"c2.bin", L"g2.bin"}) {
+    EXPECT_FALSE(entry_exists(root() / name)) << name;
+  }
+  EXPECT_EQ(fs().stat(root() / L"taken.bin")->size, Bytes{10});
+}
+
+TEST_F(Win32FileSystemTest, CopyFileOfAFileBeingWrittenIsInUse) {
+  write_file(root() / L"log.txt", 10);
+  const FileIdentity identity = fs().stat(root() / L"log.txt")->identity;
+  const wil::unique_hfile writer{::CreateFileW((root() / L"log.txt").c_str(), GENERIC_WRITE,
+                                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                                               OPEN_EXISTING, 0, nullptr)};
+  ASSERT_TRUE(writer);
+  EXPECT_EQ(fs().copy_file(root() / L"log.txt", root() / L"copy.txt", identity).error().code,
+            Errc::in_use);
+  EXPECT_FALSE(entry_exists(root() / L"copy.txt"));
 }
 
 TEST_F(Win32FileSystemTest, CreateDirectoriesNeverGoesThroughALink) {

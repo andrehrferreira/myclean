@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -40,7 +42,10 @@ enum class Disposition {
 //   deny_list:<entry>       a deny-list entry (deny_list()) matched the path or destination
 //   reparse_point_in_path   a folder above the item is a junction or link
 //   changed_since_plan      the entry's identity differs from what the plan recorded
-//   cloud_placeholder       a cloud file whose content is not (fully) local
+//   cloud_placeholder       a cloud file whose content is not (fully) local; for a folder moved
+//                           to another volume, also one anywhere inside it
+//   reparse_point_inside    a folder moved to another volume holds a junction or link
+//   already_exists          the destination of a move exists
 //   not_found               the item no longer exists
 //   <Errc name>             an operating-system failure, such as access_denied or in_use
 // A partial folder carries the reason of the first entry it kept.
@@ -57,6 +62,33 @@ struct ItemOutcome {
 struct MoveRequest {
   PlanItemId item;
   std::filesystem::path destination;  // the item's new full path; must not exist yet
+  // A folder moved to another volume: called once its copy at `destination` is complete and
+  // durable, before any source entry is removed, with the copy's identity. A failure moves the
+  // item back. Optional.
+  std::function<Result<void>(const FileIdentity& copy)> on_copied;
+};
+
+// Told what SafeRemove does as it goes, on the thread that called remove() or move(). The calls
+// must be quick and must not call SafeRemove.
+class IProgress {
+ public:
+  virtual ~IProgress() = default;
+  IProgress(const IProgress&) = delete;
+  IProgress& operator=(const IProgress&) = delete;
+  IProgress(IProgress&&) = delete;
+  IProgress& operator=(IProgress&&) = delete;
+
+  // A remove() or move() call starts on `items` items whose stored sizes add up to `bytes`.
+  virtual void begin(std::size_t items, Bytes bytes) = 0;
+  // `item` is handled now: the plan item as stored (only its id when the plan has none such).
+  virtual void item_started(const PlanItem& item) = 0;
+  // One file of the current item was removed, moved or copied, `bytes` on disk.
+  virtual void file_done(Bytes bytes) = 0;
+  // The current item ended with `outcome`.
+  virtual void item_finished(const ItemOutcome& outcome) = 0;
+
+ protected:
+  IProgress() = default;
 };
 
 // The only code path that deletes or moves files (docs/architecture.md section 6).
@@ -68,6 +100,16 @@ struct MoveRequest {
 // plan, and skips cloud placeholders. It never follows a reparse point: a junction or link is
 // removed as a link and never entered. Every item gets an outcome; one refusal does not stop
 // the others.
+//
+// A folder moved to another volume is copied and then removed, all or nothing. Every entry is
+// checked as a removal checks it, and a junction, link or cloud placeholder anywhere inside
+// leaves the whole item where it is (reparse_point_inside, cloud_placeholder): links are never
+// recreated and placeholders never hydrated. Every file is copied with its attributes and
+// timestamps, the copies are flushed once, on_copied is told, and only then are the sources
+// removed through the guarded delete, deepest first. When a copy fails (a file in use, access
+// denied), the copies are removed and the source is untouched; when a removal fails, what was
+// removed is copied back and the destination removed, so the item ends where it was. A copy
+// that cannot be put back stays at the destination: nothing is ever lost.
 class SafeRemove {
  public:
   // Fails with invalid_argument when `locations.windows` or `locations.profiles` is missing or
@@ -77,13 +119,16 @@ class SafeRemove {
                                                  ProtectedLocations locations);
 
   // Deletes the given items of stored plan `plan`: a folder with everything inside it that
-  // passes the same guards, a reparse point as the link itself.
-  [[nodiscard]] std::vector<ItemOutcome> remove(PlanId plan, std::span<const PlanItemId> items);
+  // passes the same guards, a reparse point as the link itself. `progress` (optional) is told
+  // as it goes.
+  [[nodiscard]] std::vector<ItemOutcome> remove(PlanId plan, std::span<const PlanItemId> items,
+                                                IProgress* progress = nullptr);
 
   // Moves the given items of stored plan `plan`, creating the destination's parent folders.
-  // The destination passes the same normalization and deny-list. A folder moves only within its
-  // volume; a file may move to another volume, which frees its size on the source.
-  [[nodiscard]] std::vector<ItemOutcome> move(PlanId plan, std::span<const MoveRequest> requests);
+  // The destination passes the same normalization and deny-list. On its own volume an item is
+  // renamed; a file or a folder moved to another volume frees its size on the source.
+  [[nodiscard]] std::vector<ItemOutcome> move(PlanId plan, std::span<const MoveRequest> requests,
+                                              IProgress* progress = nullptr);
 
  private:
   struct Verdict {
@@ -98,6 +143,13 @@ class SafeRemove {
   struct Run {
     Result<Plan> plan;
     ProtectedLocations locations;  // long-named for this run
+  };
+  // One entry inside a folder moved to another volume. Walk order puts every folder before the
+  // entries inside it.
+  struct Entry {
+    std::filesystem::path relative;    // below the item
+    os::FileStat stat;                 // of the source
+    std::optional<FileIdentity> copy;  // of the copy at the destination, once made
   };
   struct Tally {
     Bytes freed;
@@ -141,9 +193,43 @@ class SafeRemove {
   // (changed_since_plan, or a skip with not_found when it vanished).
   [[nodiscard]] std::optional<Verdict> remove_checked(const std::filesystem::path& path,
                                                       const FileIdentity& expected);
-  [[nodiscard]] Tally remove_contents(const Run& run, const std::filesystem::path& folder);
-  [[nodiscard]] ItemOutcome remove_item(const Run& run, PlanItemId id);
-  [[nodiscard]] ItemOutcome move_item(const Run& run, const MoveRequest& request);
+  [[nodiscard]] Tally remove_contents(const Run& run, const std::filesystem::path& folder,
+                                      IProgress& progress);
+  [[nodiscard]] ItemOutcome remove_item(const Run& run, PlanItemId id, IProgress& progress);
+  [[nodiscard]] ItemOutcome move_item(const Run& run, const MoveRequest& request,
+                                      IProgress& progress);
+  // Every entry inside `folder`, each checked as a removal checks it; otherwise the verdict that
+  // keeps the whole item where it is.
+  [[nodiscard]] tl::expected<std::vector<Entry>, Verdict> walk(
+      const Run& run, const std::filesystem::path& folder) const;
+  // Moves folder `source` to `destination` on another volume: nullopt when moved (`freed` set),
+  // else the verdict, with the item where it was.
+  [[nodiscard]] std::optional<Verdict> move_across(const Run& run, const Target& source,
+                                                   const std::filesystem::path& destination,
+                                                   const MoveRequest& request, IProgress& progress,
+                                                   Bytes& freed);
+  // The new, empty folder `destination` and its identity; it must not exist yet.
+  [[nodiscard]] tl::expected<FileIdentity, Verdict> create_destination(
+      const std::filesystem::path& destination);
+  // Copies `entries` of folder `source` below `destination` in walk order (setting each copy),
+  // then flushes the copies once; the verdict when something could not be copied.
+  [[nodiscard]] std::optional<Verdict> copy_entries(const std::filesystem::path& source,
+                                                    const std::filesystem::path& destination,
+                                                    std::vector<Entry>& entries,
+                                                    IProgress& progress);
+  // Removes the copied `entries` of `source`, deepest first, then `source` itself; the verdict
+  // when an entry stays, with entries[kept, size) removed.
+  [[nodiscard]] std::optional<Verdict> remove_source(const Target& source,
+                                                     std::span<const Entry> entries,
+                                                     std::size_t& kept);
+  // Removes what a move created: the copies of `entries` below `root`, last first, then `root`.
+  // False when something stays.
+  bool discard(const std::filesystem::path& root, const FileIdentity& identity,
+               std::span<const Entry> entries);
+  // Copies the removed `entries` of folder `source` back from its copy `copy`; false when one
+  // could not be put back.
+  bool put_back(const std::filesystem::path& source, const std::filesystem::path& copy,
+                std::span<const Entry> entries);
 
   os::IFileSystem* file_system_;
   const IPlanSource* plans_;

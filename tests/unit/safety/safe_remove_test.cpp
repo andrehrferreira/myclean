@@ -2,14 +2,17 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -492,9 +495,9 @@ TEST_F(SafeRemoveTest, PlanThatWasNeverStoredRefused) {
 TEST(SafeRemoveApi, AcceptsNoRawPath) {
   static_assert(!std::is_invocable_v<decltype(&SafeRemove::remove), SafeRemove&, path>);
   static_assert(!std::is_invocable_v<decltype(&SafeRemove::remove), SafeRemove&, PlanId,
-                                     std::span<const path>>);
+                                     std::span<const path>, IProgress*>);
   static_assert(std::is_invocable_v<decltype(&SafeRemove::remove), SafeRemove&, PlanId,
-                                    std::span<const PlanItemId>>);
+                                    std::span<const PlanItemId>, IProgress*>);
 }
 
 TEST_F(SafeRemoveTest, PlanNotApplyingRefused) {
@@ -673,6 +676,210 @@ TEST_F(SafeRemoveTest, MoveAppliesTheSourceGuards) {
   EXPECT_EQ(outcomes[1].reason, "cloud_placeholder");
   expect_refused(outcomes[2], "not_in_plan");
   EXPECT_TRUE(fs().operations().empty());
+}
+
+// A folder of C: moved to L:, as a quarantine on a volume short of space does it.
+class SafeRemoveAcrossVolumes : public SafeRemoveTest {
+ protected:
+  using Kind = fakes::FakeFileSystem::OperationKind;
+
+  SafeRemoveAcrossVolumes() {
+    fs().add_directory(L"C:\\cache\\zig\\empty");
+    fs().add_file(L"C:\\cache\\zig\\o\\a.bin", 1_MiB);
+    b_ = fs().add_file(L"C:\\cache\\zig\\o\\sub\\b.bin", 2_MiB);
+    fs().add_directory(L"L:\\");
+  }
+
+  ItemOutcome move_zig(std::function<Result<void>(const FileIdentity&)> on_copied = {}) {
+    return move({{.item = add_item(L"C:\\cache\\zig"),
+                  .destination = destination(),
+                  .on_copied = std::move(on_copied)}})
+        .front();
+  }
+
+  [[nodiscard]] std::size_t count(Kind kind) {
+    return static_cast<std::size_t>(
+        std::ranges::count(fs().operations(), kind, &fakes::FakeFileSystem::Operation::kind));
+  }
+
+  // The source is where it was, every file with the identity it had.
+  void expect_source_intact(const FileIdentity& a, bool b_identity_kept = true) {
+    EXPECT_EQ(fs().stat(L"C:\\cache\\zig\\o\\a.bin")->identity, a);
+    ASSERT_TRUE(fs().exists(L"C:\\cache\\zig\\o\\sub\\b.bin"));
+    EXPECT_EQ(fs().stat(L"C:\\cache\\zig\\o\\sub\\b.bin")->size, 2_MiB);
+    if (b_identity_kept) {
+      EXPECT_EQ(fs().stat(L"C:\\cache\\zig\\o\\sub\\b.bin")->identity, b_);
+    }
+    EXPECT_TRUE(fs().exists(L"C:\\cache\\zig\\empty"));
+    EXPECT_FALSE(fs().exists(destination()));
+  }
+
+  [[nodiscard]] const path& destination() const { return destination_; }
+
+ private:
+  path destination_{L"L:\\.myclean-quarantine\\1\\1\\zig"};
+  FileIdentity b_;
+};
+
+TEST_F(SafeRemoveAcrossVolumes, MovesAFolderCompletelyAndFlushesOnce) {
+  const ItemOutcome outcome = move_zig();
+  EXPECT_EQ(outcome.disposition, Disposition::moved) << outcome.reason << outcome.detail;
+  EXPECT_EQ(outcome.freed, 3_MiB);  // left C: at once
+  EXPECT_FALSE(fs().exists(L"C:\\cache\\zig"));
+  EXPECT_EQ(fs().stat(destination() / L"o\\a.bin")->size, 1_MiB);
+  EXPECT_EQ(fs().stat(destination() / L"o\\sub\\b.bin")->size, 2_MiB);
+  EXPECT_EQ(fs().stat(destination() / L"empty")->kind, os::EntryKind::directory);
+  EXPECT_EQ(count(Kind::copy_file), 2U);
+  EXPECT_EQ(count(Kind::flush), 1U);  // once per item, not per file
+  EXPECT_EQ(count(Kind::rename), 0U);
+  // Every copy is made and flushed before the first source entry goes.
+  const auto first_remove =
+      std::ranges::find(fs().operations(), Kind::remove, &fakes::FakeFileSystem::Operation::kind);
+  const auto flush =
+      std::ranges::find(fs().operations(), Kind::flush, &fakes::FakeFileSystem::Operation::kind);
+  EXPECT_LT(flush, first_remove);
+}
+
+TEST_F(SafeRemoveAcrossVolumes, AFileInUseLeavesTheWholeFolderWhereItWas) {
+  const FileIdentity a = fs().stat(L"C:\\cache\\zig\\o\\a.bin")->identity;
+  fs().fail_on(L"C:\\cache\\zig\\o\\sub\\b.bin", Errc::in_use, Kind::copy_file);
+  const ItemOutcome outcome = move_zig();
+  EXPECT_EQ(outcome.disposition, Disposition::failed);
+  EXPECT_EQ(outcome.reason, "in_use");
+  EXPECT_EQ(outcome.freed, Bytes{});
+  expect_source_intact(a);
+  EXPECT_EQ(count(Kind::flush), 0U);
+  // Only copies were removed: nothing of the source.
+  for (const fakes::FakeFileSystem::Operation& op : fs().operations()) {
+    if (op.kind == Kind::remove) {
+      EXPECT_TRUE(op.from.native().starts_with(L"L:\\")) << op.from;
+    }
+  }
+}
+
+TEST_F(SafeRemoveAcrossVolumes, AFailedRemovalCopiesBackWhatWasRemoved) {
+  // The source goes deepest first: b.bin and its folder are removed before a.bin fails.
+  const FileIdentity a = fs().stat(L"C:\\cache\\zig\\o\\a.bin")->identity;
+  fs().fail_on(L"C:\\cache\\zig\\o\\a.bin", Errc::access_denied, Kind::remove);
+  const ItemOutcome outcome = move_zig();
+  EXPECT_EQ(outcome.disposition, Disposition::failed);
+  EXPECT_EQ(outcome.reason, "access_denied");
+  EXPECT_EQ(outcome.freed, Bytes{});
+  expect_source_intact(a, false);     // b.bin is a copy put back
+  EXPECT_EQ(count(Kind::flush), 2U);  // the copy, then what was put back
+}
+
+TEST_F(SafeRemoveAcrossVolumes, ACopyThatCannotBePutBackStaysAtTheDestination) {
+  fs().fail_on(L"C:\\cache\\zig\\o\\a.bin", Errc::access_denied, Kind::remove);
+  // b.bin is put back, but its flush on C: fails: the complete copy on L: is kept.
+  fs().fail_on(L"C:\\cache\\zig\\o\\sub\\b.bin", Errc::io_error, Kind::flush);
+  const ItemOutcome outcome = move_zig();
+  EXPECT_EQ(outcome.disposition, Disposition::failed);
+  EXPECT_NE(outcome.detail.find("stays complete at"), std::string::npos) << outcome.detail;
+  EXPECT_TRUE(fs().exists(destination() / L"o\\a.bin"));
+  EXPECT_TRUE(fs().exists(destination() / L"o\\sub\\b.bin"));
+  EXPECT_TRUE(fs().exists(L"C:\\cache\\zig\\o\\a.bin"));
+}
+
+TEST_F(SafeRemoveAcrossVolumes, ALinkInsideIsNeverFollowedAndRefusesTheItem) {
+  fs().add_directory(L"D:\\store\\pkg");
+  fs().add_file(L"D:\\store\\pkg\\index.js", 1_KiB);
+  fs().add_directory(L"C:\\cache\\zig\\o\\link", reparse);
+  const ItemOutcome outcome = move_zig();
+  expect_refused(outcome, "reparse_point_inside");
+  EXPECT_EQ(outcome.detail, "C:\\cache\\zig\\o\\link");
+  EXPECT_EQ(count(Kind::copy_file), 0U);
+  EXPECT_EQ(count(Kind::remove), 0U);
+  EXPECT_FALSE(touched(L"D:\\store"));
+  EXPECT_TRUE(fs().exists(L"C:\\cache\\zig\\o\\link"));
+}
+
+TEST_F(SafeRemoveAcrossVolumes, APlaceholderInsideIsNeverHydratedAndSkipsTheItem) {
+  fs().add_file(L"C:\\cache\\zig\\o\\cloud.bin", 1_GiB, {.recall_on_data_access = true});
+  const ItemOutcome outcome = move_zig();
+  EXPECT_EQ(outcome.disposition, Disposition::skipped);
+  EXPECT_EQ(outcome.reason, "cloud_placeholder");
+  EXPECT_EQ(count(Kind::copy_file), 0U);
+  EXPECT_FALSE(touched(L"C:\\cache\\zig\\o\\cloud.bin"));
+}
+
+TEST_F(SafeRemoveAcrossVolumes, OnCopiedIsToldTheCopyBeforeTheSourceGoes) {
+  std::optional<FileIdentity> told;
+  bool source_there = false;
+  const ItemOutcome outcome = move_zig([&](const FileIdentity& copy) -> Result<void> {
+    told = copy;
+    source_there = fs().exists(L"C:\\cache\\zig\\o\\a.bin");
+    return {};
+  });
+  EXPECT_EQ(outcome.disposition, Disposition::moved);
+  ASSERT_TRUE(told);
+  EXPECT_EQ(*told, fs().stat(destination())->identity);
+  EXPECT_TRUE(source_there);
+}
+
+TEST_F(SafeRemoveAcrossVolumes, AFailingOnCopiedLeavesTheItemWhereItWas) {
+  const FileIdentity a = fs().stat(L"C:\\cache\\zig\\o\\a.bin")->identity;
+  const ItemOutcome outcome = move_zig([](const FileIdentity&) -> Result<void> {
+    return fail(Errc::io_error, "the store refused the record");
+  });
+  EXPECT_EQ(outcome.disposition, Disposition::failed);
+  EXPECT_EQ(outcome.reason, "io_error");
+  expect_source_intact(a);
+}
+
+TEST_F(SafeRemoveAcrossVolumes, AnExistingDestinationIsNeverMerged) {
+  fs().add_file(destination() / L"o\\a.bin", 1_KiB);
+  const ItemOutcome outcome = move_zig();
+  EXPECT_EQ(outcome.disposition, Disposition::failed);
+  EXPECT_EQ(outcome.reason, "already_exists");
+  EXPECT_EQ(count(Kind::copy_file), 0U);
+  EXPECT_EQ(fs().stat(destination() / L"o\\a.bin")->size, 1_KiB);
+}
+
+// Records what SafeRemove reports, as text.
+class Recorder final : public IProgress {
+ public:
+  Recorder() = default;
+  void begin(std::size_t items, Bytes bytes) override {
+    events.push_back("begin " + std::to_string(items) + " " + std::to_string(bytes.count()));
+  }
+  void item_started(const PlanItem& item) override {
+    events.push_back("start " + std::to_string(item.id.value()) + " " + to_utf8(item.path));
+  }
+  void file_done(Bytes bytes) override {
+    events.push_back("file " + std::to_string(bytes.count()));
+  }
+  void item_finished(const ItemOutcome& outcome) override {
+    events.push_back("end " + std::to_string(outcome.item.value()) + " " +
+                     std::string(to_string(outcome.disposition)));
+  }
+
+  std::vector<std::string> events;
+};
+
+TEST_F(SafeRemoveAcrossVolumes, ProgressIsReportedInOrderPerItemAndFile) {
+  fs().add_file(L"C:\\Temp\\x.tmp", 4_KiB);
+  const PlanItemId zig = add_item(L"C:\\cache\\zig");
+  const PlanItemId tmp = add_item(L"C:\\Temp\\x.tmp");
+  plan().items[0].size = 3_MiB;
+  plan().items[1].size = 4_KiB;
+  Recorder removal;
+  const std::vector<PlanItemId> items = {tmp, PlanItemId{99}};
+  static_cast<void>(safe_remove().remove(plan_id, items, &removal));
+  EXPECT_EQ(removal.events,
+            (std::vector<std::string>{"begin 2 4096", "start 2 C:\\Temp\\x.tmp", "file 4096",
+                                      "end 2 removed", "start 99 ", "end 99 refused"}));
+
+  Recorder moving;
+  const std::vector<MoveRequest> requests = {{.item = zig, .destination = destination()}};
+  static_cast<void>(safe_remove().move(plan_id, requests, &moving));
+  ASSERT_EQ(moving.events.size(), 5U);
+  EXPECT_EQ(moving.events[0], "begin 1 " + std::to_string((3_MiB).count()));
+  EXPECT_EQ(moving.events[1], "start 1 C:\\cache\\zig");
+  // One report per file copied, in walk order.
+  EXPECT_EQ(moving.events[2], "file " + std::to_string((1_MiB).count()));
+  EXPECT_EQ(moving.events[3], "file " + std::to_string((2_MiB).count()));
+  EXPECT_EQ(moving.events[4], "end 1 moved");
 }
 
 TEST(SafeRemoveCreate, RequiresValidLocations) {

@@ -57,6 +57,13 @@ namespace {
 namespace fs = std::filesystem;
 using Json = nlohmann::json;
 
+// True when `volume` (known) has less than low_space_ratio of its size free.
+bool low_on_space(const placement::TargetVolume* volume) {
+  return volume != nullptr && volume->size.count() != 0 &&
+         static_cast<double>(volume->free.count()) <
+             low_space_ratio * static_cast<double>(volume->size.count());
+}
+
 constexpr std::string_view scan_source = "scan";
 
 std::string utf8(const fs::path& path) {
@@ -216,14 +223,14 @@ Slot slot_of(const Candidate& candidate, const fs::path& system_root) {
 }
 
 // The plans of a scan, by group: ask-tier and native/handler candidates always, auto-tier ones
-// only for the scheduled run; never report-tier ones. A file item gets the identity it has now;
+// when `with_auto`; never report-tier ones. A file item gets the identity it has now;
 // one that is gone since the scan is left out.
-std::map<std::string, Group> groups_of(const std::vector<Candidate>& found, bool scheduled,
+std::map<std::string, Group> groups_of(const std::vector<Candidate>& found, bool with_auto,
                                        WallTime now, const fs::path& system_root,
                                        const os::IFileSystem& file_system) {
   std::map<std::string, Group> groups;
   for (const Candidate& candidate : found) {
-    if (candidate.tier == Tier::report || (candidate.tier == Tier::automatic && !scheduled)) {
+    if (candidate.tier == Tier::report || (candidate.tier == Tier::automatic && !with_auto)) {
       continue;
     }
     Slot slot = slot_of(candidate, system_root);
@@ -378,7 +385,7 @@ Result<void> Executor::record(std::vector<Candidate>& found, WallTime now) const
   });
 }
 
-Result<ScanResult> Executor::scan(const RuleSet& rules, bool scheduled,
+Result<ScanResult> Executor::scan(const RuleSet& rules, bool with_auto,
                                   const std::stop_token& stop) {
   const WallTime now = environment_.clock->now();
   ScanResult result;
@@ -398,7 +405,7 @@ Result<ScanResult> Executor::scan(const RuleSet& rules, bool scheduled,
     return tl::unexpected(open.error());
   }
   for (auto& [key, group] :
-       groups_of(*found, scheduled, now, options_.system_root, *environment_.file_system)) {
+       groups_of(*found, with_auto, now, options_.system_root, *environment_.file_system)) {
     if (open->contains(key)) {
       continue;
     }
@@ -458,22 +465,14 @@ actions::QuarantineRoot Executor::quarantine_root() const {
   if (!volumes) {
     return {};  // free space unknown: every item stays on its own volume
   }
-  return [volumes = *std::move(volumes), overflow = options_.overflow_root,
-          file_system = environment_.file_system](
+  return [volumes = *std::move(volumes), overflow = options_.overflow_root](
              const PlanItem& item) -> tl::expected<fs::path, std::string> {
     const placement::TargetVolume* source = placement::volume_of(volumes, item.path);
-    if (source == nullptr || source->size.count() == 0 ||
-        static_cast<double>(source->free.count()) >=
-            low_space_ratio * static_cast<double>(source->size.count())) {
+    if (!low_on_space(source)) {
       return fs::path{};
     }
     const placement::TargetVolume* target = placement::volume_of(volumes, overflow);
     if (target == source) {
-      return fs::path{};
-    }
-    // A folder cannot leave its volume (SafeRemove moves only files across volumes).
-    if (const Result<os::FileStat> status = file_system->stat(item.path);
-        status && status->kind == os::EntryKind::directory) {
       return fs::path{};
     }
     if (target == nullptr) {
@@ -497,11 +496,15 @@ Result<std::unique_ptr<Action>> Executor::action_for(const Plan& plan, const Pla
   const Json& params = spec.params;
   try {
     if (plan.action == "DeleteItems") {
-      return std::make_unique<actions::DeleteItems>(environment_, plan.id, actor);
+      auto action = std::make_unique<actions::DeleteItems>(environment_, plan.id, actor);
+      action->observe(&progress_);
+      return action;
     }
     if (plan.action == "QuarantineItems") {
-      return std::make_unique<actions::QuarantineItems>(environment_, *quarantine_, plan.id, actor,
-                                                        quarantine_root());
+      auto action = std::make_unique<actions::QuarantineItems>(environment_, *quarantine_, plan.id,
+                                                               actor, quarantine_root());
+      action->observe(&progress_);
+      return action;
     }
     if (plan.action == "HandlerCleanup") {
       if (probes_.handlers == nullptr) {
@@ -588,7 +591,19 @@ Result<actions::RunReport> Executor::execute(PlanId id) {
     }
     return tl::unexpected(action.error());
   }
+  Applying applying{.kind = Applying::Kind::plan,
+                    .plan = id,
+                    .title = spec->title,
+                    .started_at = environment_.clock->now()};
+  for (const PlanItem& item : plan->items) {
+    if (item.approval != ItemApproval::not_approved) {
+      ++applying.items_total;
+      applying.bytes_total += item.size;
+    }
+  }
+  progress_.start(std::move(applying));
   Result<actions::RunReport> report = engine_->execute(id, **action, actor, false);
+  progress_.finish();
   if (report && plan->action == "DeleteItems") {
     if (Result<void> manifest = write_manifest(id); !manifest) {
       return tl::unexpected(manifest.error());
@@ -1062,11 +1077,32 @@ Result<std::size_t> Executor::restore(PlanId run, std::optional<PlanItemId> item
 }
 
 Result<std::size_t> Executor::purge() {
-  return quarantine_->purge(Actor::scheduler());
+  // A quarantine on a volume short of space frees nothing until it is purged: purge it now.
+  actions::PurgeEarly early;
+  if (probes_.drives != nullptr) {
+    if (Result<std::vector<placement::TargetVolume>> volumes = probes_.drives->volumes()) {
+      early = [volumes = *std::move(volumes)](const fs::path& folder) {
+        return low_on_space(placement::volume_of(volumes, folder));
+      };
+    }
+  }
+  progress_.start(Applying{.kind = Applying::Kind::purge,
+                           .title = "Purge the quarantine",
+                           .started_at = environment_.clock->now()});
+  Result<std::size_t> purged =
+      quarantine_->purge(Actor::scheduler(), std::nullopt, early, &progress_);
+  progress_.finish();
+  return purged;
 }
 
 Result<std::size_t> Executor::purge_run(PlanId run) {
-  return quarantine_->purge(Actor::owner(), run);
+  progress_.start(Applying{.kind = Applying::Kind::purge,
+                           .plan = run,
+                           .title = "Delete quarantine run " + std::to_string(run.value()),
+                           .started_at = environment_.clock->now()});
+  Result<std::size_t> purged = quarantine_->purge(Actor::owner(), run, {}, &progress_);
+  progress_.finish();
+  return purged;
 }
 
 }  // namespace myclean::cleaning

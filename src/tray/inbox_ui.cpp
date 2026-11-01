@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -108,6 +109,33 @@ void draw_scan(const CleanupView& cleanup, const std::chrono::time_zone& zone, b
   if (!status->unavailable.empty()) {
     wrapped_text(color::warning, "Cleaning cannot run now: " + status->unavailable);
   }
+}
+
+// The plan or quarantine purge the service applies now, with its progress and elapsed time.
+void draw_applying(const CleanupView& cleanup) {
+  const auto& status = cleanup.status();
+  if (!status || !status->applying) {
+    return;
+  }
+  const tray_model::ApplyingRow& applying = *status->applying;
+  const auto done = static_cast<float>(tray_model::applied_share(applying));
+  ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ui::rgb(color::accent));
+  ImGui::ProgressBar(done, ImVec2(-1.0F, 0.0F), std::format("{:.0f} %", done * 100.0F).c_str());
+  ImGui::PopStyleColor();
+  wrapped_text(color::accent, tray_model::applying_text(applying));
+  muted_text(std::format("Running for {}, {} so far",
+                         tray_model::applying_elapsed(applying, std::chrono::system_clock::now()),
+                         plural(applying.files_done, "file")));
+}
+
+// The share of `plan` applied now, when the service is applying it.
+std::optional<double> applied(const PlanRow& plan, const CleanupView& cleanup) {
+  const auto& status = cleanup.status();
+  if (!status || !status->applying || status->applying->kind != "plan" ||
+      status->applying->plan != plan.id) {
+    return std::nullopt;
+  }
+  return tray_model::applied_share(*status->applying);
 }
 
 void draw_task(const CleanupView& cleanup) {
@@ -241,11 +269,13 @@ void draw_plan(const PlanRow& plan, const CleanupView& cleanup, const std::chron
                bool reachable, UiState& state) {
   ImGui::PushID(std::to_string(plan.id).c_str());
   const bool waiting = tray_model::pending(plan);
+  const std::optional<double> share = applied(plan, cleanup);
+  const std::string progress =
+      share ? std::format("{} {:.0f} %", plan.state, *share * 100.0) : plan.state;
   const std::string header =
-      waiting
-          ? std::format("{}  -  {}  -  {}  -  tier {}###plan", plan.title, size_text(plan.bytes),
-                        plural(plan.items, "item"), plan.tier)
-          : std::format("{}  -  {}  -  {}###plan", plan.title, plan.state, size_text(plan.bytes));
+      waiting ? std::format("{}  -  {}  -  {}  -  tier {}###plan", plan.title,
+                            size_text(plan.bytes), plural(plan.items, "item"), plan.tier)
+              : std::format("{}  -  {}  -  {}###plan", plan.title, progress, size_text(plan.bytes));
   ImGui::PushStyleColor(ImGuiCol_Text, ui::rgb(waiting ? color::text : state_color(plan.state)));
   // The owner's open plans are the state; a click toggles it.
   ImGui::SetNextItemOpen(state.open_plans.contains(plan.id));
@@ -549,6 +579,7 @@ void draw_cleanup(const DashboardModel& model, const std::chrono::time_zone& zon
     wrapped_text(color::bad, cleanup.action_error());
   }
   draw_task(cleanup);
+  draw_applying(cleanup);
   const auto& plans = cleanup.plans();
   if (!plans) {
     muted_text("Plans: " + std::string(tray_model::not_available) +

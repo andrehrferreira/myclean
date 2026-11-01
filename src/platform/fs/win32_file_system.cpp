@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cwchar>
 #include <filesystem>
 #include <iterator>
 #include <span>
@@ -143,9 +144,12 @@ Result<os::FileStat> stat_handle(HANDLE file, const fs::path& path) {
 // Marks the entry open in `file` (opened with DELETE) for deletion when the handle closes.
 Result<void> delete_on_close(HANDLE file, const fs::path& path) {
   // POSIX semantics unlink the name at once even while another process holds the file open,
-  // so that the parent folder can be removed next. Volumes without them get the classic form.
+  // so that the parent folder can be removed next. The read-only attribute protects nothing
+  // here (git object files carry it in every clone), so it does not stop the removal. Volumes
+  // without these flags get the classic form.
   FILE_DISPOSITION_INFO_EX posix{.Flags = FILE_DISPOSITION_FLAG_DELETE |
-                                          FILE_DISPOSITION_FLAG_POSIX_SEMANTICS};
+                                          FILE_DISPOSITION_FLAG_POSIX_SEMANTICS |
+                                          FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE};
   if (::SetFileInformationByHandle(file, FileDispositionInfoEx, &posix, sizeof(posix)) != FALSE) {
     return {};
   }
@@ -158,6 +162,106 @@ Result<void> delete_on_close(HANDLE file, const fs::path& path) {
     return last_error("cannot remove", path);
   }
   return {};
+}
+
+// The attributes a copy takes over from its source.
+constexpr DWORD copied_attributes = FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN |
+                                    FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_ARCHIVE |
+                                    FILE_ATTRIBUTE_NOT_CONTENT_INDEXED | FILE_ATTRIBUTE_TEMPORARY;
+constexpr std::size_t copy_buffer = std::size_t{1} << 20U;
+
+// Writes the content of `source` to `target` and gives it the times and attributes of `basic`.
+Result<void> copy_content(HANDLE source, HANDLE target, const fs::path& to, std::uint64_t size,
+                          FILE_BASIC_INFO basic) {
+  // One allocation for the whole file: less fragmentation on a hard disk.
+  FILE_ALLOCATION_INFO allocation{};
+  allocation.AllocationSize.QuadPart = static_cast<LONGLONG>(size);
+  if (::SetFileInformationByHandle(target, FileAllocationInfo, &allocation, sizeof(allocation)) ==
+      FALSE) {
+    return last_error("cannot allocate", to);
+  }
+  std::vector<std::byte> buffer(std::clamp<std::uint64_t>(size, 1, copy_buffer));
+  for (;;) {
+    DWORD read = 0;
+    if (::ReadFile(source, buffer.data(), static_cast<DWORD>(buffer.size()), &read, nullptr) ==
+        FALSE) {
+      return last_error("cannot read the source of", to);
+    }
+    if (read == 0) {
+      break;
+    }
+    DWORD written = 0;
+    if (::WriteFile(target, buffer.data(), read, &written, nullptr) == FALSE || written != read) {
+      return last_error("cannot write", to);
+    }
+  }
+  basic.ChangeTime.QuadPart = 0;  // left to the file system
+  basic.FileAttributes &= copied_attributes;
+  if (basic.FileAttributes == 0) {
+    basic.FileAttributes = FILE_ATTRIBUTE_NORMAL;
+  }
+  if (::SetFileInformationByHandle(target, FileBasicInfo, &basic, sizeof(basic)) == FALSE) {
+    return last_error("cannot set the times of", to);
+  }
+  return {};
+}
+
+// FlushFileBuffers on one file. A read-only file cannot be opened for writing, so its attribute
+// is lifted for the flush and put back.
+Result<void> flush_file(const fs::path& path) {
+  const Result<std::wstring> native = win32_path(path);
+  if (!native) {
+    return tl::unexpected(native.error());
+  }
+  const auto open = [&] {
+    return wil::unique_hfile{::CreateFileW(
+        native->c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        nullptr)};
+  };
+  wil::unique_hfile file = open();
+  const DWORD attributes = ::GetFileAttributesW(native->c_str());
+  const bool read_only = !file && ::GetLastError() == ERROR_ACCESS_DENIED &&
+                         attributes != INVALID_FILE_ATTRIBUTES &&
+                         (attributes & FILE_ATTRIBUTE_READONLY) != 0;
+  if (read_only &&
+      ::SetFileAttributesW(native->c_str(), attributes & ~FILE_ATTRIBUTE_READONLY) != FALSE) {
+    file = open();
+    if (::SetFileAttributesW(native->c_str(), attributes) == FALSE) {
+      return last_error("cannot restore the attributes of", path);
+    }
+  }
+  if (!file) {
+    return last_error("cannot open for flushing", path);
+  }
+  if (::FlushFileBuffers(file.get()) == FALSE) {
+    return last_error("cannot flush", path);
+  }
+  return {};
+}
+
+// The volume device ("\\?\Volume{...}") that holds `path`; empty when it has none.
+std::wstring volume_device(const fs::path& path) {
+  const Result<std::wstring> native = win32_path(path);
+  if (!native) {
+    return {};
+  }
+  std::wstring mount(native->size() + 1, L'\0');
+  if (::GetVolumePathNameW(native->c_str(), mount.data(), static_cast<DWORD>(mount.size())) ==
+      FALSE) {
+    return {};
+  }
+  mount.resize(std::wcslen(mount.c_str()));
+  std::wstring volume(MAX_PATH, L'\0');
+  if (::GetVolumeNameForVolumeMountPointW(mount.c_str(), volume.data(),
+                                          static_cast<DWORD>(volume.size())) == FALSE) {
+    return {};
+  }
+  volume.resize(std::wcslen(volume.c_str()));
+  if (volume.ends_with(L'\\')) {
+    volume.pop_back();  // the device, not its root folder
+  }
+  return volume;
 }
 
 }  // namespace
@@ -319,6 +423,92 @@ Result<void> Win32FileSystem::move_file(const fs::path& from, const fs::path& to
   if (::MoveFileExW(source->c_str(), target->c_str(),
                     MOVEFILE_COPY_ALLOWED | MOVEFILE_WRITE_THROUGH) == FALSE) {
     return last_error("cannot move", from);
+  }
+  return {};
+}
+
+Result<os::FileStat> Win32FileSystem::copy_file(const fs::path& from, const fs::path& to,
+                                                const FileIdentity& expected) {
+  // The entry itself first: a placeholder is refused before anything could open its content.
+  const auto check = [&](const os::FileStat& status) -> Result<void> {
+    if (status.identity != expected) {
+      return fail(Errc::refused, "entry changed identity: " + utf8(from));
+    }
+    if (status.kind != os::EntryKind::file || status.attributes.reparse_point ||
+        status.attributes.cloud_placeholder()) {
+      return fail(Errc::invalid_argument, "not a regular local file: " + utf8(from));
+    }
+    return {};
+  };
+  const Result<os::FileStat> entry = stat(from);
+  if (!entry) {
+    return tl::unexpected(entry.error());
+  }
+  if (Result<void> checked = check(*entry); !checked) {
+    return tl::unexpected(checked.error());
+  }
+  const Result<std::wstring> source_name = win32_path(from);
+  const Result<std::wstring> target_name = win32_path(to);
+  if (!target_name) {
+    return tl::unexpected(target_name.error());
+  }
+  // The content is read through the handle whose identity is checked, and nobody may write or
+  // delete the file meanwhile.
+  const wil::unique_hfile source{::CreateFileW(
+      source_name->c_str(), FILE_READ_DATA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ, nullptr,
+      OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN, nullptr)};
+  if (!source) {
+    return last_error("cannot open", from);
+  }
+  const Result<os::FileStat> status = stat_handle(source.get(), from);
+  if (!status) {
+    return tl::unexpected(status.error());
+  }
+  if (Result<void> checked = check(*status); !checked) {
+    return tl::unexpected(checked.error());
+  }
+  FILE_BASIC_INFO basic{};
+  if (::GetFileInformationByHandleEx(source.get(), FileBasicInfo, &basic, sizeof(basic)) == FALSE) {
+    return last_error("cannot query", from);
+  }
+  if ((basic.FileAttributes & FILE_ATTRIBUTE_ENCRYPTED) != 0) {
+    return fail(Errc::invalid_argument, "an encrypted file is not copied: " + utf8(from));
+  }
+  const wil::unique_hfile target{
+      ::CreateFileW(target_name->c_str(), GENERIC_WRITE | DELETE | FILE_READ_ATTRIBUTES, 0, nullptr,
+                    CREATE_NEW, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr)};
+  if (!target) {
+    return last_error("cannot create", to);
+  }
+  if (Result<void> copied =
+          copy_content(source.get(), target.get(), to, status->size.count(), basic);
+      !copied) {
+    static_cast<void>(delete_on_close(target.get(), to));
+    return tl::unexpected(copied.error());
+  }
+  return stat_handle(target.get(), to);
+}
+
+Result<void> Win32FileSystem::flush(std::span<const fs::path> files) {
+  if (files.empty()) {
+    return {};
+  }
+  // One flush of the volume writes everything; opening it for writing needs an administrator.
+  if (const std::wstring device = volume_device(files.front()); !device.empty()) {
+    const wil::unique_hfile volume{::CreateFileW(device.c_str(), GENERIC_WRITE,
+                                                 FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                                                 OPEN_EXISTING, 0, nullptr)};
+    if (volume) {
+      if (::FlushFileBuffers(volume.get()) == FALSE) {
+        return last_error("cannot flush the volume of", files.front());
+      }
+      return {};
+    }
+  }
+  for (const fs::path& file : files) {
+    if (Result<void> flushed = flush_file(file); !flushed) {
+      return flushed;
+    }
   }
   return {};
 }

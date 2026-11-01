@@ -4,8 +4,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cwchar>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -38,9 +40,11 @@ fs::path long_temp_folder() {
 
 }  // namespace
 
-Sandbox::Sandbox() {
+Sandbox::Sandbox() : Sandbox(long_temp_folder()) {}
+
+Sandbox::Sandbox(const fs::path& parent) {
   static std::atomic<std::uint32_t> counter{0};
-  const fs::path base = long_temp_folder() / L"myclean-it";
+  const fs::path base = parent / L"myclean-it";
   root_ = base / (std::to_wstring(::GetCurrentProcessId()) + L"-" +
                   std::to_wstring(::GetTickCount64()) + L"-" + std::to_wstring(++counter));
   fs::create_directories(root_);
@@ -66,6 +70,32 @@ Sandbox::~Sandbox() {
     std::error_code ignored;
     fs::remove_all(root_, ignored);
   }
+}
+
+std::optional<fs::path> second_volume() {
+  std::wstring folder(32768, L'\0');
+  const DWORD length = ::GetEnvironmentVariableW(L"MYCLEAN_TEST_SECOND_VOLUME", folder.data(),
+                                                 static_cast<DWORD>(folder.size()));
+  if (length == 0 || length >= folder.size()) {
+    return std::nullopt;
+  }
+  folder.resize(length);
+  const auto volume_of = [](const fs::path& path) {
+    std::wstring volume(MAX_PATH + 1, L'\0');
+    if (::GetVolumePathNameW(path.c_str(), volume.data(), static_cast<DWORD>(volume.size())) ==
+        FALSE) {
+      return std::wstring();
+    }
+    volume.resize(std::wcslen(volume.c_str()));
+    return volume;
+  };
+  std::error_code error;
+  const std::wstring other = volume_of(folder);
+  if (!fs::is_directory(folder, error) || other.empty() ||
+      _wcsicmp(other.c_str(), volume_of(long_temp_folder()).c_str()) == 0) {
+    return std::nullopt;
+  }
+  return fs::path{folder};
 }
 
 void write_file(const fs::path& path, std::size_t size) {

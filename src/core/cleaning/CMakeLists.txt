@@ -5,6 +5,8 @@ myclean_add_library(cleaning
   SOURCES
     executor.cpp
     executor.hpp
+    progress.cpp
+    progress.hpp
     records.cpp
     records.hpp
     service.cpp

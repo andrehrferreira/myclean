@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <span>
 #include <vector>
 
 #include "core/model/file_identity.hpp"
@@ -61,8 +62,8 @@ class IFileSystem {
   [[nodiscard]] virtual Result<std::filesystem::path> expand_short_names(
       const std::filesystem::path& path) const = 0;
 
-  // Removes a file, an empty directory, or a reparse point as a link (never its target).
-  // Does not recurse: fails with not_empty for a directory that has entries.
+  // Removes a file (read-only too), an empty directory, or a reparse point as a link (never its
+  // target). Does not recurse: fails with not_empty for a directory that has entries.
   [[nodiscard]] virtual Result<void> remove(const std::filesystem::path& path) = 0;
 
   // Like remove(), but only while `path` is still the entry `expected`: the identity is checked
@@ -80,6 +81,21 @@ class IFileSystem {
   // already_exists when `to` exists and invalid_argument when `from` is not a regular file.
   [[nodiscard]] virtual Result<void> move_file(const std::filesystem::path& from,
                                                const std::filesystem::path& to) = 0;
+
+  // Copies the regular local file `from`, only while it is still the entry `expected` (checked
+  // on the handle that reads it), to the new file `to`, also on another volume, with its
+  // attributes and timestamps (alternate data streams are not copied). The copy is not flushed
+  // (see flush()); a copy that fails part way is deleted. Returns the copy's metadata. Fails
+  // with refused when `from` is another entry now, already_exists when `to` exists, and
+  // invalid_argument when `from` is not a regular local file (a directory, a reparse point, a
+  // cloud placeholder, an encrypted file).
+  [[nodiscard]] virtual Result<FileStat> copy_file(const std::filesystem::path& from,
+                                                   const std::filesystem::path& to,
+                                                   const FileIdentity& expected) = 0;
+
+  // Makes the content and metadata of `files`, all on one volume, durable: one flush of their
+  // volume when the process may open it for writing (an administrator), else one flush per file.
+  [[nodiscard]] virtual Result<void> flush(std::span<const std::filesystem::path> files) = 0;
 
   // Creates `path` and its missing parents; succeeds when it is already a directory.
   [[nodiscard]] virtual Result<void> create_directories(const std::filesystem::path& path) = 0;

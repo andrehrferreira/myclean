@@ -16,6 +16,7 @@
 #include "core/actions/quarantine.hpp"
 #include "core/clean/probes.hpp"
 #include "core/clean/workspaces.hpp"
+#include "core/cleaning/progress.hpp"
 #include "core/cleaning/records.hpp"
 #include "core/cleanup/command_runner.hpp"
 #include "core/cleanup/handler_host.hpp"
@@ -59,7 +60,8 @@ struct ExecutorOptions {
   bool system_changes = true;
 };
 
-// Below this share of free space a volume's quarantined items go to the overflow volume.
+// Below this share of free space a volume's quarantined items go to the overflow volume, and a
+// quarantine already on it is purged by the next scheduled purge.
 inline constexpr double low_space_ratio = 0.10;
 
 // The rules a scan evaluates.
@@ -100,9 +102,9 @@ class Executor {
   // Evaluates `rules`, sizes the system-area handlers, replaces the candidates of source "scan"
   // and records report-tier ones as findings. Then one plan per group that has no open plan
   // yet: ask-tier items by category (quarantine), native commands, handlers by scope, DISM,
-  // all waiting for approval; when `scheduled`, also the auto-tier items, approved at once
+  // all waiting for approval; when `with_auto`, also the auto-tier items, approved at once
   // (deleted by the service, or run by the tray for user scope).
-  [[nodiscard]] Result<ScanResult> scan(const RuleSet& rules, bool scheduled,
+  [[nodiscard]] Result<ScanResult> scan(const RuleSet& rules, bool with_auto,
                                         const std::stop_token& stop);
 
   // The approved service-scope plans, oldest first.
@@ -128,10 +130,15 @@ class Executor {
 
   // Moves held items of run `run` back (every held item when `item` is nullopt); how many.
   [[nodiscard]] Result<std::size_t> restore(PlanId run, std::optional<PlanItemId> item);
-  // Purges the quarantine runs older than 7 days; how many items.
+  // Purges the quarantine runs older than 7 days, and every run's folder on a volume with less
+  // than low_space_ratio free (it frees nothing until purged); how many items.
   [[nodiscard]] Result<std::size_t> purge();
   // Purges every held item of run `run` now, for the owner; how many items.
   [[nodiscard]] Result<std::size_t> purge_run(PlanId run);
+
+  // The plan or purge execute(), purge() or purge_run() is applying now; nullopt when none
+  // runs. Safe to call from any thread.
+  [[nodiscard]] std::optional<Applying> applying() const { return progress_.now(); }
 
  private:
   // What the rules select now, the system-area handlers sized; a handler that cannot be sized
@@ -178,6 +185,7 @@ class Executor {
   Probes probes_;
   safety::ProtectedLocations locations_;
   ExecutorOptions options_;
+  mutable ApplyTracker progress_;  // told by the actions it builds; synchronized
 };
 
 }  // namespace myclean::cleaning

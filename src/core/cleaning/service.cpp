@@ -119,6 +119,23 @@ Candidate file_candidate(const fs::path& path, Bytes size, std::string reason, W
                    .found_at = now};
 }
 
+// cleaning.status "applying" (core/ipc/plans.hpp).
+Json applying_json(const std::optional<Applying>& applying) {
+  if (!applying) {
+    return nullptr;
+  }
+  return Json{{"kind", std::string(to_string(applying->kind))},
+              {"plan", applying->plan ? Json(applying->plan->value()) : Json(nullptr)},
+              {"title", applying->title},
+              {"started_at", store::to_unix_seconds(applying->started_at)},
+              {"items_done", applying->items_done},
+              {"items_total", applying->items_total},
+              {"bytes_done", applying->bytes_done.count()},
+              {"bytes_total", applying->bytes_total.count()},
+              {"files_done", applying->files_done},
+              {"current", applying->current.empty() ? Json(nullptr) : Json(applying->current)}};
+}
+
 }  // namespace
 
 CleaningService::CleaningService(ServiceSources sources, ServiceSettings settings)
@@ -409,7 +426,7 @@ void CleaningService::run_scan(bool scheduled, const std::stop_token& stop) {
   }
   const Result<ScanResult> scanned = executor()->scan(
       RuleSet{.rules = registry_.clean, .workspaces = workspaces ? &*workspaces : nullptr},
-      scheduled, stop);
+      settings_.execute, stop);
   Result<void> outcome;
   if (!scanned) {
     note("scan: " + scanned.error().message);
@@ -418,7 +435,7 @@ void CleaningService::run_scan(bool scheduled, const std::stop_token& stop) {
     for (const std::string& problem : scanned->problems) {
       note(problem);
     }
-    if (scheduled && settings_.execute) {
+    if (settings_.execute) {  // every scan's auto-tier plan runs at once
       {
         const std::scoped_lock lock(mutex_);
         progress_ = 0.8;
@@ -451,6 +468,8 @@ Json CleaningService::status() const {
     }
   }
   const std::optional<std::string> reason = unavailable();
+  const Executor* ready = executor();
+  const Json applying = applying_json(ready != nullptr ? ready->applying() : std::nullopt);
   const std::scoped_lock lock(mutex_);
   double progress = last_completed_ ? 1.0 : 0.0;
   if (scanning_) {
@@ -468,6 +487,7 @@ Json CleaningService::status() const {
               {"bytes", totals ? totals->bytes.count() : 0},
               {"next_auto_run", next},
               {"purging", purging},
+              {"applying", applying},
               {"unavailable", reason ? Json(*reason) : Json(nullptr)}};
 }
 

@@ -42,8 +42,9 @@ namespace myclean::ipc {
 // No parameters. Starts a cleaning scan in the background (rules, developer artifacts, Windows
 // handler sizes) unless one runs or cleaning is unavailable. The scan stores its candidates,
 // creates an `awaiting_approval` plan per ask-tier group and records report-tier candidates as
-// findings; auto-tier items are deleted only by the scheduled run (daily at 03:00 with
-// catch-up, skipped while the system volume is critically busy).
+// findings; its auto-tier items are deleted at once, without approval. The scheduled auto run
+// (hourly with catch-up, skipped while the system volume is critically busy) scans and deletes
+// them too.
 //   {"started": bool}
 inline constexpr std::string_view cleaning_scan_method = "cleaning.scan";
 
@@ -51,7 +52,17 @@ inline constexpr std::string_view cleaning_scan_method = "cleaning.scan";
 //   {"state": "idle"|"scanning", "progress": number 0..1, "last_completed": int|null,
 //    "candidates": int, "bytes": int (of those candidates), "next_auto_run": int|null,
 //    "purging": [int] (quarantine runs queued by quarantine.purge, the first being deleted),
+//    "applying": null | {"kind": "plan"|"purge", "plan": int|null, "title": string,
+//                        "started_at": int, "items_done": int, "items_total": int,
+//                        "bytes_done": int, "bytes_total": int, "files_done": int,
+//                        "current": string|null},
 //    "unavailable": string|null (why scans or executions cannot run now)}
+// applying: what the service applies now, null when nothing. kind "plan": an approved plan (its
+// id in "plan", its title); "purge": a quarantine purge ("plan" the run deleted now, null for
+// the scheduled purge of expired runs and runs on a volume short of space). Items and bytes
+// count the plan's items (a purge: one run folder per volume) and their stored sizes, done
+// when acted on, skipped or refused; files_done counts files removed, moved or copied;
+// current is the item handled now. A service older than this field omits it.
 inline constexpr std::string_view cleaning_status_method = "cleaning.status";
 
 // ---- plans.* ----------------------------------------------------------------------------------
