@@ -514,12 +514,21 @@ Result<std::vector<alerts::Reading>> TelemetryMethods::volume_facts() const {
   const WallTime now = clock_->now();
   for (const telemetry::VolumeStatus& volume : view->volumes) {
     const std::string entity = telemetry::volume_entity(volume);
-    const std::string free =
-        std::format("{:.1f} GiB free of {:.1f} GiB", static_cast<double>(volume.free.count()) / gib,
-                    static_cast<double>(volume.size.count()) / gib);
-    facts.push_back(alerts::Reading{.metric = "volume.free_percent",
+    // The toast shows only the title and this detail, so the detail names the drive.
+    const std::string free = std::format("{} {:.1f} GiB free of {:.1f} GiB", entity,
+                                         static_cast<double>(volume.free.count()) / gib,
+                                         static_cast<double>(volume.size.count()) / gib);
+    // A share is a fair measure only on the system volume, which Windows needs room on; 10 % of
+    // a 2 TB data drive is still 200 GB. Every volume reports its free GiB for an absolute limit.
+    if (entity == system_drive_) {
+      facts.push_back(alerts::Reading{.metric = "volume.free_percent",
+                                      .entity = entity,
+                                      .value = percent(volume.free, volume.size),
+                                      .detail = free});
+    }
+    facts.push_back(alerts::Reading{.metric = "volume.free_gib",
                                     .entity = entity,
-                                    .value = percent(volume.free, volume.size),
+                                    .value = static_cast<double>(volume.free.count()) / gib,
                                     .detail = free});
     const Result<telemetry::FillProjection> fill =
         telemetry::project_volume_fill(*store_, entity, now);

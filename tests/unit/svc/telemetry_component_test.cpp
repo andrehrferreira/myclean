@@ -191,11 +191,13 @@ TEST_F(TelemetryMethodsTest, VolumeFactsCarryFreeSpaceAndDaysUntilFull) {
   poll();
   Result<std::vector<alerts::Reading>> facts = methods().volume_facts();
   ASSERT_TRUE(facts.has_value()) << facts.error().message;
-  ASSERT_EQ(facts->size(), 1U);  // too little history for a fill projection
-  EXPECT_EQ(facts->at(0).metric, "volume.free_percent");
+  ASSERT_EQ(facts->size(), 2U);  // too little history for a fill projection
+  EXPECT_EQ(facts->at(0).metric, "volume.free_percent");  // C: is the system volume
   EXPECT_EQ(facts->at(0).entity, "C:");
   EXPECT_EQ(facts->at(0).value, 10.0);
-  EXPECT_EQ(facts->at(0).detail, "100.0 GiB free of 1000.0 GiB");
+  EXPECT_EQ(facts->at(0).detail, "C: 100.0 GiB free of 1000.0 GiB");
+  EXPECT_EQ(facts->at(1).metric, "volume.free_gib");
+  EXPECT_EQ(facts->at(1).value, 100.0);
 
   // Three hours without change: not filling, so days until full is infinite.
   for (int minute = 1; minute <= 180; ++minute) {
@@ -203,9 +205,9 @@ TEST_F(TelemetryMethodsTest, VolumeFactsCarryFreeSpaceAndDaysUntilFull) {
   }
   facts = methods().volume_facts();
   ASSERT_TRUE(facts.has_value()) << facts.error().message;
-  ASSERT_EQ(facts->size(), 2U);
-  EXPECT_EQ(facts->at(1).metric, "volume.days_until_full");
-  EXPECT_TRUE(std::isinf(facts->at(1).value));
+  ASSERT_EQ(facts->size(), 3U);
+  EXPECT_EQ(facts->at(2).metric, "volume.days_until_full");
+  EXPECT_TRUE(std::isinf(facts->at(2).value));
 }
 
 TEST_F(TelemetryMethodsTest, TopListsTheQualifyingTreesButNeverTheIdleProcess) {
@@ -332,9 +334,9 @@ TEST_F(TelemetryMethodsTest, VolumesProjectDaysUntilFull) {
 
   const Result<std::vector<alerts::Reading>> facts = methods().volume_facts();
   ASSERT_TRUE(facts.has_value()) << facts.error().message;
-  ASSERT_EQ(facts->size(), 2U);
-  EXPECT_EQ(facts->at(1).metric, "volume.days_until_full");
-  EXPECT_NEAR(facts->at(1).value, 97.0 / 24.0, 0.02);
+  ASSERT_EQ(facts->size(), 3U);
+  EXPECT_EQ(facts->at(2).metric, "volume.days_until_full");
+  EXPECT_NEAR(facts->at(2).value, 97.0 / 24.0, 0.02);
 }
 
 // The component inside a running service, over the pipe.
@@ -398,11 +400,14 @@ TEST(TelemetryComponent, ReportsVolumeFactsToTheAlertSinkOncePerVolumeSample) {
   ASSERT_TRUE(telemetry.start(Context(**store, methods, clock, dir.path())).has_value());
   telemetry.stop();
 
-  // The first sample, taken in start(): one fact, free space of C:.
+  // The first sample, taken in start(): the free space of C:, the system volume, as a share and
+  // in GiB.
   const std::vector<alerts::Reading> facts = sink.facts();
-  ASSERT_EQ(facts.size(), 1U);
+  ASSERT_EQ(facts.size(), 2U);
   EXPECT_EQ(facts[0].metric, "volume.free_percent");
   EXPECT_EQ(facts[0].entity, "C:");
+  EXPECT_EQ(facts[1].metric, "volume.free_gib");
+  EXPECT_EQ(facts[1].entity, "C:");
   ASSERT_NE(telemetry.volumes(), nullptr);
   EXPECT_EQ(telemetry.volumes()->volumes.size(), 1U);
 }

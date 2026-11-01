@@ -15,6 +15,7 @@
 
 #include <toml++/toml.hpp>
 
+#include "core/cleanup/dism_cleanup.hpp"
 #include "core/cleanup/native_command.hpp"
 #include "core/map/attribution.hpp"
 #include "core/model/enum_names.hpp"
@@ -214,16 +215,19 @@ Result<void> check_no_caps(std::string_view text, const fs::path& file) {
   }
 }
 
-// A native rule may name only a command the tray runs (cleanup::find_native_tool); the tray
-// refuses any other, so such a rule would only ever fail.
+// A native rule may name only a command MyClean runs: in the tray (scope user) one of
+// cleanup::find_native_tool, in the service (scope system) the DISM component cleanup. Any other
+// would only ever fail.
 Result<std::vector<rules::CleaningRule>> check_native_commands(
     Result<std::vector<rules::CleaningRule>> rules, const fs::path& file) {
   if (!rules) {
     return rules;
   }
   for (const rules::CleaningRule& rule : *rules) {
-    if (rule.strategy == rules::Strategy::native &&
-        cleanup::find_native_tool(rule.command) == nullptr) {
+    const bool runs = rule.scope == ExecutionContext::service
+                          ? rule.command == cleanup::component_cleanup_command
+                          : cleanup::find_native_tool(rule.command) != nullptr;
+    if (rule.strategy == rules::Strategy::native && !runs) {
       return fail(Errc::invalid_data, utf8(file) + ": rule '" + rule.id +
                                           "': field 'command' is not a native command MyClean "
                                           "runs: '" +

@@ -99,8 +99,9 @@ class TelemetryMethods {
   [[nodiscard]] Result<nlohmann::json> explain(const nlohmann::json& params) const;
   [[nodiscard]] Result<nlohmann::json> volumes() const;
 
-  // The alert facts of every volume: volume.free_percent and volume.days_until_full (infinite
-  // when not filling, absent while there is too little history), entity the volume entity.
+  // The alert facts of every volume: volume.free_percent (the system volume only),
+  // volume.free_gib and volume.days_until_full (infinite when not filling, absent while there is
+  // too little history), entity the volume entity; each detail starts with the entity ("C:").
   [[nodiscard]] Result<std::vector<alerts::Reading>> volume_facts() const;
 
  private:

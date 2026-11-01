@@ -40,6 +40,10 @@ struct ComponentStore {
 // The plan item path that stands for the component store: "dism:component-store".
 [[nodiscard]] std::filesystem::path component_store_item();
 
+// The command a native rule of scope "system" names: the service runs it as DismCleanup.
+inline constexpr std::string_view component_cleanup_command =
+    "DISM /Online /Cleanup-Image /StartComponentCleanup";
+
 // Removes superseded components with `DISM /Online /Cleanup-Image /StartComponentCleanup`,
 // run by the service (cleaning spec, "Windows System Areas Through Windows Handlers"). Never
 // /ResetBase. Not reversible. The runner must outlive the action.

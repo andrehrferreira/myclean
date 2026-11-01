@@ -1,7 +1,7 @@
 #include "svc/owner_session.hpp"
 
+#include <algorithm>
 #include <cstdint>
-#include <cstring>
 #include <cwctype>
 #include <filesystem>
 #include <map>
@@ -142,7 +142,7 @@ bool same_file(const fs::path& left, const fs::path& right) {
   const std::optional<FILE_ID_INFO> a = file_identity(left);
   const std::optional<FILE_ID_INFO> b = file_identity(right);
   return a && b && a->VolumeSerialNumber == b->VolumeSerialNumber &&
-         std::memcmp(a->FileId.Identifier, b->FileId.Identifier, sizeof(a->FileId.Identifier)) == 0;
+         std::ranges::equal(a->FileId.Identifier, b->FileId.Identifier);
 }
 
 }  // namespace

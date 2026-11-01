@@ -5,6 +5,7 @@
 # At most one toast per rule and entity within this many minutes.
 rate_limit_minutes = 5
 
+# The Windows drive by share (reported for the system volume only), every drive by what is left.
 [[rule]]
 id = "volume.free-space-low"
 title = "Drive is almost full"
@@ -12,6 +13,14 @@ metric = "volume.free_percent"
 severity = "warning"
 below = 10
 unit = "%"
+
+[[rule]]
+id = "volume.free-gib-low"
+title = "Drive is almost full"
+metric = "volume.free_gib"
+severity = "warning"
+below = 50
+unit = "GiB"
 
 [[rule]]
 id = "volume.fill-up"

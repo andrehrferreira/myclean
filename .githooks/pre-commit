@@ -5,5 +5,10 @@
 set -eu
 
 root="$(git rev-parse --show-toplevel)"
+# Git runs hooks with GIT_DIR, GIT_INDEX_FILE and friends set. The test suite runs git in sandbox
+# repositories; with those variables inherited it acted on this repository instead (it set
+# core.bare and moved HEAD). Clear them so every git the gate starts finds its own repository.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_NAMESPACE GIT_CEILING_DIRECTORIES
 exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$root/tools/dev/check.ps1" \
     -Preset "${MYCLEAN_HOOK_PRESET:-debug}"

@@ -174,6 +174,18 @@ TEST(LoadPack, RejectsANativeCommandMyCleanDoesNotRun) {
 
   files.put(builtin / "tool" / "clean.toml", native("docker system prune"));
   EXPECT_TRUE(load(files, "tool").has_value());
+
+  // A rule of scope system runs in the service, which runs only the DISM component cleanup.
+  const auto service = [](std::string_view command) {
+    return "[[rule]]\nid = \"store\"\ncategory = \"windows\"\ntier = \"ask\"\n"
+           "scope = \"system\"\nstrategy = \"native\"\ncommand = \"" +
+           std::string(command) + "\"\n";
+  };
+  files.put(builtin / "tool" / "clean.toml",
+            service("DISM /Online /Cleanup-Image /StartComponentCleanup"));
+  EXPECT_TRUE(load(files, "tool").has_value());
+  files.put(builtin / "tool" / "clean.toml", service("pnpm store prune"));
+  expect_error(load(files, "tool"), "rule 'store': field 'command' is not a native command");
 }
 
 TEST(LoadPack, RejectsJobCapsInClasses) {
