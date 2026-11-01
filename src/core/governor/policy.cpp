@@ -1,6 +1,7 @@
 #include "core/governor/policy.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -15,6 +16,7 @@
 
 #include <toml++/toml.hpp>
 
+#include "core/model/enum_names.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/rules/data_files.hpp"
@@ -28,6 +30,8 @@ constexpr double gib = 1024.0 * 1024.0 * 1024.0;
 constexpr int max_seconds = 3600;
 constexpr int max_minutes = 1440;
 constexpr int max_commit_gib = 1 << 20;
+
+constexpr std::array<std::string_view, 2> mode_names = {"observe", "act"};
 
 // Thrown at the first schema violation; parse_policy_file returns it as invalid_data.
 class SchemaError : public std::runtime_error {
@@ -106,6 +110,17 @@ class Fields {
     return static_cast<int>(value);
   }
 
+  [[nodiscard]] std::optional<std::string> text(std::string_view key) const {
+    const toml::node* node = table_->get(key);
+    if (node == nullptr) {
+      return std::nullopt;
+    }
+    if (!node->is_string()) {
+      fail(key, "must be a string");
+    }
+    return node->as_string()->get();
+  }
+
   // A list of strings, which may be empty; std::nullopt when absent.
   [[nodiscard]] std::optional<std::vector<std::string>> strings(std::string_view key) const {
     const toml::node* node = table_->get(key);
@@ -155,6 +170,21 @@ void read_percent(const Fields& fields, std::string_view key, double& value) {
 void read_gib(const Fields& fields, std::string_view key, Bytes& value) {
   if (const std::optional<double> amount = fields.number(key, 0.0, max_commit_gib)) {
     value = Bytes{static_cast<std::uint64_t>(std::llround(*amount * gib))};
+  }
+}
+
+void read_mode(const Fields& root, GovernorMode& mode) {
+  const std::optional<Fields> fields = root.table("governor");
+  if (!fields) {
+    return;
+  }
+  fields->only({"mode"});
+  if (const std::optional<std::string> text = fields->text("mode")) {
+    const std::optional<GovernorMode> parsed = parse_governor_mode(*text);
+    if (!parsed) {
+      fields->fail("mode", R"(must be "observe" or "act", not ')" + *text + "'");
+    }
+    mode = *parsed;
   }
 }
 
@@ -277,6 +307,14 @@ void read_jobs(const Fields& root, GovernorPolicy& policy) {
 
 }  // namespace
 
+std::string_view to_string(GovernorMode mode) {
+  return detail::enum_name(mode_names, mode);
+}
+
+std::optional<GovernorMode> parse_governor_mode(std::string_view text) {
+  return detail::enum_from_name<GovernorMode>(mode_names, text);
+}
+
 bool kill_enabled(const LadderPolicy& policy, rules::ProcessClass process_class) {
   return std::ranges::find(policy.kill, process_class) != policy.kill.end();
 }
@@ -294,8 +332,9 @@ Result<GovernorPolicy> parse_policy_file(std::string_view text, const std::files
   }
   try {
     const Fields fields(root, name);
-    fields.only({"pressure", "clear", "ladder", "game_mode", "jobs", "notifications"});
+    fields.only({"governor", "pressure", "clear", "ladder", "game_mode", "jobs", "notifications"});
     GovernorPolicy policy;
+    read_mode(fields, policy.mode);
     read_pressure(fields, policy.pressure);
     check_hysteresis(fields, policy.pressure);
     read_ladder(fields, policy.ladder);

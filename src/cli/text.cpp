@@ -347,6 +347,77 @@ std::string freezes(const Json& summary) {
 
 namespace {
 
+// "cargo.exe (pid 100)" for an object with "image"/"root_image" and "root".
+std::string tree_name(const Json& object, std::string_view image_key) {
+  const Json& root = object.value("root", Json());
+  if (!root.is_object()) {
+    return text_of(object, image_key);
+  }
+  return std::format("{} (pid {})", text_of(object, image_key), fixed(number(root, "pid"), 0));
+}
+
+}  // namespace
+
+std::string governor(const Json& status) {
+  const Json& pressure = status.value("pressure", Json::object());
+  const Json& metrics = pressure.value("metrics", Json());
+  std::string reasons;
+  for (const Json& reason : pressure.value("reasons", Json::array())) {
+    reasons += (reasons.empty() ? "" : ", ") + reason.get<std::string>();
+  }
+  std::string out =
+      std::format("Governor: {} mode, {}{}{}\n", text_of(status, "mode"),
+                  text_of(pressure, "state"), reasons.empty() ? "" : " (" + reasons + ")",
+                  pressure.value("clearing", false) ? ", clearing" : "");
+  if (metrics.is_object()) {
+    out += std::format("  CPU {} %, available {}, commit {} of {}, hard faults {}/s\n",
+                       fixed(number(metrics, "cpu_percent")), bytes(number(metrics, "available")),
+                       bytes(number(metrics, "commit")), bytes(number(metrics, "commit_limit")),
+                       fixed(number(metrics, "hard_faults_per_second"), 0));
+  }
+  if (status.value("paused_until", Json()).is_number()) {
+    out += "  paused until " + utc(status, "paused_until") + "\n";
+  }
+  const Json& game = status.value("game_mode", Json::object());
+  out += std::format("Game mode: {} (override {}), build CPU cap {} %\n",
+                     game.value("active", false) ? "on" : "off", text_of(game, "override"),
+                     fixed(number(game, "build_cpu_percent"), 0));
+  for (const Json& detected : game.value("games", Json::array())) {
+    out += std::format("  game {} (pid {}): {}\n", text_of(detected, "image"),
+                       fixed(number(detected, "pid"), 0), text_of(detected, "reason"));
+  }
+  const Json& jobs = status.value("jobs", Json::array());
+  out += jobs.empty() ? "Jobs: none\n" : "Jobs:\n";
+  for (const Json& job : jobs) {
+    out += std::format("  {} {} {}: {} processes, CPU {} %, commit {} of {}{}\n",
+                       text_of(job, "role"), text_of(job, "class"), tree_name(job, "root_image"),
+                       fixed(number(job, "members"), 0), fixed(number(job, "cpu_cap_percent"), 0),
+                       bytes(number(job, "commit_used")), bytes(number(job, "commit_cap")),
+                       job.value("adopted", false) ? " (re-adopted)" : "");
+  }
+  for (const Json& tree : status.value("trees", Json::array())) {
+    out += std::format("Step in effect: {} on {} ({})\n", text_of(tree, "step"),
+                       tree_name(tree, "image"), text_of(tree, "class"));
+  }
+  for (const Json& notification : status.value("notifications", Json::array())) {
+    out += std::format("Notification {}: {} on {}, {}\n", fixed(number(notification, "id"), 0),
+                       text_of(notification, "step"), tree_name(notification, "image"),
+                       text_of(notification, "reason"));
+  }
+  const Json& events = status.value("events", Json::array());
+  out += events.empty() ? "Recent events: none\n" : "Recent events, newest first:\n";
+  for (const Json& event : events) {
+    const Json& step = event.value("step", Json());
+    out += std::format("  {} {}{} {}: {}, {}{}\n", utc(event, "time"), text_of(event, "kind"),
+                       step.is_string() ? " " + step.get<std::string>() : "",
+                       tree_name(event, "image"), text_of(event, "reason"), text_of(event, "actor"),
+                       text_of(event, "detail").empty() ? "" : " - " + text_of(event, "detail"));
+  }
+  return out;
+}
+
+namespace {
+
 // How an area's space can be reclaimed, from its "reclaim" object.
 std::string how(const Json& reclaim) {
   const std::string kind = text_of(reclaim, "kind");

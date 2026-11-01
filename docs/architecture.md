@@ -176,30 +176,61 @@ right before acting.
 
 ## 7. Governor (detail)
 
-- **Classification:** every process start (ETW) is matched against
-  `classes.toml` (image, command-line regex, path root, signer). The first
-  match wins.
-- **Proactive jobs:** each `build`/`test` start is assigned to that class's
-  job object (`JobObjectCpuRateControlInformation` hard cap +
-  `JOB_OBJECT_LIMIT_JOB_MEMORY`, plus notification limits at 80 %). One I/O
-  completion port receives new-process, exit and limit messages.
-- **Pressure loop (1 s):** inputs are CPU, available memory, commit, hard
-  faults/s and the foreground window's probe latency. Pressure needs the
-  threshold held for a dwell time; it clears after 60 s below the exit
-  threshold.
-- **Ladder:** a per-tree state machine with a 10 s cooldown per step.
-  Steps 1–4 roll back on clear; a suspend waits for the owner; kill is
-  opt-in.
-- **Game mode:** entered on game detection. It tightens build caps and,
-  optionally, moves build jobs to the frequency CCD
-  (`GetLogicalProcessorInformationEx` → L3 grouping → CPU sets).
-- **Fail-open:** jobs are created without `KILL_ON_JOB_CLOSE`. On a clean
-  stop the service lifts every cap and resumes everything it suspended. A
-  crash cannot lift caps: a job object keeps its limits while processes are
-  still in it. Jobs are therefore **named** (`Global\MyClean.Job.<class>`) and
-  every suspend is persisted. The restarted service (SCM recovery, 5 s)
-  reopens its jobs, reconciles their limits with the current policy, and
-  resumes trees whose suspend it cannot account for.
+Specification: `.rulebook/tasks/phase3_resource-governor/specs/governor/spec.md`. Decisions are
+pure functions in `core/governor` (snapshot in, commands out); `core/governing` applies them in
+the service (`svc::GovernorComponent`), over the `core/os` job and process interfaces.
+
+- **Mode:** `[governor] mode` in `data/governor.toml`. `observe` (the pilot's default) records
+  every decision in `governor_event` with detail `observe` and changes nothing: no priority,
+  EcoQoS, suspend or kill, and no proactive job is created. `act` applies every decision and
+  also writes each change to `action_log`. Crash recovery and the clean stop lift MyClean's own
+  caps and resume its own suspends in either mode; a reload that switches from `act` to
+  `observe` fails open first.
+- **Classification:** every process start (ETW, through the events component's router) is
+  matched against the classes of the loaded knowledge packs (image, command-line regex, path
+  root, signer); the first match wins. A detected game is `game`; the owner's Always-allow
+  images are `allow`. Policy and classes are reloaded every 5 minutes; a rejected file or pack
+  keeps the previous ones.
+- **Proactive jobs, one per tree:** a `build`/`test` process whose parent is not in a MyClean
+  tree job becomes a tree root (spike X4 §5.1). A root in no job is assigned to its class's
+  parent job first, so its tree job nests under it (aggregate class caps); a root already in a
+  foreign job (an IDE's) gets a tree job only, nested under that job. Each job carries the
+  class's CPU hard cap (`JobObjectCpuRateControlInformation`), the commit cap of the whole tree
+  (`JOB_OBJECT_LIMIT_JOB_MEMORY`) and a commit notification limit at 80 %; the root runs at
+  `BELOW_NORMAL`, which its children inherit. The first notification is recorded and the limit
+  cleared; the 1 s loop also checks the job's commit from its accounting and re-arms the limit
+  below 70 %. One completion port per job reports membership, `JOB_MEMORY_LIMIT` and member
+  exits; a tree job is released when its last member exits (a root exiting while `mspdbsrv`
+  or a compiler server lives on is normal).
+- **Jobs are permanent and named** `Global\MyClean.Job.<class>.<nonce>` with a random nonce
+  (`OBJ_PERMANENT`: they outlive the service's handles, spike X4 §5.5), created without
+  `KILL_ON_JOB_CLOSE`, `BREAKAWAY_OK` or `SILENT_BREAKAWAY_OK`, and made temporary again when
+  released. Every job is persisted in `governor_job` (class, nonce, role class/tree/cap, root)
+  before anything is assigned to it.
+- **Pressure loop (1 s):** the telemetry pipeline's own samples (CPU, available memory, commit,
+  hard faults/s and the process table; no WMI, no query of its own) feed the pressure detector:
+  a threshold held for its dwell enters pressure, 60 s at every exit threshold clears it.
+- **Ladder:** on the heaviest unprotected tree, one step at a time with a 10 s cooldown:
+  priority + memory priority, EcoQoS, cap (a cap job at 50 % CPU and commit + 25 %; a tree in
+  its MyClean tree job has that job tightened instead), suspend (persisted in
+  `governor_suspend` before it is applied, with an owner notification), kill (opt-in per
+  class). Steps 1-3 roll back when pressure clears; a suspend waits for the owner (Resume,
+  Kill, Allow once, Always allow, through the tray), a pause or the stop. Every step and
+  rollback is a `governor_event` row and a `GovernorStep` entry in `action_log`.
+- **Game mode:** a game is on the owner's list, under a launcher library root, path-matched in
+  the owner's `GameConfigStore` (read from `HKU\<owner SID>`), or the fullscreen foreground
+  process with sustained GPU use (the tray sends the notification state and foreground PID
+  every second; GPU engines are sampled only while there is a candidate). Game mode (or the
+  tray's override) lowers every build job's CPU cap to 40 % and shortens dwell and cooldown to
+  5 s; a game and its descendants are never acted on.
+- **Fail-open:** on a clean stop the service rolls back every step, resumes every suspend,
+  lifts and releases every job and resumes every persisted suspend as recorded, within the
+  30 s stop budget. A crash leaves jobs (permanent) and suspend records behind: the restarted
+  service (SCM recovery, 5 s) re-opens each persisted job, refuses one not owned by SYSTEM
+  (`untrusted_job`), adopts one with members at the current policy's limits (its members are
+  then polled, since its port is gone), releases cap jobs and empty jobs, and resumes each
+  recorded (PID, creation time) exactly as often as recorded (`orphaned_suspend`); nothing
+  that is not recorded is resumed.
 
 ## 8. IPC and MCP
 
@@ -207,7 +238,7 @@ right before acting.
   (`src/core/ipc`). Methods are typed and registered by the service
   components; the exact JSON of each is documented in the contract headers
   of `src/core/ipc/` (`status.hpp`, `telemetry.hpp`, `disk_health.hpp`,
-  `alerts.hpp`, `input.hpp`). Phase 1:
+  `alerts.hpp`, `input.hpp`, `plans.hpp`, `governor.hpp`). Phase 1 and the governor:
 
   | Method | Parameters | Component |
   |---|---|---|
@@ -224,9 +255,15 @@ right before acting.
   | `alerts.dismiss` | rule, entity | alerts |
   | `input.record_incident` | incident (record) | input |
   | `input.summary` | none | input |
+  | `governor.status` | none | governor |
+  | `governor.events` | since, limit | governor |
+  | `governor.choose` (tray only) | pid, created, choice | governor |
+  | `governor.pause` (tray only) | minutes | governor |
+  | `governor.game_mode` (tray only) | override | governor |
+  | `governor.user_state` (tray only) | state, foreground_pid | governor |
 
-  Later phases add `scan.run`, `plan.get`, `plan.approve` (tray only, checked
-  via the client process image and session), `governor.command` and so on.
+  Tray-only methods are checked via the client process image and session. Later phases add
+  `scan.run` and so on (the cleaning methods are in `plans.hpp`).
 - **Parameters** are integers, numbers, booleans or tokens (ASCII letters,
   digits, `_`, `.`, `-`; at most 128 characters), so no method accepts a raw
   path or a command line. An undeclared parameter, a missing one or a value

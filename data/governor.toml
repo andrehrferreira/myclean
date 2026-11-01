@@ -1,7 +1,17 @@
 # Resource governor policy (format: src/core/governor/policy.hpp; behaviour:
 # .rulebook/tasks/phase3_resource-governor/specs/governor/spec.md). Every value below is the
 # default; a key left out keeps it. A file that fails validation is rejected whole and the
-# governor keeps the policy it had.
+# governor keeps the policy it had. The service reads this file at start and every 5 minutes.
+
+# What the governor does with its decisions.
+#   observe  every decision (ladder steps, rollbacks, proactive build/test jobs, owner choices) is
+#            recorded in governor_event with detail "observe"; no process, priority or job object
+#            is changed and no job is created. The pilot's default: watch what it would do first.
+#   act      every decision is applied, and each change also goes to action_log.
+# Crash recovery and the clean stop lift MyClean's own caps and resume its own suspends in
+# either mode.
+[governor]
+mode = "observe"
 
 # Entering the pressure state: any one signal is enough.
 [pressure]

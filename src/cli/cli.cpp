@@ -27,6 +27,7 @@
 #include "cli/text.hpp"
 #include "core/ipc/alerts.hpp"
 #include "core/ipc/disk_health.hpp"
+#include "core/ipc/governor.hpp"
 #include "core/ipc/input.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/status.hpp"
@@ -184,11 +185,13 @@ struct PlainCommand {
   std::string (*render)(const Json&);
 };
 
-constexpr std::array<PlainCommand, 4> plain_commands{
+constexpr std::array<PlainCommand, 5> plain_commands{
     PlainCommand{.name = "volumes", .method = ipc::volumes_list_method, .render = &render_volumes},
     PlainCommand{.name = "disks", .method = ipc::disks_health_method, .render = &text::disks},
     PlainCommand{.name = "alerts", .method = ipc::alerts_list_method, .render = &text::alerts},
-    PlainCommand{.name = "freezes", .method = ipc::input_summary_method, .render = &text::freezes}};
+    PlainCommand{.name = "freezes", .method = ipc::input_summary_method, .render = &text::freezes},
+    PlainCommand{
+        .name = "governor", .method = ipc::governor_status_method, .render = &text::governor}};
 
 // explain <pid>
 int explain(const CommandLine& line, const mcp::Caller& call, std::ostream& out,
@@ -291,6 +294,8 @@ std::string_view usage() {
          "  disks                       health of every physical disk\n"
          "  alerts                      stored alerts, newest first\n"
          "  freezes                     copy/paste freezes grouped by mechanism and process\n"
+         "  governor                    the resource governor: mode, pressure, game mode, jobs,\n"
+         "                              steps in effect and recent events\n"
          "  volumes                     volumes with free space and days until full\n"
          "  metrics latest              the newest CPU, memory, disk and GPU values\n"
          "  metrics query <metric> [--entity <entity>] [--hours <n>] [--max-points <n>]\n"

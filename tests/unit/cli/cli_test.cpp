@@ -22,9 +22,11 @@
 
 #include "core/model/result.hpp"
 #include "fakes/fake_clock.hpp"
+#include "fakes/fake_jobs.hpp"
 #include "platform/ipc/pipe_server.hpp"
 #include "platform/ipc/security.hpp"
 #include "svc/fake_machine.hpp"
+#include "svc/governor_component.hpp"
 #include "svc/phase1_fakes.hpp"
 #include "svc/service.hpp"
 #include "svc/svc_test_support.hpp"
@@ -113,6 +115,42 @@ class CliTest : public ::testing::Test {
   std::wstring pipe_ = svc::testing::unique_pipe_name();
   std::unique_ptr<svc::Service> service_;
 };
+
+// `myclean governor` against a console-mode service running the governor over FakeJobs.
+TEST(CliGovernorTest, GovernorAnswersInBothForms) {
+  const svc::testing::TempDir dir;
+  const fakes::FakeClock clock{noon};
+  const std::wstring pipe = svc::testing::unique_pipe_name();
+  static const packs::DiskPackFiles files;
+  std::vector<std::unique_ptr<svc::IComponent>> components;
+  components.push_back(std::make_unique<svc::GovernorComponent>(
+      svc::GovernorSources{.jobs = std::make_unique<fakes::FakeJobs>(),
+                           .processes = std::make_unique<fakes::FakeJobs>()},
+      files, nullptr));
+  Result<std::string> owner = platform::current_user_sid();
+  ASSERT_TRUE(owner.has_value());
+  Result<std::unique_ptr<svc::Service>> service =
+      svc::Service::start(svc::ServiceOptions{.database = dir.path() / "myclean.db",
+                                              .data_dir = svc::testing::shipped_data,
+                                              .pipe_name = pipe,
+                                              .owner_sid = *owner,
+                                              .mode = "console"},
+                          std::move(components), clock);
+  ASSERT_TRUE(service.has_value()) << service.error().message;
+  const std::vector<std::string> args = {"--pipe", pipe_token(pipe), "governor"};
+
+  const Outcome human = run_cli(args, {}, 5s, clock);
+  EXPECT_EQ(human.code, exit_ok) << human.err;
+  EXPECT_TRUE(human.out.starts_with("Governor: observe mode, normal")) << human.out;
+  EXPECT_NE(human.out.find("Game mode: off (override auto), build CPU cap 75 %"), std::string::npos)
+      << human.out;
+
+  std::vector<std::string> json_args = args;
+  json_args.emplace_back("--json");
+  const Json status = document(run_cli(json_args, {}, 5s, clock));
+  EXPECT_EQ(status.at("mode"), "observe");
+  EXPECT_TRUE(status.at("jobs").empty());
+}
 
 TEST_F(CliTest, StatusJsonExitsZeroWhenTheServiceIsHealthy) {
   start();

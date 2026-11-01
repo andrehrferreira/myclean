@@ -682,6 +682,10 @@ std::shared_ptr<const telemetry::VolumeView> TelemetryComponent::volumes() const
   return collectors_.live.volumes != nullptr ? collectors_.live.volumes->latest() : nullptr;
 }
 
+std::shared_ptr<const telemetry::ProcessView> TelemetryComponent::processes() const {
+  return collectors_.live.processes != nullptr ? collectors_.live.processes->latest() : nullptr;
+}
+
 std::optional<double> TelemetryComponent::latest_value(std::string_view metric,
                                                        std::string_view entity) const {
   for (const Tap* tap : collectors_.taps) {

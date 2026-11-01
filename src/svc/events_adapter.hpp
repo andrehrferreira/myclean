@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "core/events/connections.hpp"
+#include "core/events/event_router.hpp"
 #include "core/events/events.hpp"
 #include "core/events/events_component.hpp"
 #include "core/ipc/status.hpp"
@@ -39,6 +40,9 @@ class EventsAdapter final : public IComponent {
   }
   void stop() override { events_.stop(); }
   [[nodiscard]] ipc::ComponentHealth health() const override;
+
+  // The process and network events, for other components to subscribe to (the governor).
+  [[nodiscard]] events::EventRouter& router() { return events_.router(); }
 
  private:
   EventSources sources_;

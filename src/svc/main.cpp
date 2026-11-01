@@ -19,10 +19,13 @@
 #include <wil/resource.h>
 #include <windows.h>
 
+#include "core/games/library_roots.hpp"
+#include "core/governing/governor.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/packs/loader.hpp"
 #include "core/placement/drives.hpp"
+#include "core/telemetry/metrics.hpp"
 #include "platform/clean/win32_probes.hpp"
 #include "platform/cleanup/win32_command_runner.hpp"
 #include "platform/cleanup/win32_handler_host.hpp"
@@ -31,8 +34,11 @@
 #include "platform/etw/etw_event_source.hpp"
 #include "platform/etw/ip_helper_connections.hpp"
 #include "platform/fs/win32_file_system.hpp"
+#include "platform/games/win32_games.hpp"
 #include "platform/git/git_cli.hpp"
 #include "platform/ipc/pipe_io.hpp"
+#include "platform/jobs/win32_jobs.hpp"
+#include "platform/jobs/win32_process_control.hpp"
 #include "platform/packs/win32_packs.hpp"
 #include "platform/perf/pdh_counters.hpp"
 #include "platform/perf/win32_memory_status.hpp"
@@ -50,6 +56,7 @@
 #include "svc/component.hpp"
 #include "svc/disk_health_component.hpp"
 #include "svc/events_adapter.hpp"
+#include "svc/governor_component.hpp"
 #include "svc/host.hpp"
 #include "svc/input_component.hpp"
 #include "svc/owner_session.hpp"
@@ -171,6 +178,59 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
                         .system_root = root});
 }
 
+// Game detection's sources as the owner sees them: launcher library roots (no owner roots yet)
+// and the owner's GameConfigStore, read from HKU\<owner SID>.
+myclean::governing::GameScan read_games(std::string_view owner_sid) {
+  namespace platform = myclean::platform;
+  const platform::Win32GameSources sources(std::wstring(owner_sid.begin(), owner_sid.end()));
+  const platform::Win32GameFiles files;
+  myclean::games::RootsReport roots =
+      myclean::games::find_library_roots(sources.launcher_data(), {}, files);
+  myclean::governing::GameScan scan{.sources = {.roots = std::move(roots.roots)},
+                                    .problems = std::move(roots.problems)};
+  if (Result<std::vector<myclean::games::GameConfigEntry>> entries = sources.game_config_store();
+      entries) {
+    scan.sources.game_config = std::move(*entries);
+  } else {
+    scan.problems.push_back("GameConfigStore: " + entries.error().message);
+  }
+  return scan;
+}
+
+// The governor: jobs owned by SYSTEM in the service; a console run opens only jobs its own user
+// created.
+std::unique_ptr<svc::GovernorComponent> make_governor(const svc::HostOptions& options,
+                                                      const myclean::packs::IPackFiles& files,
+                                                      const svc::TelemetryComponent& telemetry,
+                                                      svc::EventsAdapter& events) {
+  namespace platform = myclean::platform;
+  std::string owner(platform::local_system_sid);
+  if (options.mode == svc::Mode::console) {
+    if (Result<std::string> user = platform::current_user_sid(); user) {
+      owner = std::move(*user);
+    }
+  }
+  auto images = std::make_shared<platform::WinProcessImages>();
+  return std::make_unique<svc::GovernorComponent>(
+      svc::GovernorSources{.jobs = std::make_unique<platform::Win32JobControl>(std::move(owner)),
+                           .processes = std::make_unique<platform::Win32ProcessControl>(),
+                           .gpu = std::make_unique<platform::PdhCounters>(),
+                           .view = [&telemetry] { return telemetry.processes(); },
+                           .metric =
+                               [&telemetry](std::string_view metric) {
+                                 return telemetry.latest_value(metric,
+                                                               myclean::telemetry::metric::system);
+                               },
+                           .games = &read_games,
+                           .image_path = [images](std::uint32_t pid, myclean::WallTime created)
+                               -> std::optional<std::filesystem::path> {
+                             Result<std::filesystem::path> path = images->image_path(pid, created);
+                             return path ? std::optional(std::move(*path)) : std::nullopt;
+                           },
+                           .owner_packs = owner_packs},
+      files, &events.router());
+}
+
 // Every component the service runs, in start order: a component starts after those it uses and
 // stops before them. Collectors are registered here.
 std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOptions& options) {
@@ -202,6 +262,7 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
                         .processes = std::make_unique<platform::NtProcessTable>()},
       trust.get());
 
+  auto governor = make_governor(options, files, *telemetry, *events);
   auto cleaning = make_cleaning(options, files, *telemetry, *disk_health);
 
   std::vector<std::unique_ptr<svc::IComponent>> components;
@@ -210,6 +271,7 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
   components.push_back(std::move(telemetry));
   components.push_back(std::move(disk_health));
   components.push_back(std::move(events));
+  components.push_back(std::move(governor));
   components.push_back(std::make_unique<svc::InputComponent>());
   components.push_back(std::move(cleaning));
   return components;

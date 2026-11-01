@@ -83,10 +83,14 @@ src/core/governor/      governor logic: classes, policy (data/governor.toml), pr
                         game mode, job placement, crash recovery (snapshot in, commands out)
 src/core/games/         game detection for the governor: launcher library roots, the owner's
                         GameConfigStore, fullscreen foreground with sustained GPU use
+src/core/governing/     the governor in the service: proactive build/test jobs, the ladder through
+                        the job and process interfaces, game mode, crash recovery and fail-open,
+                        observe/act mode, governor_* tables, the methods of ipc/governor.hpp
 src/core/input/         copy/paste freeze watchdog logic, mechanism classifier, incident store,
                         the incident record sent over the pipe
 src/core/ipc/           frames, the JSON-RPC dispatcher with typed parameters, the method
-                        contracts (status, telemetry, disk_health, alerts, input)
+                        contracts (status, telemetry, disk_health, alerts, input, plans,
+                        governor)
 src/core/mcp/           the `myclean mcp` stdio server and the health snapshot
 src/core/cleaning/      cleaning in the service: executor, scheduled auto run and purge, user
                         tasks of the tray, space analyses, the methods of ipc/plans.hpp
@@ -228,8 +232,13 @@ stored plans, so they too go through SafeRemove.
 `cleaning::PlanSpec` there), so the approved action is rebuilt exactly; `engine.execute` hands
 apply the preview reconciled with the stored plan (stored item ids, rejected items dropped).
 Only the owner may undo a `verified` plan (`verified -> rolled_back`). `QuarantineItems` takes a
-`QuarantineRoot`: the cleaning executor sends files of a volume under 10 % free to the overflow
-volume (default `L:`) and skips them when that drive is not healthy.
+`QuarantineRoot`: the cleaning executor sends items (files and folders) of a volume under 10 %
+free to the overflow volume (default `L:`) and skips them when that drive is not healthy. A
+folder moves there all or nothing: SafeRemove copies every file, flushes the copies once, then
+removes the source through its guarded delete, and puts everything back when any step fails; a
+folder holding a junction, link or cloud placeholder stays where it is. Restore moves it back
+the same way. `SafeRemove` and the item actions take an optional `safety::IProgress`; the
+executor's `ApplyTracker` keeps the progress `cleaning.status` reports as `applying`.
 
 ### Service components
 
@@ -243,10 +252,13 @@ started in this order (stopped in reverse), so that each starts after those it u
 | `telemetry` | 1 s / 60 s collectors; volume facts to `alerts` | `metrics.*`, `processes.*`, `volumes.list` |
 | `disk_health` | HealthCollector on its own pipeline thread (a read may wait 60 s on WMI); health facts to `alerts` | `disks.health` |
 | `events` | ETW process and network events, connection snapshots | none yet |
+| `governor` | resource governor (`core/governing`): build/test trees into their jobs on the ETW start, the 1 s pressure loop and ladder on the telemetry samples, game detection and game mode, crash recovery at start and fail-open at stop; `[governor] mode` in `data/governor.toml` (`observe`, the default, records only) | `governor.*` |
 | `input` | `input_incident` table for the tray's watchdog | `input.*` |
-| `cleaning` | rule scans (the clean cases of the knowledge packs that apply, reloaded at every scan) and plans by tier; runs approved service-scope plans; auto run daily at 03:00 (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge on the in-app scheduler; user tasks for the tray; space analyses | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*` |
+| `cleaning` | rule scans (the clean cases of the knowledge packs that apply, reloaded at every scan) and plans by tier; runs approved service-scope plans and, after every scan, its auto-tier plan; auto run hourly (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge (runs past 7 days, and at once every run on a volume under 10 % free) on the in-app scheduler; user tasks for the tray; space analyses | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*` |
 
-The contracts of the cleaning methods are in `src/core/ipc/plans.hpp`. Approving, rejecting and
+The contracts of the cleaning methods are in `src/core/ipc/plans.hpp`, the governor's in
+`src/core/ipc/governor.hpp` (`governor.choose`, `.pause`, `.game_mode` and `.user_state` are
+tray-only). Approving, rejecting and
 undoing plans, the user tasks, recycling and quarantine restore are tray-only
 (`ipc::Access::tray`): the service checks each request's pipe client process
 (`GetNamedPipeClientProcessId`) and accepts it only from the configured `myclean-tray.exe`

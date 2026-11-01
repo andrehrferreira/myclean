@@ -35,6 +35,7 @@ std::string error_of(const std::string& text) {
 
 TEST(GovernorPolicy, DefaultsAreTheSpecValues) {
   const GovernorPolicy policy;
+  EXPECT_EQ(policy.mode, GovernorMode::observe);
   EXPECT_EQ(policy.pressure.cpu_enter_percent, 90.0);
   EXPECT_EQ(policy.pressure.cpu_dwell, seconds{15});
   EXPECT_EQ(policy.pressure.available_enter, 8_GiB);
@@ -73,6 +74,7 @@ TEST(GovernorPolicy, ShippedFileHoldsTheDefaults) {
       load_policy(rules::DiskDataFiles{}, std::filesystem::path{MYCLEAN_DATA_DIR});
   ASSERT_TRUE(loaded.has_value()) << loaded.error().message;
   const GovernorPolicy defaults;
+  EXPECT_EQ(loaded->mode, defaults.mode);
   EXPECT_EQ(loaded->pressure.cpu_enter_percent, defaults.pressure.cpu_enter_percent);
   EXPECT_EQ(loaded->pressure.cpu_dwell, defaults.pressure.cpu_dwell);
   EXPECT_EQ(loaded->pressure.available_enter, defaults.pressure.available_enter);
@@ -108,6 +110,34 @@ TEST(GovernorPolicy, EmptyFileIsTheDefaults) {
   ASSERT_TRUE(policy.has_value()) << policy.error().message;
   EXPECT_EQ(policy->pressure.cpu_dwell, seconds{15});
   EXPECT_EQ(policy->jobs.build.commit, 96_GiB);
+}
+
+TEST(GovernorPolicy, ModeIsObserveOrAct) {
+  const Result<GovernorPolicy> act = parse(R"([governor]
+mode = "act")");
+  ASSERT_TRUE(act.has_value()) << act.error().message;
+  EXPECT_EQ(act->mode, GovernorMode::act);
+  const Result<GovernorPolicy> observe = parse(R"([governor]
+mode = "observe")");
+  ASSERT_TRUE(observe.has_value()) << observe.error().message;
+  EXPECT_EQ(observe->mode, GovernorMode::observe);
+  EXPECT_EQ(parse("[governor]")->mode, GovernorMode::observe);
+
+  EXPECT_NE(error_of(R"([governor]
+mode = "enforce")")
+                .find("governor.mode"),
+            std::string::npos);
+  EXPECT_NE(error_of(R"([governor]
+mode = 1)")
+                .find("governor.mode"),
+            std::string::npos);
+  EXPECT_NE(error_of(R"([governor]
+level = "act")")
+                .find("governor.level"),
+            std::string::npos);
+  EXPECT_EQ(to_string(GovernorMode::act), "act");
+  EXPECT_EQ(parse_governor_mode("observe"), GovernorMode::observe);
+  EXPECT_FALSE(parse_governor_mode("Act").has_value());
 }
 
 TEST(GovernorPolicy, ReadsEveryKey) {

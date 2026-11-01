@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -12,6 +13,9 @@
 
 // The governor's policy, loaded from data/governor.toml. Every key is optional and defaults to
 // the value of the governor spec; the shipped file states the defaults, with comments.
+//
+//   [governor]
+//   mode = "observe"                    # observe: decide and record only; act: apply
 //
 //   [pressure]                          # entering the pressure state (any one signal)
 //   cpu_percent            = 90         # total CPU above this ...
@@ -59,6 +63,17 @@
 // say), and rearm_percent must be below notification_percent.
 namespace myclean::governor {
 
+// Whether the governor applies its decisions. Stored as text: "observe", "act".
+enum class GovernorMode {
+  // Every decision is recorded in governor_event (detail "observe"); no process, priority or job
+  // is changed and no proactive job is created. The pilot's default.
+  observe,
+  act,  // every decision is applied
+};
+
+[[nodiscard]] std::string_view to_string(GovernorMode mode);
+[[nodiscard]] std::optional<GovernorMode> parse_governor_mode(std::string_view text);
+
 struct PressurePolicy {
   double cpu_enter_percent = 90.0;
   std::chrono::seconds cpu_dwell{15};
@@ -97,6 +112,7 @@ struct JobPolicy {
 };
 
 struct GovernorPolicy {
+  GovernorMode mode = GovernorMode::observe;
   PressurePolicy pressure;
   LadderPolicy ladder;
   JobPolicy jobs;

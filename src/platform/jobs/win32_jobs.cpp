@@ -714,12 +714,4 @@ Result<bool> Win32JobControl::in_any_job(const os::ProcessKey& process) const {
   return member != FALSE;
 }
 
-Result<std::string> current_user_sid() {
-  Result<std::vector<std::byte>> user = token_user();
-  if (!user) {
-    return tl::unexpected(user.error());
-  }
-  return sid_string(user_sid_of(*user));
-}
-
 }  // namespace myclean::platform

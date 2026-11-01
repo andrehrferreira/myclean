@@ -8,6 +8,7 @@
 - [ ] 1.7 G2: fail-open: clean stop lifts caps and resumes suspends; restarted service re-adopts named jobs and resumes orphaned suspends; every step in governor_event + action_log
 - [ ] 1.8 G3: game detection (owner list, library roots, GameConfigStore, fullscreen + GPU) and game mode (protected game tree, tighter build cap default 40 %, stricter ladder) with tray override auto/on/off
 - [ ] 1.9 G4: tray notifications rate-limited to one per tree per 5 min with Resume / Kill / Allow once / Always allow; Pause governor for N minutes
+- [ ] 1.9b Orphaned process trees: detect polling/watch loops (shell scripts, tail -f, sleep loops, inbox pollers) whose launching session is gone and that repeat the same command line many times; propose ending them, and end them automatically once the owner allows it per pattern (seen 2026-11-01: 88 orphaned watch_channel.sh / collab.py loops from closed Claude sessions)
 - [ ] 1.10 Acceptance: stress scenario (parallel C++ + Rust builds + memory hog) keeps foreground probe latency < 100 ms with no commit exhaustion; a running game receives zero actions; killing the service then letting the SCM restart it leaves no orphaned cap or suspend; service overhead within NFR-PERF-1
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)

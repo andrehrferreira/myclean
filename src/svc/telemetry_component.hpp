@@ -146,6 +146,8 @@ class TelemetryComponent final : public IComponent {
 
   // The newest volume table; null before the first volume sample. Thread-safe, after start().
   [[nodiscard]] std::shared_ptr<const telemetry::VolumeView> volumes() const;
+  // The newest process table; null before the first process sample. Thread-safe, after start().
+  [[nodiscard]] std::shared_ptr<const telemetry::ProcessView> processes() const;
   // The newest sample of `metric` for `entity` ("disk.idle", "0"); nullopt when none was taken.
   // Thread-safe, after start().
   [[nodiscard]] std::optional<double> latest_value(std::string_view metric,

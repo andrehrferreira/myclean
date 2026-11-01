@@ -6,6 +6,7 @@ myclean_add_library(ipc
     disk_health.hpp
     frame.cpp
     frame.hpp
+    governor.hpp
     input.hpp
     json_rpc.cpp
     json_rpc.hpp

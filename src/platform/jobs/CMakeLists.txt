@@ -10,4 +10,5 @@ myclean_add_library(platform_jobs
     win32_process_control.hpp
   DEPENDS
     myclean::os
+    myclean::platform_ipc
     WIL::WIL)

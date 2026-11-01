@@ -8,6 +8,7 @@ myclean_add_test(svc
     disk_health_component_test.cpp
     events_adapter_test.cpp
     fake_machine.hpp
+    governor_component_test.cpp
     host_test.cpp
     input_component_test.cpp
     phase1_fakes.hpp
