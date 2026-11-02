@@ -3,6 +3,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -222,7 +223,15 @@ void App::refresh_icon(bool add) {
     return;
   }
   if (new_image) {
-    Result<wil::unique_hicon> image = make_icon(tray_model::icon_pixels(status, size), size);
+    // The application icon with the state as a dot; the state disc alone without it.
+    const Result<std::vector<tray_model::Argb>> base = app_icon_pixels(module_, size);
+    if (!base) {
+      spdlog::warn("tray icon base: {}", base.error().message);
+    }
+    Result<wil::unique_hicon> image =
+        make_icon(tray_model::icon_pixels(
+                      status, size, base ? std::span(*base) : std::span<const tray_model::Argb>{}),
+                  size);
     if (!image) {
       spdlog::error("tray icon image: {}", image.error().message);
       return;

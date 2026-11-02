@@ -118,6 +118,20 @@ TEST(TrayStateTest, BadgeIsAWhiteDotInTheTopRightCorner) {
   EXPECT_EQ(pixels[(24 * size) + 8], state_color(status));
 }
 
+TEST(TrayStateTest, OverTheApplicationIconTheStateIsADotInTheBottomRightCorner) {
+  const TrayStatus status{.state = TrayState::normal, .severity = std::nullopt, .badge = false};
+  constexpr int size = 32;
+  constexpr Argb app_color = 0xFF0884F9;
+  const std::vector<Argb> base(static_cast<std::size_t>(size * size), app_color);
+  const std::vector<Argb> pixels = icon_pixels(status, size, base);
+  ASSERT_EQ(pixels.size(), base.size());
+  EXPECT_EQ(pixels[0], app_color);
+  EXPECT_EQ(pixels[(8 * size) + 8], app_color);
+  EXPECT_EQ(pixels[(24 * size) + 24], state_color(status));
+  // A base of another size is ignored: the state disc alone.
+  EXPECT_EQ(icon_pixels(status, size, std::vector<Argb>(4, app_color))[0], 0U);
+}
+
 TEST(TrayStateTest, IconOfNoSizeIsEmpty) {
   EXPECT_TRUE(icon_pixels(TrayStatus{}, 0).empty());
 }

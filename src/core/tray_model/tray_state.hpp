@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -46,8 +47,10 @@ using Argb = std::uint32_t;
 
 // The pixels of a square icon of `size` pixels, row by row from the top: an anti-aliased disc
 // in the state color with a dark rim, and, with a badge, a white dot with a dark rim in the
-// top-right corner. Fully transparent outside the shapes.
-[[nodiscard]] std::vector<Argb> icon_pixels(const TrayStatus& status, int size);
+// top-right corner. Fully transparent outside the shapes. With `base` (the application icon,
+// size x size pixels) the state disc is a dot in its bottom-right corner instead.
+[[nodiscard]] std::vector<Argb> icon_pixels(const TrayStatus& status, int size,
+                                            std::span<const Argb> base = {});
 
 // What the tooltip reports; nullopt fields print as "n/a".
 struct TooltipData {

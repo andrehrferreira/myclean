@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -101,16 +102,24 @@ Argb state_color(const TrayStatus& status) {
   return 0xFF8B939C;
 }
 
-std::vector<Argb> icon_pixels(const TrayStatus& status, int size) {
+std::vector<Argb> icon_pixels(const TrayStatus& status, int size, std::span<const Argb> base) {
   std::vector<Argb> pixels(static_cast<std::size_t>(std::max(size, 0) * std::max(size, 0)), 0);
   if (size <= 0) {
     return pixels;
   }
   const double s = size;
-  const double center = s / 2.0;
   const double rim = std::max(1.0, s / 16.0);
-  paint_disc(pixels, size, center, center, (s / 2.0) - 0.5, rim_color);
-  paint_disc(pixels, size, center, center, (s / 2.0) - 0.5 - rim, state_color(status));
+  if (base.size() == pixels.size()) {
+    std::ranges::copy(base, pixels.begin());
+    const double radius = s * 0.25;
+    const double center = s - radius - 0.5;
+    paint_disc(pixels, size, center, center, radius + 0.5, rim_color);
+    paint_disc(pixels, size, center, center, radius + 0.5 - rim, state_color(status));
+  } else {
+    const double center = s / 2.0;
+    paint_disc(pixels, size, center, center, (s / 2.0) - 0.5, rim_color);
+    paint_disc(pixels, size, center, center, (s / 2.0) - 0.5 - rim, state_color(status));
+  }
   if (status.badge) {
     const double radius = s * 0.22;
     const double badge_center = s - radius - 0.5;

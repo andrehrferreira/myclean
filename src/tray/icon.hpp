@@ -1,6 +1,7 @@
 #pragma once
 
 #include <span>
+#include <vector>
 
 #include <wil/resource.h>
 #include <windows.h>
@@ -14,5 +15,10 @@ namespace myclean::tray {
 // shows nothing; the tray icon displays it.
 [[nodiscard]] Result<wil::unique_hicon> make_icon(std::span<const tray_model::Argb> pixels,
                                                   int size);
+
+// The pixels of icon resource 1 of `module` (the application icon) at `size` x `size`, row by row
+// from the top (the base of tray_model::icon_pixels). Fails when the module has no such icon or
+// it has no alpha channel.
+[[nodiscard]] Result<std::vector<tray_model::Argb>> app_icon_pixels(HINSTANCE module, int size);
 
 }  // namespace myclean::tray

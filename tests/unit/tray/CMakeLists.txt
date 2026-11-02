@@ -14,3 +14,5 @@ myclean_add_test(tray
   DEPENDS
     myclean::tray
     myclean::fakes)
+# The application icon, read back by app_icon_pixels.
+target_sources(myclean_tray_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/resources/myclean.rc)

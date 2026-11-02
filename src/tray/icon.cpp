@@ -58,4 +58,40 @@ Result<wil::unique_hicon> make_icon(std::span<const tray_model::Argb> pixels, in
   return icon;
 }
 
+Result<std::vector<tray_model::Argb>> app_icon_pixels(HINSTANCE module, int size) {
+  if (size <= 0) {
+    return fail(Errc::invalid_argument, "icon size must be positive");
+  }
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast,performance-no-int-to-ptr): a resource id
+  const wil::unique_hicon icon(static_cast<HICON>(
+      ::LoadImageW(module, MAKEINTRESOURCEW(1), IMAGE_ICON, size, size, LR_DEFAULTCOLOR)));
+  if (!icon) {
+    return fail(Errc::not_found, "the module has no application icon");
+  }
+  ICONINFO info{};
+  if (::GetIconInfo(icon.get(), &info) == FALSE) {
+    return fail(Errc::io_error, "GetIconInfo failed");
+  }
+  const wil::unique_hbitmap color(info.hbmColor);
+  const wil::unique_hbitmap mask(info.hbmMask);
+  BITMAPINFO bitmap{};
+  bitmap.bmiHeader.biSize = sizeof(bitmap.bmiHeader);
+  bitmap.bmiHeader.biWidth = size;
+  bitmap.bmiHeader.biHeight = -size;  // top-down rows
+  bitmap.bmiHeader.biPlanes = 1;
+  bitmap.bmiHeader.biBitCount = 32;
+  bitmap.bmiHeader.biCompression = BI_RGB;
+  std::vector<tray_model::Argb> pixels(static_cast<std::size_t>(size) *
+                                       static_cast<std::size_t>(size));
+  const wil::unique_hdc_window screen(::GetDC(nullptr));
+  if (!color || ::GetDIBits(screen.get(), color.get(), 0, static_cast<UINT>(size), pixels.data(),
+                            &bitmap, DIB_RGB_COLORS) != size) {
+    return fail(Errc::io_error, "GetDIBits failed");
+  }
+  if (std::ranges::none_of(pixels, [](tray_model::Argb pixel) { return (pixel >> 24U) != 0; })) {
+    return fail(Errc::invalid_argument, "the application icon has no alpha channel");
+  }
+  return pixels;
+}
+
 }  // namespace myclean::tray

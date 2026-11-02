@@ -1,5 +1,6 @@
 #include "tray/icon.hpp"
 
+#include <cstddef>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -30,6 +31,17 @@ TEST(IconTest, MakesA32BitIconOfTheRequestedSize) {
     EXPECT_EQ(bitmap.bmWidth, size);
     EXPECT_EQ(bitmap.bmHeight, size);
     EXPECT_EQ(bitmap.bmBitsPixel, 32);
+  }
+}
+
+// The test executable carries the application icon (src/resources/myclean.rc).
+TEST(IconTest, ReadsTheApplicationIconWithAlphaAtEverySize) {
+  for (const int size : {16, 20, 24, 32}) {
+    const Result<std::vector<tray_model::Argb>> pixels =
+        app_icon_pixels(::GetModuleHandleW(nullptr), size);
+    ASSERT_TRUE(pixels.has_value()) << pixels.error().message;
+    EXPECT_EQ(pixels->size(), static_cast<std::size_t>(size * size));
+    EXPECT_GT((*pixels)[(size / 2 * size) + (size / 2)] >> 24U, 0U) << "opaque in the middle";
   }
 }
 
