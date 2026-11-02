@@ -1,11 +1,14 @@
 id          = "games"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "Games and game launchers"
-description = "Steam's and the Epic Games launcher's web and download caches and the logs, crash reports and shader byte-code caches of Unreal Engine games (cleaned), where the games of each launcher and the Epic launcher's data are (uninstall), and what Steam's processes are."
+description = "Steam's and the Epic Games launcher's web and download caches, Steam's shader pre-cache in every library, and the logs, crash reports and shader byte-code caches of Unreal Engine games (cleaned), where the games of each launcher and the Epic launcher's data are (uninstall), and what Steam's processes are."
 sources     = [
   "observed on reference machine: Steam in %ProgramFiles(x86)%\\Steam with appcache\\httpcache, depotcache and steamapps; Epic Games launcher web caches in %LOCALAPPDATA%\\EpicGamesLauncher\\Saved\\webcache*; game folders of the other launchers (analysis F-016)",
   "observed on reference machine: steam.exe, steamwebhelper.exe and steamservice.exe, their image paths and signers",
   "observed on reference machine: the Epic Games Launcher's machine-wide data (manifests, ContentCache) in %ProgramData%/Epic/EpicGamesLauncher/Data, 1.6 GiB",
+  "https://store.steampowered.com/oldnews/35534 (Valve, Steam Client Update of 2017-12-13: \"New feature: Shader Pre-Caching. Whenever possible, depending on hardware and driver support, Steam can download pre-compiled shaders for your specific video card. This reduces load times and in-game stuttering during the first few launches of OpenGL- and Vulkan-based games\"; the feature can be disabled in the Settings dialog)",
+  "https://steamcommunity.com/groups/SteamClientBeta/announcements/detail/1447197096908335573 (Valve, Steam Client Beta of 2017-07-25, shader cache management: \"Shader caches for games launched by Steam are placed in separate folders next to their Steam Library folder and are deleted when each game is uninstalled, or when switching drivers or graphics cards\")",
+  "observed on reference machine: libraryfolders.vdf of %ProgramFiles(x86)%\\Steam lists C:\\Program Files (x86)\\Steam, E:\\SteamLibrary, F:\\SteamLibrary, L:\\SteamLibrary and W:\\SteamLibrary; E:\\SteamLibrary\\steamapps\\shadercache\\275850 (No Man's Sky's pre-cache, 0.17 GiB: DXVK_state_cache, fozmediav1, fozpipelinesv6, nvidiav1) next to steamapps\\common and the appmanifest_*.acf files",
   "observed on reference machine: Unreal Engine games keep %LOCALAPPDATA%/<project>/Saved with Logs, Crashes, Config, SaveGames and D3DDriverByteCodeBlob_*.ushaderprecache (b1, Wardogs, TL, SCUM, ABInfinite: 0.7 GiB of logs, 0.5 GiB of crash reports, 1.5 GiB of shader byte code)",
 ]
 min_myclean = "0.1.0"

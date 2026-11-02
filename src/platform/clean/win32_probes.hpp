@@ -26,13 +26,21 @@ class Win32FileTree final : public clean::IFileTree {
   [[nodiscard]] std::vector<std::filesystem::path> fixed_volumes() const override;
 };
 
-// The calling process's environment block.
+// The calling process's environment block, and the variables read from tools' own files
+// (tool_variable) as the calling user sees them.
 class Win32Environment final : public clean::IEnvironment {
  public:
   Win32Environment() = default;
 
   [[nodiscard]] std::optional<std::wstring> variable(std::wstring_view name) const override;
+  [[nodiscard]] std::vector<std::wstring> values(std::wstring_view name) const override;
 };
+
+// clean::tool_variable() for the user `owner_sid` names (empty: the calling user): Steam's folder
+// is the SteamPath of that user's Software\Valve\Steam, files are read with
+// platform::read_small_file (a link or cloud file is refused). nullopt for any other variable.
+[[nodiscard]] std::optional<std::vector<std::wstring>> tool_variable(
+    std::wstring_view name, const std::wstring& owner_sid = {});
 
 // Lock checks and process folders.
 //   locked():          opens the file for DELETE with every sharing mode allowed and closes it

@@ -76,6 +76,11 @@ A clean target is an absolute path pattern (starting with a `%VARIABLE%`, a driv
 `C:\`, or `?:\`, which stands for the same path on every local fixed volume) or, in a rule
 with `project`, a pattern relative to the project root. A target that could never match
 (relative without `project`, absolute with it, or with a `..` component) rejects the pack.
+A few variables are read from a tool's own files, not the environment, and have several values:
+a clean target or attribution path naming one is expanded once per value (`clean::tool_variable`,
+`src/core/clean/tool_variables.hpp`). `%STEAM_LIBRARY%` is every library folder of Steam's
+`libraryfolders.vdf` (Steam's own folder among them); it has no value, so the target selects
+nothing, when Steam is not installed or the file cannot be read.
 A project rule with `require.git_ignored` may add `require.outside_git = true` when its targets
 are written only by a tool: a project outside any git work tree is then offered on the other
 conditions, while inside one git must still ignore the folder and track nothing in it.
@@ -260,6 +265,7 @@ volumes = ['C:\', 'F:\']                # optional, before any table: the fixed 
 
 [env]                                   # optional, on top of the reference owner's environment:
 VCPKG_ROOT = 'F:\tools\vcpkg'           # C:\Users\owner, C:\Windows, C:\ProgramData, ...
+STEAM_LIBRARY = ['C:\Steam', 'E:\SteamLibrary']  # a list: a variable of several values
 
 [workspace]                             # optional: roots for clean cases with a project marker
 roots = ['F:\']
@@ -340,7 +346,7 @@ the new ones.
 | `dotnet` | clean: bin/obj of inactive .sln, .slnx and .csproj code bases, NuGet locals (`dotnet nuget locals`); attribution: NuGet packages (relocate) and caches |
 | `electron-apps` | clean: caches and crash reports of Discord, Slack, Teams classic and new Teams, electron-updater downloads (`%LOCALAPPDATA%\*-updater`); attribution; kb: Discord, Teams |
 | `flutter` | clean: .dart_tool and build of inactive Flutter projects |
-| `games` | clean: Steam web and download caches, Epic launcher web cache, Unreal games' logs, crash reports and shader byte code; attribution: Steam, Epic and other launchers' games, Epic launcher data (uninstall); kb: Steam |
+| `games` | clean: Steam web and download caches, Steam's shader pre-cache in every library (`%STEAM_LIBRARY%`, 7 days), Epic launcher web cache, Unreal games' logs, crash reports and shader byte code; attribution: Steam, Epic and other launchers' games, Epic launcher data (uninstall), shader pre-cache; kb: Steam |
 | `go` | clean: build and module caches (`go clean`); attribution: build and module caches (relocate) |
 | `gpu` | clean: NVIDIA, AMD and DirectX shader caches, driver packages the NVIDIA app downloaded; attribution: driver installer leftovers (review), NVIDIA AI models (uninstall); kb: AMD and NVIDIA driver processes |
 | `java-gradle` | clean: build output of inactive Gradle and Maven projects, unused Gradle versions; attribution: Gradle home (relocate), Maven repository (review); kb: Temurin java.exe |

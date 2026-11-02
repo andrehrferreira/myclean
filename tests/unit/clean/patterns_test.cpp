@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -36,6 +37,23 @@ TEST(ExpandVariables, UnsetVariableMeansNoTarget) {
 TEST(ExpandVariables, LonePercentIsLiteral) {
   const FakeEnvironment environment;
   EXPECT_EQ(expand_variables(LR"(C:\100% done)", environment), LR"(C:\100% done)");
+}
+
+// A variable of several values gives one expansion per value; an unset one gives none.
+TEST(ExpandAll, OneExpansionPerValue) {
+  FakeEnvironment environment;
+  environment.set(L"TEMP", LR"(C:\Temp)");
+  environment.set_values(L"STEAM_LIBRARY", {LR"(C:\Steam)", LR"(E:\SteamLibrary)"});
+  EXPECT_EQ(expand_all(LR"(%steam_library%\steamapps\shadercache\*)", environment),
+            (std::vector<std::wstring>{LR"(C:\Steam\steamapps\shadercache\*)",
+                                       LR"(E:\SteamLibrary\steamapps\shadercache\*)"}));
+  EXPECT_EQ(expand_all(LR"(%TEMP%\%STEAM_LIBRARY%)", environment),
+            (std::vector<std::wstring>{LR"(C:\Temp\C:\Steam)", LR"(C:\Temp\E:\SteamLibrary)"}));
+  EXPECT_EQ(expand_all(LR"(C:\100% done)", environment),
+            std::vector<std::wstring>{LR"(C:\100% done)"});
+  EXPECT_TRUE(expand_all(LR"(%GRADLE_USER_HOME%\caches)", environment).empty());
+  environment.set_values(L"STEAM_LIBRARY", {});
+  EXPECT_TRUE(expand_all(LR"(%STEAM_LIBRARY%\steamapps)", environment).empty());
 }
 
 TEST(WildcardMatch, StarAndQuestionMarkCaseInsensitive) {

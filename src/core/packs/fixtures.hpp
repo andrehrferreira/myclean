@@ -17,7 +17,9 @@
 //                                           # drive of the entries)
 //
 //   [env]                                   # optional: on top of the reference owner's
-//   VCPKG_ROOT = 'D:\vcpkg'                 # environment (C:\Users\owner, C:\Windows, ...)
+//   VCPKG_ROOT = 'D:\vcpkg'                 # environment (C:\Users\owner, C:\Windows, ...);
+//   STEAM_LIBRARY = ['C:\Steam', 'E:\SteamLibrary']  # a list: a variable of several values,
+//                                           # as those read from tools' own files
 //
 //   [workspace]                             # optional: roots the artifact scanner walks, for
 //   roots = ['F:\']                         # clean cases with a project marker

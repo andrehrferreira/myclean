@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "core/model/result.hpp"
@@ -60,6 +61,14 @@ class IEnvironment {
   // The value of variable `name` (case-insensitive), with 8.3 short names expanded when it is
   // an existing path; nullopt when it is not set.
   [[nodiscard]] virtual std::optional<std::wstring> variable(std::wstring_view name) const = 0;
+  // Every value of variable `name`. A few variables stand for several folders at once and are
+  // read from a tool's own files (clean::tool_variable: STEAM_LIBRARY, DOCKER_WSL_DATA); a
+  // target naming one is resolved once per value. Any other variable has variable()'s value,
+  // if it is set.
+  [[nodiscard]] virtual std::vector<std::wstring> values(std::wstring_view name) const {
+    std::optional<std::wstring> value = variable(name);
+    return value ? std::vector<std::wstring>{std::move(*value)} : std::vector<std::wstring>{};
+  }
 
  protected:
   IEnvironment() = default;

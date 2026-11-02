@@ -1,0 +1,49 @@
+# Steam's shader pre-cache in every library that libraryfolders.vdf lists (reference machine:
+# Steam on C:, a library on E:; here also one with another name on D:). Caches no game wrote for
+# 7 days go; a fresh one, the games themselves and a library that libraryfolders.vdf does not
+# list stay, and the one under Program Files is kept by the deny-list.
+
+[env]
+STEAM_LIBRARY = ['C:\Program Files (x86)\Steam', 'D:\Games\Steam Library', 'E:\SteamLibrary']
+
+[[entry]]
+path = 'C:\Program Files (x86)\Steam\steamapps\shadercache\730\fozpipelinesv6\steamapprun_pipeline_cache.foz'
+age_days = 40
+[[entry]]
+path = 'D:\Games\Steam Library\steamapps\shadercache\1086940\DXVK_state_cache\bg3.dxvk-cache'
+age_days = 12
+[[entry]]
+path = 'E:\SteamLibrary\steamapps\shadercache\275850\fozpipelinesv6\steamapprun_pipeline_cache.foz'
+size = 182452224
+age_days = 29
+[[entry]]
+path = 'E:\SteamLibrary\steamapps\shadercache\275850\nvidiav1\GLCache\0f\1a\cache.bin'
+age_days = 30
+[[entry]]
+path = 'E:\SteamLibrary\steamapps\shadercache\365670\fozpipelinesv6\steamapprun_pipeline_cache.foz'
+age_days = 2
+[[entry]]
+path = 'E:\SteamLibrary\steamapps\appmanifest_275850.acf'
+[[entry]]
+path = "E:\\SteamLibrary\\steamapps\\common\\No Man's Sky\\Binaries\\NMS.exe"
+# A Steam folder that libraryfolders.vdf does not list (left by an old install).
+[[entry]]
+path = 'W:\OldSteam\steamapps\shadercache\440\fozpipelinesv6\steamapprun_pipeline_cache.foz'
+
+[[expect]]
+kind     = "clean"
+case     = "steam-library-shadercache"
+match    = ['E:\SteamLibrary\steamapps\shadercache\275850',
+            'D:\Games\Steam Library\steamapps\shadercache\1086940']
+no_match = ['E:\SteamLibrary\steamapps\shadercache\365670', 'E:\SteamLibrary\steamapps\shadercache',
+            'C:\Program Files (x86)\Steam\steamapps\shadercache\730',
+            'W:\OldSteam\steamapps\shadercache\440',
+            'E:\SteamLibrary\steamapps\appmanifest_275850.acf',
+            "E:\\SteamLibrary\\steamapps\\common\\No Man's Sky"]
+
+[[expect]]
+kind     = "attribution"
+case     = "steam-library-shadercache"
+match    = ['E:\SteamLibrary\steamapps\shadercache', 'D:\Games\Steam Library\steamapps\shadercache',
+            'C:\Program Files (x86)\Steam\steamapps\shadercache']
+no_match = ['W:\OldSteam\steamapps\shadercache', 'E:\SteamLibrary\steamapps\common']

@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Rule Catalog as Data
-The system SHALL load cleaning rules from data files covering Windows temp, caches and dumps, browsers, Electron apps, IDEs, GPU shader caches, game launchers and package managers, where each rule declares its targets, tier and strategy (delete, quarantine, native or handler), and MUST reject an invalid rule without applying any part of it. A target is an absolute path under a `%VARIABLE%`, a drive or `?:\` (the same path on every local fixed volume), or, for a project rule, a path relative to the project root; a target that could never match (relative without a project, absolute with one, or with a `..` component) makes the rule invalid.
+The system SHALL load cleaning rules from data files covering Windows temp, caches and dumps, browsers, Electron apps, IDEs, GPU shader caches, game launchers and package managers, where each rule declares its targets, tier and strategy (delete, quarantine, native or handler), and MUST reject an invalid rule without applying any part of it. A target is an absolute path under a `%VARIABLE%`, a drive or `?:\` (the same path on every local fixed volume), or, for a project rule, a path relative to the project root; a target that could never match (relative without a project, absolute with one, or with a `..` component) makes the rule invalid. A few variables are read from a tool's own files and stand for several folders: `%STEAM_LIBRARY%` is every library that Steam's `libraryfolders.vdf` lists, and a target naming it is resolved in each; when the file cannot be read or parsed it has no value and the target selects nothing. Steam's shader pre-cache in every library (`steamapps\shadercache\<app id>`) is a GPU shader cache, `auto` once nothing was written in it for 7 days (Valve's Steam client notes: Steam downloads pre-compiled shaders for the video card, and deletes them itself when the driver or graphics card changes; without them a game compiles its shaders, with some stutter at first).
 
 #### Scenario: User temp rule
 Given the built-in rule for the user `%TEMP%` folder
@@ -26,6 +26,12 @@ And a cache a running game holds open is skipped
 Given a rule targeting `?:\Python3*\Lib\site-packages\~*` and fixed volumes C: and F:, and a USB stick H:
 When the rule is evaluated
 Then `F:\Python313\Lib\site-packages\~orch` can be selected and nothing on H: is
+
+#### Scenario: Every Steam library
+Given Steam's `libraryfolders.vdf` lists `C:\Program Files (x86)\Steam` and `E:\SteamLibrary`, `E:\SteamLibrary\steamapps\shadercache\275850` was last written 29 days ago and `shadercache\365670` 2 days ago, and `W:\OldSteam\steamapps\shadercache\440` is in no listed library
+When the rule targeting `%STEAM_LIBRARY%\steamapps\shadercache\*` is evaluated
+Then `E:\SteamLibrary\steamapps\shadercache\275850` is selected (auto), and neither `365670`, the pre-cache under Program Files (deny-list) nor anything on W: is
+And when `libraryfolders.vdf` cannot be read, nothing is selected
 
 #### Scenario: Invalid rule rejected
 Given a rule file containing a rule with an unknown strategy value

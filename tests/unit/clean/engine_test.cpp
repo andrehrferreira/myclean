@@ -38,6 +38,7 @@ class RuleEngineTest : public ::testing::Test {
 
   FakeTree& tree() { return tree_; }
   FakeUsage& usage() { return usage_; }
+  FakeEnvironment& environment() { return environment_; }
   [[nodiscard]] const RuleEngine& engine() const { return engine_; }
 
  private:
@@ -296,6 +297,35 @@ TEST_F(RuleEngineTest, AnyDriveTargetCoversEveryFixedVolume) {
             (std::vector<fs::path>{R"(C:\Python313\Lib\site-packages\~orch)",
                                    R"(F:\Python313\Lib\site-packages\~-rch)",
                                    R"(G:\Python312\Lib\site-packages\~umpy)"}));
+  EXPECT_TRUE(evaluation.dropped.empty());
+}
+
+// A variable of several values (every Steam library) resolves the target in each folder; without
+// a value the target is skipped, as for an unset variable.
+TEST_F(RuleEngineTest, LibraryVariableCoversEveryLibrary) {
+  tree().add_file(R"(E:\SteamLibrary\steamapps\shadercache\275850\fozpipelinesv6\a.foz)", 2_MiB,
+                  days_ago(29));
+  tree().add_file(R"(D:\Games\Steam Library\steamapps\shadercache\1086940\b.dxvk-cache)", 1_MiB,
+                  days_ago(12));
+  tree().add_file(R"(E:\SteamLibrary\steamapps\shadercache\365670\fozpipelinesv6\a.foz)", 1_MiB,
+                  days_ago(2));
+  tree().add_file(R"(W:\OldSteam\steamapps\shadercache\440\a.foz)", 1_MiB, days_ago(90));
+  const CleaningRule rule{.id = "shadercache",
+                          .category = "gpu-shader-caches",
+                          .tier = Tier::automatic,
+                          .scope = ExecutionContext::user,
+                          .strategy = Strategy::remove,
+                          .targets = {R"(%STEAM_LIBRARY%\steamapps\shadercache\*)"},
+                          .require = {.not_in_use = true, .min_age_days = 7}};
+  EXPECT_TRUE(evaluate(rule).candidates.empty());
+
+  environment().set_values(L"STEAM_LIBRARY",
+                           {LR"(D:\Games\Steam Library)", LR"(E:\SteamLibrary)", LR"(G:\Missing)"});
+  const Evaluation evaluation = evaluate(rule);
+
+  EXPECT_EQ(paths_of(evaluation),
+            (std::vector<fs::path>{R"(D:\Games\Steam Library\steamapps\shadercache\1086940)",
+                                   R"(E:\SteamLibrary\steamapps\shadercache\275850)"}));
   EXPECT_TRUE(evaluation.dropped.empty());
 }
 

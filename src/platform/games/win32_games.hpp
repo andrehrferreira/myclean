@@ -52,6 +52,11 @@ class Win32GameFiles final : public games::IGameFiles {
       const std::filesystem::path& path) const override;
 };
 
+// The text of a small regular file (a launcher's manifest or settings: at most 4 MB; a UTF-8 BOM
+// is removed). Opened as the entry itself and without recall: a link or a cloud file is refused,
+// never followed or downloaded. Fails with not_found when it does not exist.
+[[nodiscard]] Result<std::string> read_small_file(const std::filesystem::path& path);
+
 // The roots ("C:\", "E:\") of the fixed drives. A USB SSD that Windows reports as fixed is one.
 [[nodiscard]] std::vector<std::filesystem::path> fixed_drive_roots();
 

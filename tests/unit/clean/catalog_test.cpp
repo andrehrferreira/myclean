@@ -45,6 +45,10 @@ TEST(ShippedCatalog, ShaderCachesAreAuto) {
   }
   const CleaningRule& nvidia = shipped_rule("gpu/nvidia-dxcache");
   EXPECT_EQ(nvidia.targets.front(), R"(%LOCALAPPDATA%\NVIDIA\DXCache\*)");
+  // Steam's pre-cache in every library of libraryfolders.vdf, a week after its last write.
+  const CleaningRule& steam = shipped_rule("games/steam-library-shadercache");
+  EXPECT_EQ(steam.targets, std::vector<std::string>{R"(%STEAM_LIBRARY%\steamapps\shadercache\*)"});
+  EXPECT_EQ(steam.require.min_age_days, 7);
 }
 
 // Analysis F-013 and the cleaning spec: global package caches use their tool's command, under

@@ -68,6 +68,14 @@ scope    = "user"
 strategy = "delete"
 targets  = ['?:\tool\leftovers\*']
 require  = { min_age_days = 7 }
+
+[[rule]]
+id       = "library-cache"
+category = "dev-caches"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['%TOOL_LIBRARY%\cache\*']
 )");
   files.put(folder / "attribution.toml", R"([[area]]
 id       = "home"
@@ -167,6 +175,28 @@ match = ['ToolAgent.exe']
                 .at(0)
                 .find(R"(field 'volumes' must hold volume roots such as 'C:\', not 'F:\tool')"),
             std::string::npos);
+}
+
+// A list in [env] is a variable of several values, like those read from tools' own files.
+TEST(Fixtures, EnvListIsAVariableOfSeveralValues) {
+  const std::vector<std::string> failures = run(R"(
+[env]
+TOOL_LIBRARY = ['D:\library', 'E:\other library']
+
+[[entry]]
+path = 'D:\library\cache\a\x'
+[[entry]]
+path = 'E:\other library\cache\b\x'
+[[entry]]
+path = 'F:\library\cache\c\x'
+
+[[expect]]
+kind = "clean"
+case = "library-cache"
+match = ['D:\library\cache\a', 'E:\other library\cache\b']
+no_match = ['F:\library\cache\c']
+)");
+  EXPECT_TRUE(failures.empty()) << failures.front();
 }
 
 TEST(Fixtures, KbCasesSelectTheirImageInAnyCase) {

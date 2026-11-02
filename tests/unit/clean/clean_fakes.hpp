@@ -140,14 +140,23 @@ class FakeEnvironment final : public IEnvironment {
   void set(std::wstring_view name, std::wstring value) {
     values_[key_of(std::filesystem::path{name})] = std::move(value);
   }
+  // A variable of several values (STEAM_LIBRARY); variable() does not see it.
+  void set_values(std::wstring_view name, std::vector<std::wstring> values) {
+    lists_[key_of(std::filesystem::path{name})] = std::move(values);
+  }
 
   [[nodiscard]] std::optional<std::wstring> variable(std::wstring_view name) const override {
     const auto found = values_.find(key_of(std::filesystem::path{name}));
     return found == values_.end() ? std::nullopt : std::optional{found->second};
   }
+  [[nodiscard]] std::vector<std::wstring> values(std::wstring_view name) const override {
+    const auto found = lists_.find(key_of(std::filesystem::path{name}));
+    return found == lists_.end() ? IEnvironment::values(name) : found->second;
+  }
 
  private:
   std::map<std::wstring, std::wstring> values_;
+  std::map<std::wstring, std::vector<std::wstring>> lists_;
 };
 
 class FakeUsage final : public IUsage {

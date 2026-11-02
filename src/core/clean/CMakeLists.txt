@@ -6,11 +6,14 @@ myclean_add_library(clean
     patterns.cpp
     patterns.hpp
     probes.hpp
+    tool_variables.cpp
+    tool_variables.hpp
     walk.cpp
     walk.hpp
     workspaces.cpp
     workspaces.hpp
   DEPENDS
+    myclean::games
     myclean::rules
     myclean::safety
     tomlplusplus::tomlplusplus)

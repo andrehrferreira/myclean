@@ -74,9 +74,10 @@ class RuleEngine {
              safety::ProtectedLocations locations);
 
   // The rules without a project marker. A target is an absolute path pattern: %VARIABLES% are
-  // expanded (a target with an unset variable is skipped), a "?:\" drive stands for every fixed
-  // volume (IFileTree::fixed_volumes), '*' and '?' match within one component, and every entry
-  // the last component matches is one candidate. Conditions:
+  // expanded (a target with an unset variable is skipped; one naming a variable of several
+  // values, such as %STEAM_LIBRARY%, is resolved once per value), a "?:\" drive stands for
+  // every fixed volume (IFileTree::fixed_volumes), '*' and '?' match within one component, and
+  // every entry the last component matches is one candidate. Conditions:
   //   min_age_days  the entry and everything inside it changed at least that long ago
   //   not_in_use    no file inside it is locked, no process folder lies inside it
   // Native and handler rules give one candidate each, sized by their targets; a rule whose

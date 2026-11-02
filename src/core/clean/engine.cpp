@@ -412,19 +412,18 @@ std::vector<Entry> target_entries(const IFileTree& tree, const IEnvironment& env
                                   Session& session, const CleaningRule& rule) {
   std::vector<Entry> entries;
   for (const std::string& target : rule.targets) {
-    const std::optional<std::wstring> expanded =
-        expand_variables(from_utf8(target).native(), environment);
-    if (!expanded) {
-      continue;  // names a variable this machine does not set
+    // None when it names a variable this machine does not set; one per value of each variable.
+    for (const std::wstring& expanded : expand_all(from_utf8(target).native(), environment)) {
+      const fs::path pattern{expanded};
+      if (!on_every_volume(pattern) &&
+          (!pattern.has_root_name() || !pattern.has_root_directory())) {
+        session.drop(rule, pattern, "invalid_path", "a target must be an absolute path");
+        continue;
+      }
+      Matches matches = resolve(tree, pattern);
+      session.drop_links(rule, matches);
+      std::ranges::move(matches.entries, std::back_inserter(entries));
     }
-    const fs::path pattern{*expanded};
-    if (!on_every_volume(pattern) && (!pattern.has_root_name() || !pattern.has_root_directory())) {
-      session.drop(rule, pattern, "invalid_path", "a target must be an absolute path");
-      continue;
-    }
-    Matches matches = resolve(tree, pattern);
-    session.drop_links(rule, matches);
-    std::ranges::move(matches.entries, std::back_inserter(entries));
   }
   return entries;
 }

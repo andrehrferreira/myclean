@@ -11,6 +11,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 // clang-format off
@@ -20,10 +21,12 @@
 #include <wil/resource.h>
 
 #include "core/clean/probes.hpp"
+#include "core/clean/tool_variables.hpp"
 #include "core/model/file_identity.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/file_system.hpp"
+#include "platform/games/win32_games.hpp"
 
 namespace myclean::platform {
 
@@ -280,6 +283,21 @@ std::optional<std::wstring> Win32Environment::variable(std::wstring_view name) c
   long_form.resize(
       ::GetLongPathNameW(value.c_str(), long_form.data(), static_cast<DWORD>(long_form.size())));
   return long_form.empty() ? value : long_form;
+}
+
+std::vector<std::wstring> Win32Environment::values(std::wstring_view name) const {
+  std::optional<std::vector<std::wstring>> tool = tool_variable(name);
+  return tool ? *std::move(tool) : IEnvironment::values(name);
+}
+
+std::optional<std::vector<std::wstring>> tool_variable(std::wstring_view name,
+                                                       const std::wstring& owner_sid) {
+  if (!clean::is_tool_variable(name)) {
+    return std::nullopt;  // Steam's folder is read only for a variable that needs it
+  }
+  return clean::tool_variable(
+      name, clean::ToolFiles{.steam = Win32GameSources(owner_sid).steam_path(),
+                             .read = [](const fs::path& file) { return read_small_file(file); }});
 }
 
 bool Win32Usage::locked(const fs::path& file) const {

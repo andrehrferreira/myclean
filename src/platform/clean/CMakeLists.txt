@@ -6,4 +6,5 @@ myclean_add_library(platform_clean
     win32_probes.hpp
   DEPENDS
     myclean::clean
+    myclean::platform_games
     WIL::WIL)

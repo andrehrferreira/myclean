@@ -6,6 +6,7 @@ myclean_add_test(clean
     engine_test.cpp
     fixture.hpp
     patterns_test.cpp
+    tool_variables_test.cpp
     workspaces_test.cpp
   DEPENDS
     myclean::clean

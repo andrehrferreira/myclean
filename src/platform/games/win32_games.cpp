@@ -261,6 +261,10 @@ void read_gog(games::LauncherData& data) {
 
 }  // namespace
 
+Result<std::string> read_small_file(const fs::path& path) {
+  return read_file(path);
+}
+
 std::optional<fs::path> Win32GameSources::steam_path() const {
   wil::unique_hkey key;
   const LSTATUS status =

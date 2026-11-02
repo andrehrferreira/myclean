@@ -53,3 +53,22 @@ scope    = "user"
 strategy = "delete"
 targets  = ['%LOCALAPPDATA%\*\Saved\*.ushaderprecache']
 require  = { not_in_use = true }
+
+# Steam's shader pre-cache, one folder per app id in the steamapps\shadercache of each library
+# (sources: Valve's Steam client update of 2017-12-13 and the Steam client beta of 2017-07-25,
+# see pack.toml). Steam downloads pre-compiled shaders for the video card so that OpenGL and
+# Vulkan games load faster and stutter less in their first launches; the feature can be turned
+# off in Steam's settings, and Steam deletes these caches itself when a game is uninstalled or the
+# driver or graphics card changes. A removed cache costs a download or the game compiling its
+# shaders again, as for a driver's shader cache, never lost work. %STEAM_LIBRARY% is every
+# library of Steam's libraryfolders.vdf (observed on reference machine: No Man's Sky's
+# E:\SteamLibrary\steamapps\shadercache\275850, 0.17 GiB); the one under Program Files is dropped
+# by the deny-list, as for steam-httpcache. Steam and a running game keep the cache open.
+[[rule]]
+id       = "steam-library-shadercache"
+category = "gpu-shader-caches"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+targets  = ['%STEAM_LIBRARY%\steamapps\shadercache\*']
+require  = { min_age_days = 7, not_in_use = true }

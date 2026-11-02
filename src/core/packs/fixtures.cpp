@@ -142,17 +142,28 @@ class MemoryTree final : public clean::IFileTree {
   std::uint64_t next_id_ = 0;
 };
 
+// A variable set to a list has several values (STEAM_LIBRARY): variable() has none of them.
 class MemoryEnvironment final : public clean::IEnvironment {
  public:
-  void set(std::wstring_view name, std::wstring value) { values_[key_of(name)] = std::move(value); }
+  void set(std::wstring_view name, std::vector<std::wstring> values) {
+    values_[key_of(name)] = std::move(values);
+  }
+  void set(std::wstring_view name, std::wstring value) {
+    set(name, std::vector<std::wstring>{std::move(value)});
+  }
 
   [[nodiscard]] std::optional<std::wstring> variable(std::wstring_view name) const override {
     const auto found = values_.find(key_of(name));
-    return found == values_.end() ? std::nullopt : std::optional{found->second};
+    return found == values_.end() || found->second.size() != 1 ? std::nullopt
+                                                               : std::optional{found->second[0]};
+  }
+  [[nodiscard]] std::vector<std::wstring> values(std::wstring_view name) const override {
+    const auto found = values_.find(key_of(name));
+    return found == values_.end() ? std::vector<std::wstring>{} : found->second;
   }
 
  private:
-  std::map<std::wstring, std::wstring> values_;
+  std::map<std::wstring, std::vector<std::wstring>> values_;
 };
 
 // No process runs and nothing is open.
@@ -219,15 +230,27 @@ struct Machine {
   clean::Workspaces workspaces{.roots = {}, .skip = {L".git"}, .max_depth = 8};
 };
 
+// The variables of [env]: a string is one value, a list of strings several.
+void read_env(const Fields& root, MemoryEnvironment& environment) {
+  const toml::table* env = root.table("env");
+  if (env == nullptr) {
+    return;
+  }
+  const Fields fields(*env, root.where() + ": [env]");
+  for (const auto& [name, value] : *env) {
+    const std::vector<std::string> texts = value.is_array()
+                                               ? fields.required_strings(name.str())
+                                               : std::vector{fields.required_string(name.str())};
+    std::vector<std::wstring> values;
+    std::ranges::transform(texts, std::back_inserter(values),
+                           [](const std::string& text) { return from_utf8(text).native(); });
+    environment.set(from_utf8(name.str()).native(), std::move(values));
+  }
+}
+
 void read_machine(const Fields& root, Machine& machine) {
   set_reference_environment(machine.environment);
-  if (const toml::table* env = root.table("env")) {
-    const Fields fields(*env, root.where() + ": [env]");
-    for (const auto& [name, value] : *env) {
-      const std::string text = fields.required_string(name.str());
-      machine.environment.set(from_utf8(name.str()).native(), from_utf8(text).native());
-    }
-  }
+  read_env(root, machine.environment);
   if (const toml::table* workspace = root.table("workspace")) {
     const Fields fields(*workspace, root.where() + ": [workspace]");
     fields.only({"roots"});
@@ -283,25 +306,25 @@ std::vector<std::wstring_view> components(std::wstring_view text) {
 bool names(const std::vector<std::string>& patterns, const fs::path& path,
            const clean::IEnvironment& environment) {
   return std::ranges::any_of(patterns, [&](const std::string& pattern) {
-    const std::optional<std::wstring> expanded =
-        clean::expand_variables(from_utf8(pattern).native(), environment);
-    return expanded && std::ranges::equal(components(path.native()), components(*expanded),
-                                          [](std::wstring_view name, std::wstring_view part) {
-                                            return clean::wildcard_match(name, part);
-                                          });
+    return std::ranges::any_of(clean::expand_all(from_utf8(pattern).native(), environment),
+                               [&path](const std::wstring& expanded) {
+                                 return std::ranges::equal(
+                                     components(path.native()), components(expanded),
+                                     [](std::wstring_view name, std::wstring_view part) {
+                                       return clean::wildcard_match(name, part);
+                                     });
+                               });
   });
 }
 
 std::vector<fs::path> resolved(const std::vector<std::string>& patterns, const Machine& machine) {
   std::vector<fs::path> paths;
   for (const std::string& pattern : patterns) {
-    const std::optional<std::wstring> expanded =
-        clean::expand_variables(from_utf8(pattern).native(), machine.environment);
-    if (!expanded) {
-      continue;
-    }
-    for (const clean::Entry& entry : clean::resolve(machine.tree, fs::path{*expanded}).entries) {
-      paths.push_back(entry.path);
+    for (const std::wstring& expanded :
+         clean::expand_all(from_utf8(pattern).native(), machine.environment)) {
+      for (const clean::Entry& entry : clean::resolve(machine.tree, fs::path{expanded}).entries) {
+        paths.push_back(entry.path);
+      }
     }
   }
   return paths;

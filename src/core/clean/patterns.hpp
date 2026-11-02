@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "core/clean/probes.hpp"
 
@@ -14,6 +15,11 @@ namespace myclean::clean {
 // not set: the target does not exist on this machine. A '%' without a closing one is literal.
 [[nodiscard]] std::optional<std::wstring> expand_variables(std::wstring_view text,
                                                            const IEnvironment& environment);
+
+// Every expansion of `text`: one per combination of the values of the variables it names
+// (IEnvironment::values), in order; empty when a named variable has no value here.
+[[nodiscard]] std::vector<std::wstring> expand_all(std::wstring_view text,
+                                                   const IEnvironment& environment);
 
 // True when `pattern` contains '*' or '?'.
 [[nodiscard]] bool has_wildcard(std::wstring_view pattern);

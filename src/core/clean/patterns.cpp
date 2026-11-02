@@ -5,6 +5,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "core/clean/probes.hpp"
 
@@ -49,6 +51,34 @@ std::optional<std::wstring> expand_variables(std::wstring_view text,
     position = close + 1;
   }
   return result;
+}
+
+std::vector<std::wstring> expand_all(std::wstring_view text, const IEnvironment& environment) {
+  std::vector<std::wstring> results = {std::wstring{}};
+  std::size_t position = 0;
+  while (position < text.size()) {
+    const std::size_t open = text.find(L'%', position);
+    const std::size_t close =
+        open == std::wstring_view::npos ? std::wstring_view::npos : text.find(L'%', open + 1);
+    if (close == std::wstring_view::npos) {
+      for (std::wstring& result : results) {
+        result.append(text.substr(position));
+      }
+      break;
+    }
+    const std::vector<std::wstring> values =
+        environment.values(text.substr(open + 1, close - open - 1));
+    std::vector<std::wstring> next;
+    for (const std::wstring& result : results) {
+      for (const std::wstring& value : values) {
+        next.push_back(result);
+        next.back().append(text.substr(position, open - position)).append(value);
+      }
+    }
+    results = std::move(next);
+    position = close + 1;
+  }
+  return results;
 }
 
 bool has_wildcard(std::wstring_view pattern) {

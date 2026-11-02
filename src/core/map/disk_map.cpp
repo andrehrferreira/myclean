@@ -54,19 +54,19 @@ struct Location {
   Components components;
 };
 
-// The locations of `areas` in file order; those with an unset variable are left out.
+// The locations of `areas` in file order; those with an unset variable are left out, those with
+// a variable of several values (%STEAM_LIBRARY%) are one location per value.
 std::vector<Location> expand(const std::vector<Area>& areas,
                              const clean::IEnvironment& environment) {
   std::vector<Location> locations;
   for (std::size_t index = 0; index < areas.size(); ++index) {
     for (const std::wstring& path : areas[index].paths) {
-      const std::optional<std::wstring> expanded = clean::expand_variables(path, environment);
-      if (!expanded) {
-        continue;
-      }
-      Components components = split(*expanded);
-      if (!components.empty() && components.front().size() == 2 && components.front()[1] == L':') {
-        locations.push_back(Location{.area = index, .components = std::move(components)});
+      for (const std::wstring& expanded : clean::expand_all(path, environment)) {
+        Components components = split(expanded);
+        if (!components.empty() && components.front().size() == 2 &&
+            components.front()[1] == L':') {
+          locations.push_back(Location{.area = index, .components = std::move(components)});
+        }
       }
     }
   }

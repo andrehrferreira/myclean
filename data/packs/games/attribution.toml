@@ -28,6 +28,14 @@ category = "app-caches"
 label    = "Steam download cache"
 reclaim  = { kind = "clean-rule", ref = "steam-depotcache" }
 
+# Steam's shader pre-cache in every library (clean.toml).
+[[area]]
+id       = "steam-library-shadercache"
+paths    = ['%STEAM_LIBRARY%\steamapps\shadercache']
+category = "app-caches"
+label    = "Steam shader pre-cache"
+reclaim  = { kind = "clean-rule", ref = "steam-library-shadercache", note = "Steam downloads it again, or games compile their shaders again, with some stutter at first." }
+
 [[area]]
 id       = "epic"
 paths    = ['%ProgramFiles%\Epic Games', '?:\Epic Games']

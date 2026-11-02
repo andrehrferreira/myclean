@@ -144,5 +144,14 @@ TEST(Win32Environment, ExpandsToTheLongForm) {
   EXPECT_EQ(environment.variable(L"MYCLEAN_TEST_SURELY_UNSET"), std::nullopt);
 }
 
+// An ordinary variable has its one value; only the tool variables are read from tools' files.
+TEST(Win32Environment, OrdinaryVariablesHaveTheirOneValue) {
+  const Win32Environment environment;
+  EXPECT_EQ(environment.values(L"TEMP"),
+            std::vector<std::wstring>{environment.variable(L"TEMP").value_or(L"")});
+  EXPECT_TRUE(environment.values(L"MYCLEAN_TEST_SURELY_UNSET").empty());
+  EXPECT_EQ(tool_variable(L"TEMP"), std::nullopt);
+}
+
 }  // namespace
 }  // namespace myclean::platform
