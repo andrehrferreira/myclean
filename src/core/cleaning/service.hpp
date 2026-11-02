@@ -56,6 +56,9 @@ struct OwnerContext {
   std::unique_ptr<clean::IEnvironment> environment;
   safety::ProtectedLocations locations;
   std::optional<std::filesystem::path> downloads;  // nullopt: unknown
+  // git as the owner, who owns the repositories (git refuses another user's); null: Probes::git,
+  // when this process runs as the owner.
+  std::unique_ptr<clean::IGit> git;
 };
 // Fails while the owner's session is unavailable (not logged on); retried every minute.
 using OwnerSource = std::function<Result<OwnerContext>()>;

@@ -85,6 +85,28 @@ class FsTree final : public clean::IFileTree {
   WallTime touched_;
 };
 
+// An owner context's git: answers from a FakeGit the fixture keeps.
+class ForwardingGit final : public clean::IGit {
+ public:
+  explicit ForwardingGit(const clean::IGit& git) : git_(&git) {}
+
+  [[nodiscard]] Result<std::optional<WallTime>> last_commit(
+      const std::filesystem::path& work_tree) const override {
+    return git_->last_commit(work_tree);
+  }
+  [[nodiscard]] Result<bool> ignored(const std::filesystem::path& work_tree,
+                                     const std::filesystem::path& entry) const override {
+    return git_->ignored(work_tree, entry);
+  }
+  [[nodiscard]] Result<bool> tracks_files(const std::filesystem::path& work_tree,
+                                          const std::filesystem::path& entry) const override {
+    return git_->tracks_files(work_tree, entry);
+  }
+
+ private:
+  const clean::IGit* git_;
+};
+
 inline const std::filesystem::path data_dir = L"Z:\\data";
 
 // The clean cases the tests evaluate, by tier and strategy: pack "test" of data_dir\packs.
@@ -186,7 +208,8 @@ class CleaningFixture : public ::testing::Test {
           }
           return OwnerContext{.environment = std::make_unique<clean::testing::FakeEnvironment>(),
                               .locations = actions::testing::owner_locations(),
-                              .downloads = std::filesystem::path(L"C:\\Users\\owner\\Downloads")};
+                              .downloads = std::filesystem::path(L"C:\\Users\\owner\\Downloads"),
+                              .git = owner_git_ ? std::make_unique<ForwardingGit>(git_) : nullptr};
         },
         .files = &files_,
         .data_dir = data_dir,
@@ -276,6 +299,11 @@ class CleaningFixture : public ::testing::Test {
   // The system volume is critically busy / the owner is logged on.
   void set_busy(bool busy) { busy_ = busy; }
   void set_owner_available(bool available) { owner_available_ = available; }
+  // The owner context carries a git of its own (the service's: runs as the owner).
+  clean::testing::FakeGit& owner_git() {
+    owner_git_ = true;
+    return git_;
+  }
 
  private:
   void open_store() {
@@ -300,6 +328,8 @@ class CleaningFixture : public ::testing::Test {
   std::unique_ptr<CleaningService> service_;
   bool busy_ = false;
   bool owner_available_ = true;
+  clean::testing::FakeGit git_;
+  bool owner_git_ = false;
 };
 
 }  // namespace myclean::cleaning::testing

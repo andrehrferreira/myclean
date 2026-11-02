@@ -27,6 +27,7 @@
 #include "core/safety/deny_list.hpp"
 #include "platform/clean/win32_probes.hpp"
 #include "platform/fs/protected_locations.hpp"
+#include "platform/git/git_cli.hpp"
 #include "platform/ipc/security.hpp"
 #include "platform/scan/file_content.hpp"
 
@@ -96,24 +97,52 @@ Result<wil::unique_handle> session_token(std::string_view owner_sid) {
   return fail(Errc::not_found, "the owner is not logged on");
 }
 
-Result<std::map<std::wstring, std::wstring>> environment_of(HANDLE token) {
+// The environment block of `token`: its NUL-terminated entries and the final NUL.
+Result<std::wstring> environment_block(HANDLE token) {
   void* block = nullptr;
   if (::CreateEnvironmentBlock(&block, token, FALSE) == FALSE) {
     return fail(Errc::io_error,
                 "CreateEnvironmentBlock failed: " + std::to_string(::GetLastError()));
   }
   const auto release = wil::scope_exit([&] { ::DestroyEnvironmentBlock(block); });
+  const auto* const first = static_cast<const wchar_t*>(block);
+  const auto* entry = first;
+  while (*entry != L'\0') {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic): environment block
+    entry += std::wstring_view(entry).size() + 1;
+  }
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic): environment block
+  return std::wstring(first, entry + 1);
+}
+
+std::map<std::wstring, std::wstring> variables_of(std::wstring_view block) {
   std::map<std::wstring, std::wstring> values;
-  for (const auto* entry = static_cast<const wchar_t*>(block); *entry != L'\0';) {
-    const std::wstring_view text(entry);
+  while (!block.empty() && block.front() != L'\0') {
+    const std::wstring_view text = block.substr(0, block.find(L'\0'));
     // A name may start with '=' (the per-drive current folders); the separator follows it.
     if (const std::size_t equals = text.find(L'=', 1); equals != std::wstring_view::npos) {
       values[upper(text.substr(0, equals))] = std::wstring(text.substr(equals + 1));
     }
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic): environment block
-    entry += text.size() + 1;
+    block.remove_prefix(std::min(text.size() + 1, block.size()));
   }
   return values;
+}
+
+// The owner's logon session, read again for each git command: a new logon after a sign-out
+// keeps working.
+platform::IdentitySource owner_identity(std::string owner_sid) {
+  return [owner_sid = std::move(owner_sid)]() -> Result<platform::ProcessIdentity> {
+    Result<wil::unique_handle> token = session_token(owner_sid);
+    if (!token) {
+      return tl::unexpected(token.error());
+    }
+    Result<std::wstring> environment = environment_block(token->get());
+    if (!environment) {
+      return tl::unexpected(environment.error());
+    }
+    return platform::ProcessIdentity{.token = *std::move(token),
+                                     .environment = *std::move(environment)};
+  };
 }
 
 std::optional<fs::path> downloads_of(HANDLE token) {
@@ -161,13 +190,14 @@ Result<cleaning::OwnerContext> owner_context(std::string_view owner_sid) {
     return cleaning::OwnerContext{
         .environment = std::make_unique<platform::Win32Environment>(),
         .locations = *std::move(locations),
-        .downloads = downloads ? std::optional<fs::path>(*downloads) : std::nullopt};
+        .downloads = downloads ? std::optional<fs::path>(*downloads) : std::nullopt,
+        .git = nullptr};
   }
   Result<wil::unique_handle> token = session_token(owner_sid);
   if (!token) {
     return tl::unexpected(token.error());
   }
-  Result<std::map<std::wstring, std::wstring>> environment = environment_of(token->get());
+  Result<std::wstring> environment = environment_block(token->get());
   if (!environment) {
     return tl::unexpected(environment.error());
   }
@@ -175,10 +205,13 @@ Result<cleaning::OwnerContext> owner_context(std::string_view owner_sid) {
   if (!locations) {
     return tl::unexpected(locations.error());
   }
+  const std::optional<fs::path> git = platform::find_git();
   return cleaning::OwnerContext{
-      .environment = std::make_unique<BlockEnvironment>(*std::move(environment)),
+      .environment = std::make_unique<BlockEnvironment>(variables_of(*environment)),
       .locations = *std::move(locations),
-      .downloads = downloads_of(token->get())};
+      .downloads = downloads_of(token->get()),
+      .git = git ? std::make_unique<platform::GitCli>(*git, owner_identity(std::string(owner_sid)))
+                 : nullptr};
 }
 
 bool is_owner_tray(std::uint32_t pid, std::string_view owner_sid, const fs::path& tray_image) {

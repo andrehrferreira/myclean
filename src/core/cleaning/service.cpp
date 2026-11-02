@@ -229,6 +229,9 @@ void CleaningService::resolve_owner() {
   quarantine_ = std::make_unique<actions::Quarantine>(environment, engine_);
   Probes probes = sources_.probes;
   probes.environment = owner_->environment.get();
+  if (owner_->git) {
+    probes.git = owner_->git.get();
+  }
   executor_ = std::make_unique<Executor>(environment, engine_, *quarantine_, probes,
                                          owner_->locations, settings_.executor);
   {

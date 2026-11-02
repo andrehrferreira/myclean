@@ -3,9 +3,11 @@
 #include <fstream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <wil/resource.h>
 #include <windows.h>
 
 #include "core/clean/engine.hpp"
@@ -33,6 +35,36 @@ fs::path command_processor() {
   return fs::path{system} / L"cmd.exe";
 }
 
+// A restricted copy of this process's token (with nothing restricted): a token run_hidden may
+// run a process as without the privileges of LocalSystem.
+wil::unique_handle own_token() {
+  wil::unique_handle own;
+  wil::unique_handle copy;
+  if (::OpenProcessToken(::GetCurrentProcess(),
+                         TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ASSIGN_PRIMARY,
+                         own.put()) == FALSE ||
+      ::CreateRestrictedToken(own.get(), 0, 0, nullptr, 0, nullptr, 0, nullptr, copy.put()) ==
+          FALSE) {
+    return {};
+  }
+  return copy;
+}
+
+// This process's environment block with `extra` (NAME=value) added.
+std::wstring environment_with(const std::wstring& extra) {
+  const wil::unique_environstrings_ptr strings(::GetEnvironmentStringsW());
+  std::wstring block;
+  for (const wchar_t* entry = strings.get(); *entry != L'\0';) {
+    const std::wstring_view text(entry);
+    block.append(text).push_back(L'\0');
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic): environment block
+    entry += text.size() + 1;
+  }
+  block.append(extra).push_back(L'\0');
+  block.push_back(L'\0');
+  return block;
+}
+
 TEST(RunHidden, CapturesOutputAndExitCode) {
   const fs::path cmd = command_processor();
   const std::vector<std::wstring> arguments = {L"/d", L"/c", L"echo hello& exit 3"};
@@ -42,6 +74,19 @@ TEST(RunHidden, CapturesOutputAndExitCode) {
   ASSERT_TRUE(output.has_value()) << output.error().message;
   EXPECT_EQ(output->exit_code, 3U);
   EXPECT_EQ(output->out, "hello\r\n");
+}
+
+TEST(RunHidden, RunsAsTheGivenTokenWithItsEnvironment) {
+  const ProcessIdentity identity{.token = own_token(),
+                                 .environment = environment_with(L"MYCLEAN_WHO=owner")};
+  ASSERT_TRUE(identity.token);
+  const std::vector<std::wstring> arguments = {L"/d", L"/c", L"echo %MYCLEAN_WHO%"};
+
+  const Result<ProcessOutput> output = run_hidden(command_processor(), arguments, 30s, &identity);
+
+  ASSERT_TRUE(output.has_value()) << output.error().message;
+  EXPECT_EQ(output->exit_code, 0U);
+  EXPECT_EQ(output->out, "owner\r\n");
 }
 
 TEST(RunHidden, KillsAProgramThatOutlivesTheTimeout) {
@@ -125,6 +170,27 @@ TEST_F(SandboxRepository, AnswersIgnoredTrackedAndLastCommit) {
   EXPECT_EQ(git.tracks_files(project(), project() / "node_modules"), false);
   EXPECT_EQ(git.tracks_files(project(), project() / "dist"), true);
   EXPECT_FALSE(git.ignored(project(), sandbox().root() / "elsewhere").has_value());
+}
+
+// The service runs git as the owner: each command takes the identity its source gives, and
+// one the source cannot give fails, so nothing is proposed from that repository.
+TEST_F(SandboxRepository, RunsEveryCommandAsTheIdentityItsSourceGives) {
+  int asked = 0;
+  const GitCli git{git_path(), [&]() -> Result<ProcessIdentity> {
+                     ++asked;
+                     return ProcessIdentity{.token = own_token(),
+                                            .environment = environment_with(L"MYCLEAN_WHO=owner")};
+                   }};
+  EXPECT_EQ(git.ignored(project(), project() / "node_modules"), true);
+  EXPECT_EQ(git.tracks_files(project(), project() / "dist"), true);
+  EXPECT_EQ(asked, 2);
+
+  const GitCli logged_off{git_path(), []() -> Result<ProcessIdentity> {
+                            return fail(Errc::not_found, "the owner is not logged on");
+                          }};
+  const Result<bool> ignored = logged_off.ignored(project(), project() / "node_modules");
+  ASSERT_FALSE(ignored.has_value());
+  EXPECT_EQ(ignored.error().code, Errc::not_found);
 }
 
 TEST_F(SandboxRepository, RepositoryWithoutCommitsHasNoLastCommit) {

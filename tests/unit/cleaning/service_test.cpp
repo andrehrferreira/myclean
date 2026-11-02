@@ -130,6 +130,46 @@ TEST_F(CleaningServiceTest, ScanPlansAskGroupsDeletesAutoItemsAtOnceAndOnlyShows
   EXPECT_EQ(plans().size(), 4U);
 }
 
+// The service runs as LocalSystem, and git refuses the owner's repositories to it: the project
+// scan asks the owner context's git, which runs as the owner, and without one proposes nothing.
+TEST_F(CleaningServiceTest, ProjectArtifactsAreAskedOfTheOwnersGit) {
+  pack_files().put(testing::data_dir / "workspaces.toml", "roots = ['F:\\']\n");
+  pack_files().put(testing::data_dir / "packs" / "projects" / "pack.toml",
+                   R"toml(id = "projects"
+version = "1.0.0"
+title = "Projects"
+description = "A project artifact case."
+sources = ["observed on reference machine"]
+min_myclean = "0.1.0"
+)toml");
+  pack_files().put(testing::data_dir / "packs" / "projects" / "clean.toml", R"toml(
+[[rule]]
+id       = "target"
+category = "dev-artifacts"
+tier     = "ask"
+scope    = "user"
+strategy = "quarantine"
+project  = { marker = "Cargo.toml" }
+targets  = ['target']
+require  = { git_ignored = true, inactive_days = 14 }
+)toml");
+  fs().add_file(L"F:\\code\\app\\Cargo.toml", 1_KiB);
+  fs().add_directory(L"F:\\code\\app\\.git");
+  fs().add_file(L"F:\\code\\app\\target\\debug\\app.exe", 3_MiB);
+  start();
+  scan();
+  EXPECT_EQ(count("SELECT COUNT(*) FROM cleaning_candidate WHERE rule = 'projects/target'"), 0);
+
+  clean::testing::FakeGit& git = owner_git();
+  git.set_last_commit(L"F:\\code\\app", testing::noon - std::chrono::days{60});
+  git.ignore(L"F:\\code\\app\\target");
+  start();
+  scan();
+  const Json plan = plan_titled("dev-artifacts");
+  EXPECT_EQ(plan.at("items"), 1);
+  EXPECT_EQ(plan.at("bytes"), (3_MiB).count());
+}
+
 TEST_F(CleaningServiceTest, PlanGetShowsItemsCommandsAndUndo) {
   add_targets();
   start();

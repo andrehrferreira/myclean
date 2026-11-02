@@ -75,7 +75,8 @@ tl::unexpected<Error> git_failed(const fs::path& work_tree, const char* command,
 }  // namespace
 
 Result<ProcessOutput> run_hidden(const fs::path& program, std::span<const std::wstring> arguments,
-                                 std::chrono::milliseconds timeout) {
+                                 std::chrono::milliseconds timeout,
+                                 const ProcessIdentity* identity) {
   SECURITY_ATTRIBUTES inheritable{.nLength = sizeof(SECURITY_ATTRIBUTES),
                                   .lpSecurityDescriptor = nullptr,
                                   .bInheritHandle = TRUE};
@@ -130,10 +131,23 @@ Result<ProcessOutput> run_hidden(const fs::path& program, std::span<const std::w
     command_line += L' ' + quoted(argument);
   }
   wil::unique_process_information process;
-  if (::CreateProcessW(program.c_str(), command_line.data(), nullptr, nullptr, TRUE,
-                       CREATE_NO_WINDOW | CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT, nullptr,
-                       nullptr, &startup.StartupInfo, &process) == FALSE) {
-    return last_error("cannot start " + utf8(program));
+  constexpr DWORD flags = CREATE_NO_WINDOW | CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT;
+  if (identity == nullptr) {
+    if (::CreateProcessW(program.c_str(), command_line.data(), nullptr, nullptr, TRUE, flags,
+                         nullptr, nullptr, &startup.StartupInfo, &process) == FALSE) {
+      return last_error("cannot start " + utf8(program));
+    }
+  } else {
+    // The user's own desktop: a service's desktop is closed to the user's token.
+    std::wstring desktop = L"winsta0\\default";
+    startup.StartupInfo.lpDesktop = desktop.data();
+    std::wstring environment = identity->environment;
+    if (::CreateProcessAsUserW(identity->token.get(), program.c_str(), command_line.data(), nullptr,
+                               nullptr, TRUE, flags | CREATE_UNICODE_ENVIRONMENT,
+                               environment.data(), nullptr, &startup.StartupInfo,
+                               &process) == FALSE) {
+      return last_error("cannot start " + utf8(program) + " as the owner");
+    }
   }
   if (::AssignProcessToJobObject(job.get(), process.hProcess) == FALSE) {
     ::TerminateProcess(process.hProcess, 1);
@@ -187,8 +201,8 @@ std::optional<fs::path> find_git() {
   return std::nullopt;
 }
 
-GitCli::GitCli(fs::path git, std::chrono::milliseconds timeout)
-    : git_(std::move(git)), timeout_(timeout) {}
+GitCli::GitCli(fs::path git, IdentitySource identity, std::chrono::milliseconds timeout)
+    : git_(std::move(git)), identity_(std::move(identity)), timeout_(timeout) {}
 
 Result<ProcessOutput> GitCli::run(const fs::path& work_tree,
                                   std::vector<std::wstring> arguments) const {
@@ -196,7 +210,14 @@ Result<ProcessOutput> GitCli::run(const fs::path& work_tree,
                                     work_tree.native()};
   full.insert(full.end(), std::make_move_iterator(arguments.begin()),
               std::make_move_iterator(arguments.end()));
-  return run_hidden(git_, full, timeout_);
+  if (!identity_) {
+    return run_hidden(git_, full, timeout_);
+  }
+  const Result<ProcessIdentity> identity = identity_();
+  if (!identity) {
+    return tl::unexpected(identity.error());
+  }
+  return run_hidden(git_, full, timeout_, &*identity);
 }
 
 Result<std::optional<WallTime>> GitCli::last_commit(const fs::path& work_tree) const {

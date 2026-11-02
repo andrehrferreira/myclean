@@ -3,10 +3,13 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
 #include <vector>
+
+#include <wil/resource.h>
 
 #include "core/clean/probes.hpp"
 #include "core/model/result.hpp"
@@ -18,13 +21,25 @@ struct ProcessOutput {
   std::string out;  // everything written to standard output
 };
 
+// A user to run a process as: a primary token of that user's logon session and the user's
+// environment block (CreateEnvironmentBlock: NUL-terminated entries, then one more NUL).
+struct ProcessIdentity {
+  wil::unique_handle token;
+  std::wstring environment;
+};
+// The identity of each command, read again for every one; empty: this process's own.
+using IdentitySource = std::function<Result<ProcessIdentity>()>;
+
 // Runs `program` with `arguments` without a window (CREATE_NO_WINDOW), standard input and error
 // on NUL and standard output captured, inheriting no handle but those. The process and every
 // process it starts run in a job that is killed after `timeout` (then the call fails with
-// io_error) or when the call returns.
+// io_error) or when the call returns. With `identity` it runs as that user, on the user's
+// desktop (CreateProcessAsUser; needs the privileges of LocalSystem unless the token is a
+// restricted copy of this process's own).
 [[nodiscard]] Result<ProcessOutput> run_hidden(const std::filesystem::path& program,
                                                std::span<const std::wstring> arguments,
-                                               std::chrono::milliseconds timeout);
+                                               std::chrono::milliseconds timeout,
+                                               const ProcessIdentity* identity = nullptr);
 
 // The first git.exe in the folders of PATH; nullopt when there is none.
 [[nodiscard]] std::optional<std::filesystem::path> find_git();
@@ -34,10 +49,11 @@ struct ProcessOutput {
 // so it takes no index lock and starts no fsmonitor daemon. Commands: rev-parse -q --verify
 // HEAD, log -1 --format=%ct HEAD, check-ignore -q -- <path>, ls-files -z -- :(literal)<path>.
 // git's own safety checks apply: a repository git refuses (such as one owned by another user)
-// fails with io_error, and the engine then proposes nothing from it.
+// fails with io_error, and the engine then proposes nothing from it. So the service runs git as
+// the owner (`identity`); a command whose identity cannot be read fails the same way.
 class GitCli final : public clean::IGit {
  public:
-  explicit GitCli(std::filesystem::path git,
+  explicit GitCli(std::filesystem::path git, IdentitySource identity = {},
                   std::chrono::milliseconds timeout = std::chrono::seconds{60});
 
   [[nodiscard]] Result<std::optional<WallTime>> last_commit(
@@ -52,6 +68,7 @@ class GitCli final : public clean::IGit {
                                           std::vector<std::wstring> arguments) const;
 
   std::filesystem::path git_;
+  IdentitySource identity_;
   std::chrono::milliseconds timeout_;
 };
 
