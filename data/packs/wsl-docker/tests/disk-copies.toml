@@ -1,0 +1,49 @@
+# Docker Desktop's data folders on the reference machine (F: analysis 02): the live one on D:,
+# which settings-store.json names, and a renamed copy on F:, which no setting names (the legacy
+# settings.json still names the folder before its rename). Docker has not run for 40 days, so
+# only the settings keep the live one. Only the copy is offered; a folder without the disk, a
+# recent copy and anything inside or around a named folder stay.
+
+volumes = ['C:\', 'D:\', 'E:\', 'F:\']
+
+[env]
+DOCKER_WSL_DATA = ['D:\Database\DockerDesktopWSL', 'F:\WSL\wsl\DockerDesktopWSL',
+                   'C:\Users\owner\AppData\Local\Docker\wsl']
+
+[[entry]]
+path = 'D:\Database\DockerDesktopWSL\disk\docker_data.vhdx'
+size = 1552857169920
+age_days = 40
+[[entry]]
+path = 'D:\Database\DockerDesktopWSL\main\ext4.vhdx'
+age_days = 40
+[[entry]]
+path = 'F:\WSL\wsl\DockerDesktopWSL.ANTIGO\disk\docker_data.vhdx'
+size = 1072010625024
+age_days = 50
+[[entry]]
+path = 'F:\WSL\wsl\DockerDesktopWSL.ANTIGO\main\ext4.vhdx'
+size = 96468992
+age_days = 50
+[[entry]]
+path = 'F:\WSL\wsl\DockerDesktopWSL.ANTIGO\distro'
+folder = true
+[[entry]]
+path = 'F:\WSL\wsl\main\ext4.vhdx'
+size = 504365056
+age_days = 381
+# A copy made yesterday, and a folder of notes that only shares the name.
+[[entry]]
+path = 'E:\DockerDesktopWSL-new\disk\docker_data.vhdx'
+age_days = 1
+[[entry]]
+path = 'E:\Docs\DockerDesktopWSL-notes\readme.txt'
+age_days = 200
+
+[[expect]]
+kind     = "clean"
+case     = "docker-data-copy"
+match    = ['F:\WSL\wsl\DockerDesktopWSL.ANTIGO']
+no_match = ['D:\Database\DockerDesktopWSL', 'D:\Database\DockerDesktopWSL\disk',
+            'F:\WSL\wsl\DockerDesktopWSL.ANTIGO\disk\docker_data.vhdx', 'F:\WSL\wsl\main',
+            'F:\WSL', 'E:\DockerDesktopWSL-new', 'E:\Docs\DockerDesktopWSL-notes']

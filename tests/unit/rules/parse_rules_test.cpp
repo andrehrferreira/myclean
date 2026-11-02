@@ -263,8 +263,8 @@ TEST(ParseRules, OutsideGitOnlyOnProjectRulesWithGitIgnored) {
   }
 }
 
-// require.contains narrows a project rule's matches to folders holding one named file.
-TEST(ParseRules, ContainsOnlyOnProjectRulesAndNamesOneFile) {
+// require.contains narrows a rule's matches to folders holding one file, named by a relative path.
+TEST(ParseRules, ContainsNamesOneFileByARelativePath) {
   const std::string head =
       "[[rule]]\nid = \"x\"\ncategory = \"c\"\ntier = \"auto\"\nscope = \"user\"\n"
       "strategy = \"delete\"\n";
@@ -273,13 +273,46 @@ TEST(ParseRules, ContainsOnlyOnProjectRulesAndNamesOneFile) {
       parse_rule_file(head + project + "require = { contains = \"CMakeCache.txt\" }\n", rule_file);
   ASSERT_TRUE(rules.has_value()) << rules.error().message;
   EXPECT_EQ(rules->front().require.contains, "CMakeCache.txt");
+  const Result<std::vector<CleaningRule>> nested =
+      parse_rule_file(head + "targets = ['?:\\DockerDesktopWSL*']\n" +
+                          R"(require = { contains = 'disk\docker_data.vhdx' })" + "\n",
+                      rule_file);
+  ASSERT_TRUE(nested.has_value()) << nested.error().message;
+  EXPECT_EQ(nested->front().require.contains, R"(disk\docker_data.vhdx)");
 
   for (const std::string& rule :
-       {head + "targets = ['%TEMP%\\x']\nrequire = { contains = \"CMakeCache.txt\" }\n",
-        head + project + "require = { contains = \"CMakeFiles\\\\x.txt\" }\n",
-        head + project + "require = { contains = \"*.txt\" }\n"}) {
-    EXPECT_NE(rejection(rule).find(
-                  "field 'require.contains' is only allowed on a project rule and names one file"),
+       {head + project + "require = { contains = \"*.txt\" }\n",
+        head + project + R"(require = { contains = '..\CMakeCache.txt' })" + "\n",
+        head + project + R"(require = { contains = 'C:\CMakeCache.txt' })" + "\n",
+        head + project + R"(require = { contains = '%TEMP%\x' })" + "\n"}) {
+    EXPECT_NE(rejection(rule).find("field 'require.contains' must name one file by a path "
+                                   "relative to the selected folder"),
+              std::string::npos)
+        << rule;
+  }
+}
+
+// require.outside_of names the folders a rule without project must keep, by an absolute path
+// without wildcards.
+TEST(ParseRules, OutsideOfIsAnAbsolutePathOfARuleWithoutProject) {
+  const std::string head =
+      "[[rule]]\nid = \"x\"\ncategory = \"c\"\ntier = \"ask\"\nscope = \"user\"\n"
+      "strategy = \"delete\"\n";
+  const std::string targets = "targets = ['?:\\DockerDesktopWSL*']\n";
+  const Result<std::vector<CleaningRule>> rules = parse_rule_file(
+      head + targets + "require = { outside_of = '%DOCKER_WSL_DATA%' }\n", rule_file);
+  ASSERT_TRUE(rules.has_value()) << rules.error().message;
+  EXPECT_EQ(rules->front().require.outside_of, "%DOCKER_WSL_DATA%");
+
+  for (const std::string& rule :
+       {head + "project = { marker = \"x\" }\ntargets = ['y']\n" +
+            "require = { outside_of = '%DOCKER_WSL_DATA%' }\n",
+        head + targets + "require = { outside_of = 'Docker' }\n",
+        head + targets + R"(require = { outside_of = '?:\Docker' })" + "\n",
+        head + targets + R"(require = { outside_of = 'D:\Docker*' })" + "\n",
+        head + targets + R"(require = { outside_of = '%APPDATA%\..\x' })" + "\n"}) {
+    EXPECT_NE(rejection(rule).find("field 'require.outside_of' is only allowed on a rule without "
+                                   "project"),
               std::string::npos)
         << rule;
   }

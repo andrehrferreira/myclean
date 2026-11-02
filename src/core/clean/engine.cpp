@@ -407,10 +407,41 @@ Project find_project(const IFileTree& tree, Session& session,
   return project;
 }
 
-// The entries the absolute targets of `rule` match; links on the way are dropped.
+// The folders `rule` keeps (require.outside_of, one per value of its variables); empty when it
+// keeps none, nullopt when its pattern names a variable without a value.
+std::optional<std::vector<fs::path>> kept_folders(const IEnvironment& environment,
+                                                  const CleaningRule& rule) {
+  if (!rule.require.outside_of) {
+    return std::vector<fs::path>{};
+  }
+  const std::vector<std::wstring> values =
+      expand_all(from_utf8(*rule.require.outside_of).native(), environment);
+  if (values.empty()) {
+    return std::nullopt;
+  }
+  return std::vector<fs::path>(values.begin(), values.end());
+}
+
+// True when `entry` meets require.contains and lies neither inside nor around a kept folder.
+bool selectable(const IFileTree& tree, const CleaningRule& rule, std::span<const fs::path> kept,
+                const Entry& entry) {
+  if (rule.require.contains && !holds_file(tree, entry, from_utf8(*rule.require.contains))) {
+    return false;
+  }
+  return std::ranges::none_of(kept, [&entry](const fs::path& folder) {
+    return within(entry.path, folder) || within(folder, entry.path);
+  });
+}
+
+// The entries the absolute targets of `rule` match and selectable() allows; links on the way are
+// dropped. None when what the rule must keep is unknown.
 std::vector<Entry> target_entries(const IFileTree& tree, const IEnvironment& environment,
                                   Session& session, const CleaningRule& rule) {
   std::vector<Entry> entries;
+  const std::optional<std::vector<fs::path>> kept = kept_folders(environment, rule);
+  if (!kept) {
+    return entries;
+  }
   for (const std::string& target : rule.targets) {
     // None when it names a variable this machine does not set; one per value of each variable.
     for (const std::wstring& expanded : expand_all(from_utf8(target).native(), environment)) {
@@ -422,7 +453,9 @@ std::vector<Entry> target_entries(const IFileTree& tree, const IEnvironment& env
       }
       Matches matches = resolve(tree, pattern);
       session.drop_links(rule, matches);
-      std::ranges::move(matches.entries, std::back_inserter(entries));
+      std::ranges::copy_if(matches.entries, std::back_inserter(entries), [&](const Entry& entry) {
+        return selectable(tree, rule, *kept, entry);
+      });
     }
   }
   return entries;

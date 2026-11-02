@@ -38,7 +38,8 @@ struct Pattern {
 //   handler  = "Temporary Files"              # required for handler, not allowed otherwise
 //   project  = { marker = "package.json" }    # optional: targets are relative to a project root
 //   require  = { git_ignored = true, inactive_days = 30, not_in_use = true, min_age_days = 2,
-//                outside_git = true }
+//                outside_git = true, contains = "CMakeCache.txt",
+//                outside_of = '%DOCKER_WSL_DATA%' }
 
 // How a rule removes what it selects.
 enum class Strategy {
@@ -60,9 +61,15 @@ struct Requirements {
   bool not_in_use = false;           // no process has its current directory or a file open in it
   std::optional<int> inactive_days;  // project untouched (last commit, newest source) this long
   std::optional<int> min_age_days;   // the item itself is at least this old
-  // Project rules only: a selected item is a folder holding this file (a CMake build tree holds
-  // CMakeCache.txt); any other match is not an artifact.
+  // A selected item is a folder holding this file, named by a path relative to it (a CMake
+  // build tree holds CMakeCache.txt, a Docker Desktop data folder disk\docker_data.vhdx); any
+  // other match is not selected.
   std::optional<std::string> contains;
+  // Rules without a project only: an absolute path without wildcards (under a %VARIABLE%, often
+  // one with several values, or a drive) naming folders that are never selected, nor anything
+  // inside them or holding them. When it names a variable without a value, the rule selects
+  // nothing: what it must keep is unknown.
+  std::optional<std::string> outside_of;
 };
 
 struct CleaningRule {

@@ -195,33 +195,66 @@ void check_strategy_field(const Fields& fields, std::string_view key, const std:
   }
 }
 
+// True when `text` starts with a drive ("C:\") or "?:\" (every fixed volume).
+bool starts_with_drive(const std::string& text) {
+  return text.size() >= 3 && text[1] == ':' && (text[2] == '\\' || text[2] == '/') &&
+         (text[0] == '?' || (text[0] >= 'A' && text[0] <= 'Z') ||
+          (text[0] >= 'a' && text[0] <= 'z'));
+}
+
+// True when `text` starts with a drive, a drive-relative path or a separator.
+bool rooted(const std::string& text) {
+  return (text.size() >= 2 && text[1] == ':') || text.starts_with('\\') || text.starts_with('/');
+}
+
+bool has_parent_component(const std::string& text) {
+  for (std::size_t start = 0; start <= text.size();) {
+    const std::size_t end = std::min(text.find_first_of("\\/", start), text.size());
+    if (text.substr(start, end - start) == "..") {
+      return true;
+    }
+    start = end + 1;
+  }
+  return false;
+}
+
 // Fails `targets` on a target the engine would never match, so that a rule cannot load and
 // silently select nothing: a project rule's targets are relative to the project root; any other
 // rule's start with a %VARIABLE%, a drive ("C:\") or "?:\" (every fixed volume). No target has
 // a ".." component.
 void check_targets(const Fields& fields, const CleaningRule& rule) {
   for (const std::string& target : rule.targets) {
-    const bool drive = target.size() >= 3 && target[1] == ':' &&
-                       (target[2] == '\\' || target[2] == '/') &&
-                       (target[0] == '?' || (target[0] >= 'A' && target[0] <= 'Z') ||
-                        (target[0] >= 'a' && target[0] <= 'z'));
-    const bool rooted = (target.size() >= 2 && target[1] == ':') || target.starts_with('\\') ||
-                        target.starts_with('/');
-    if (rule.project_marker && (rooted || target.starts_with('%'))) {
+    if (rule.project_marker && (rooted(target) || target.starts_with('%'))) {
       fields.fail("targets", "must hold paths relative to the project root, not '" + target + "'");
     }
-    if (!rule.project_marker && !drive && !target.starts_with('%')) {
+    if (!rule.project_marker && !starts_with_drive(target) && !target.starts_with('%')) {
       fields.fail("targets",
                   "must hold absolute paths starting with a drive, '?:\\' or a %VARIABLE%, not '" +
                       target + "'");
     }
-    for (std::size_t start = 0; start <= target.size();) {
-      const std::size_t end = std::min(target.find_first_of("\\/", start), target.size());
-      if (target.substr(start, end - start) == "..") {
-        fields.fail("targets", "must not hold a '..' component, in '" + target + "'");
-      }
-      start = end + 1;
+    if (has_parent_component(target)) {
+      fields.fail("targets", "must not hold a '..' component, in '" + target + "'");
     }
+  }
+}
+
+// Fails require.contains unless it names one file by a path relative to the selected folder
+// ("CMakeCache.txt", "disk\docker_data.vhdx"), and require.outside_of unless it is an absolute
+// path without wildcards (so not "?:\") of a rule without project.
+void check_requirements(const Fields& fields, const CleaningRule& rule) {
+  if (const std::optional<std::string>& contains = rule.require.contains;
+      contains &&
+      (rooted(*contains) || contains->starts_with('%') ||
+       contains->find_first_of("*?") != std::string::npos || has_parent_component(*contains))) {
+    fields.fail("contains", "must name one file by a path relative to the selected folder");
+  }
+  if (const std::optional<std::string>& outside_of = rule.require.outside_of;
+      outside_of &&
+      (rule.project_marker || (!starts_with_drive(*outside_of) && !outside_of->starts_with('%')) ||
+       outside_of->find_first_of("*?") != std::string::npos || has_parent_component(*outside_of))) {
+    fields.fail("outside_of",
+                "is only allowed on a rule without project, as an absolute path without "
+                "wildcards starting with a drive or a %VARIABLE%");
   }
 }
 
@@ -257,8 +290,8 @@ CleaningRule parse_rule(const toml::table& table, Location& location) {
   check_targets(fields, rule);
   if (const toml::table* require = fields.table("require")) {
     const Fields require_fields(*require, location, "require.");
-    require_fields.only(
-        {"git_ignored", "outside_git", "not_in_use", "inactive_days", "min_age_days", "contains"});
+    require_fields.only({"git_ignored", "outside_git", "not_in_use", "inactive_days",
+                         "min_age_days", "contains", "outside_of"});
     constexpr int max_days = 36500;
     rule.require.git_ignored = require_fields.boolean("git_ignored").value_or(false);
     rule.require.outside_git = require_fields.boolean("outside_git").value_or(false);
@@ -270,11 +303,8 @@ CleaningRule parse_rule(const toml::table& table, Location& location) {
     rule.require.inactive_days = require_fields.integer("inactive_days", 0, max_days);
     rule.require.min_age_days = require_fields.integer("min_age_days", 0, max_days);
     rule.require.contains = require_fields.string("contains");
-    if (rule.require.contains &&
-        (!rule.project_marker || rule.require.contains->empty() ||
-         rule.require.contains->find_first_of("\\/*?") != std::string::npos)) {
-      require_fields.fail("contains", "is only allowed on a project rule and names one file");
-    }
+    rule.require.outside_of = require_fields.string("outside_of");
+    check_requirements(require_fields, rule);
   }
   return rule;
 }

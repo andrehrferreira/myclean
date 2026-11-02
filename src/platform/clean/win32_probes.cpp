@@ -191,6 +191,17 @@ std::optional<fs::path> current_directory(HANDLE process) {
   return folder.has_relative_path() && text.ends_with(L'\\') ? folder.parent_path() : folder;
 }
 
+// `value` with 8.3 short names expanded when it is an existing path; as it is otherwise.
+std::wstring long_form(std::wstring value) {
+  std::wstring expanded(::GetLongPathNameW(value.c_str(), nullptr, 0), L'\0');
+  if (expanded.empty()) {
+    return value;  // not an existing path
+  }
+  expanded.resize(
+      ::GetLongPathNameW(value.c_str(), expanded.data(), static_cast<DWORD>(expanded.size())));
+  return expanded.empty() ? value : expanded;
+}
+
 }  // namespace
 
 Result<clean::Entry> Win32FileTree::stat(const fs::path& path) const {
@@ -276,28 +287,31 @@ std::optional<std::wstring> Win32Environment::variable(std::wstring_view name) c
   if (value.empty()) {
     return std::nullopt;
   }
-  std::wstring long_form(::GetLongPathNameW(value.c_str(), nullptr, 0), L'\0');
-  if (long_form.empty()) {
-    return value;  // not an existing path
-  }
-  long_form.resize(
-      ::GetLongPathNameW(value.c_str(), long_form.data(), static_cast<DWORD>(long_form.size())));
-  return long_form.empty() ? value : long_form;
+  return long_form(std::move(value));
 }
 
 std::vector<std::wstring> Win32Environment::values(std::wstring_view name) const {
-  std::optional<std::vector<std::wstring>> tool = tool_variable(name);
+  std::optional<std::vector<std::wstring>> tool = tool_variable(name, *this);
   return tool ? *std::move(tool) : IEnvironment::values(name);
 }
 
 std::optional<std::vector<std::wstring>> tool_variable(std::wstring_view name,
+                                                       const clean::IEnvironment& environment,
                                                        const std::wstring& owner_sid) {
   if (!clean::is_tool_variable(name)) {
     return std::nullopt;  // Steam's folder is read only for a variable that needs it
   }
-  return clean::tool_variable(
-      name, clean::ToolFiles{.steam = Win32GameSources(owner_sid).steam_path(),
-                             .read = [](const fs::path& file) { return read_small_file(file); }});
+  std::optional<std::vector<std::wstring>> values = clean::tool_variable(
+      name, environment,
+      clean::ToolFiles{.steam = Win32GameSources(owner_sid).steam_path(),
+                       .read = [](const fs::path& file) { return read_small_file(file); }});
+  if (values) {
+    // Spelled as the file tree lists them, so a folder to keep compares equal (outside_of).
+    for (std::wstring& value : *values) {
+      value = long_form(std::move(value));
+    }
+  }
+  return values;
 }
 
 bool Win32Usage::locked(const fs::path& file) const {

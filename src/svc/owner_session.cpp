@@ -72,7 +72,8 @@ class BlockEnvironment final : public clean::IEnvironment {
   }
 
   [[nodiscard]] std::vector<std::wstring> values(std::wstring_view name) const override {
-    std::optional<std::vector<std::wstring>> tool = platform::tool_variable(name, owner_sid_);
+    std::optional<std::vector<std::wstring>> tool =
+        platform::tool_variable(name, *this, owner_sid_);
     return tool ? *std::move(tool) : IEnvironment::values(name);
   }
 

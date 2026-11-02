@@ -36,11 +36,14 @@ class Win32Environment final : public clean::IEnvironment {
   [[nodiscard]] std::vector<std::wstring> values(std::wstring_view name) const override;
 };
 
-// clean::tool_variable() for the user `owner_sid` names (empty: the calling user): Steam's folder
-// is the SteamPath of that user's Software\Valve\Steam, files are read with
-// platform::read_small_file (a link or cloud file is refused). nullopt for any other variable.
+// clean::tool_variable() for the user `owner_sid` names (empty: the calling user), whose
+// variables `environment` holds (%APPDATA%, %LOCALAPPDATA%): Steam's folder is the SteamPath of
+// that user's Software\Valve\Steam, files are read with platform::read_small_file (a link or
+// cloud file is refused), and 8.3 short names in the values are expanded. nullopt for any other
+// variable.
 [[nodiscard]] std::optional<std::vector<std::wstring>> tool_variable(
-    std::wstring_view name, const std::wstring& owner_sid = {});
+    std::wstring_view name, const clean::IEnvironment& environment,
+    const std::wstring& owner_sid = {});
 
 // Lock checks and process folders.
 //   locked():          opens the file for DELETE with every sharing mode allowed and closes it

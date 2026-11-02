@@ -28,3 +28,25 @@ scope    = "user"
 strategy = "native"
 command  = "wsl tmp prune"
 targets  = ['%LOCALAPPDATA%\Packages\*\LocalState\rootfs\tmp', '%LOCALAPPDATA%\Packages\*\rootfs\tmp']
+
+# A Docker Desktop data folder Docker no longer uses (analysis F-drive 02 and 07; sources:
+# docs.docker.com and the reference machine, see pack.toml). Docker Desktop keeps the disk of
+# every image, container and volume in disk\docker_data.vhdx of the folder its settings name
+# (Settings > Resources > Advanced > Disk image location: CustomWslDistroDir in
+# %APPDATA%\Docker\settings-store.json, or the legacy settings.json). Moving that disk by
+# copying, or renaming its folder, leaves a full copy Docker never reads again (observed on
+# reference machine: F:\WSL\wsl\DockerDesktopWSL.ANTIGO, 998 GiB, last written 7 weeks before,
+# while Docker runs from D:\Database\DockerDesktopWSL). A DockerDesktopWSL folder at the root or
+# up to two levels below on a fixed volume is offered only when it holds disk\docker_data.vhdx,
+# no Docker setting names it (%DOCKER_WSL_DATA%, every folder they name: when they cannot be
+# read nothing is offered), nothing in it changed for 30 days and no process holds a file in it
+# open (Docker's VM keeps the disk it runs on open). It may hold the only copy of a volume, so
+# the owner decides.
+[[rule]]
+id       = "docker-data-copy"
+category = "containers"
+tier     = "ask"
+scope    = "user"
+strategy = "delete"
+targets  = ['?:\DockerDesktopWSL*', '?:\*\DockerDesktopWSL*', '?:\*\*\DockerDesktopWSL*']
+require  = { min_age_days = 30, not_in_use = true, contains = 'disk\docker_data.vhdx', outside_of = '%DOCKER_WSL_DATA%' }

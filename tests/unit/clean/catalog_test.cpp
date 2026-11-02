@@ -51,6 +51,17 @@ TEST(ShippedCatalog, ShaderCachesAreAuto) {
   EXPECT_EQ(steam.require.min_age_days, 7);
 }
 
+// A copy of Docker Desktop's data folder may hold the only copy of a volume: the owner decides,
+// and the folders Docker's settings name are never offered.
+TEST(ShippedCatalog, DockerDataCopiesAreAskedAndKeepTheNamedFolders) {
+  const CleaningRule& copy = shipped_rule("wsl-docker/docker-data-copy");
+  EXPECT_EQ(copy.tier, Tier::ask);
+  EXPECT_EQ(copy.require.outside_of, "%DOCKER_WSL_DATA%");
+  EXPECT_EQ(copy.require.contains, R"(disk\docker_data.vhdx)");
+  EXPECT_TRUE(copy.require.not_in_use);
+  EXPECT_GE(copy.require.min_age_days.value_or(0), 30);
+}
+
 // Analysis F-013 and the cleaning spec: global package caches use their tool's command, under
 // the owner's token, and run on schedule (the tool downloads what it misses); Docker's prune,
 // which also removes stopped containers, waits for approval.

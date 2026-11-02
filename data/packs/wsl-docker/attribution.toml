@@ -27,7 +27,7 @@ paths    = ['?:\DockerDesktopWSL*', '?:\*\DockerDesktopWSL*', '?:\*\*\DockerDesk
             '?:\*\*\*\DockerDesktopWSL*']
 category = "vm-disks"
 label    = "Docker Desktop disk in a custom location, or a copy left by a move"
-reclaim  = { kind = "manual-review", note = "Docker Desktop uses only the folder named by CustomWslDistroDir in %APPDATA%\\Docker\\settings-store.json. Any other DockerDesktopWSL folder (renamed, or left by a move) is a copy Docker never reads: check what you need is in the live one, then delete it. The live one moves with Settings > Resources > Advanced > Disk image location." }
+reclaim  = { kind = "manual-review", note = "Docker Desktop uses only the folder named by CustomWslDistroDir in %APPDATA%\\Docker\\settings-store.json. Any other DockerDesktopWSL folder (renamed, or left by a move) is a copy Docker never reads: check what you need is in the live one, then delete it. MyClean offers such a copy for deletion, asking first, once nothing changed in it for 30 days (clean case docker-data-copy). The live one moves with Settings > Resources > Advanced > Disk image location." }
 
 # A WSL 1 distribution keeps its Linux files in a rootfs folder instead of a disk (observed on
 # reference machine).

@@ -1,0 +1,15 @@
+# The same copy as disk-copies.toml when Docker Desktop's settings cannot be read (or Docker
+# Desktop was never set up): %DOCKER_WSL_DATA% has no value, so which folder Docker uses is
+# unknown and nothing is offered.
+
+[[entry]]
+path = 'D:\Database\DockerDesktopWSL\disk\docker_data.vhdx'
+age_days = 40
+[[entry]]
+path = 'F:\WSL\wsl\DockerDesktopWSL.ANTIGO\disk\docker_data.vhdx'
+age_days = 50
+
+[[expect]]
+kind     = "clean"
+case     = "docker-data-copy"
+no_match = ['D:\Database\DockerDesktopWSL', 'F:\WSL\wsl\DockerDesktopWSL.ANTIGO']

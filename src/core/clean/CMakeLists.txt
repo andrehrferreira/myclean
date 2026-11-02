@@ -16,4 +16,5 @@ myclean_add_library(clean
     myclean::games
     myclean::rules
     myclean::safety
+    nlohmann_json::nlohmann_json
     tomlplusplus::tomlplusplus)

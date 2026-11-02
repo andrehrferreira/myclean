@@ -80,6 +80,10 @@ class RuleEngine {
   // every entry the last component matches is one candidate. Conditions:
   //   min_age_days  the entry and everything inside it changed at least that long ago
   //   not_in_use    no file inside it is locked, no process folder lies inside it
+  //   contains      the entry is a folder holding that file
+  //   outside_of    the entry neither lies in nor holds a folder the path names (each value of
+  //                 its variables, such as every Docker data folder of %DOCKER_WSL_DATA%); when
+  //                 a variable there has no value, the rule selects nothing
   // Native and handler rules give one candidate each, sized by their targets; a rule whose
   // targets hold nothing (the tool's cache is absent or empty here) gives none.
   [[nodiscard]] Evaluation evaluate(std::span<const rules::CleaningRule> rules, WallTime now) const;

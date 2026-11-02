@@ -150,7 +150,7 @@ TEST(Win32Environment, OrdinaryVariablesHaveTheirOneValue) {
   EXPECT_EQ(environment.values(L"TEMP"),
             std::vector<std::wstring>{environment.variable(L"TEMP").value_or(L"")});
   EXPECT_TRUE(environment.values(L"MYCLEAN_TEST_SURELY_UNSET").empty());
-  EXPECT_EQ(tool_variable(L"TEMP"), std::nullopt);
+  EXPECT_EQ(tool_variable(L"TEMP", environment), std::nullopt);
 }
 
 }  // namespace

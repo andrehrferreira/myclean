@@ -329,6 +329,40 @@ TEST_F(RuleEngineTest, LibraryVariableCoversEveryLibrary) {
   EXPECT_TRUE(evaluation.dropped.empty());
 }
 
+// require.outside_of keeps every folder its variable names, and what lies in or around one;
+// require.contains keeps a folder without the named file. When the variable has no value (the
+// settings naming the live folder cannot be read), nothing is selected.
+TEST_F(RuleEngineTest, FoldersTheSettingsNameAreKept) {
+  tree().add_file(R"(D:\Database\DockerDesktopWSL\disk\docker_data.vhdx)", 4_MiB, days_ago(40));
+  tree().add_file(R"(F:\WSL\wsl\DockerDesktopWSL.ANTIGO\disk\docker_data.vhdx)", 4_MiB,
+                  days_ago(50));
+  tree().add_file(R"(F:\WSL\wsl\DockerDesktopWSL.ANTIGO\main\ext4.vhdx)", 1_MiB, days_ago(50));
+  tree().add_file(R"(G:\DockerDesktopWSL\disk\docker_data.vhdx)", 4_MiB, days_ago(60));
+  tree().add_file(R"(G:\Docs\DockerDesktopWSL-notes\readme.txt)", 1_MiB, days_ago(60));
+  tree().set_fixed_volumes({R"(D:\)", R"(F:\)", R"(G:\)"});
+  const CleaningRule rule{.id = "docker-data-copy",
+                          .category = "containers",
+                          .tier = Tier::ask,
+                          .scope = ExecutionContext::user,
+                          .strategy = Strategy::remove,
+                          .targets = {R"(?:\DockerDesktopWSL*)", R"(?:\*\DockerDesktopWSL*)",
+                                      R"(?:\*\*\DockerDesktopWSL*)"},
+                          .require = {.not_in_use = true,
+                                      .min_age_days = 30,
+                                      .contains = R"(disk\docker_data.vhdx)",
+                                      .outside_of = "%DOCKER_WSL_DATA%"}};
+  environment().set_values(L"DOCKER_WSL_DATA", {});
+  EXPECT_TRUE(evaluate(rule).candidates.empty());
+
+  // The live folder, and a setting naming a folder inside the one on G:.
+  environment().set_values(L"DOCKER_WSL_DATA",
+                           {LR"(D:\Database\DockerDesktopWSL)", LR"(G:\DockerDesktopWSL\disk)"});
+  const Evaluation evaluation = evaluate(rule);
+
+  EXPECT_EQ(paths_of(evaluation), (std::vector<fs::path>{R"(F:\WSL\wsl\DockerDesktopWSL.ANTIGO)"}));
+  EXPECT_TRUE(evaluation.dropped.empty());
+}
+
 TEST_F(RuleEngineTest, ProcessFolderInsideAnEntryMeansInUse) {
   tree().add_file(temp / "tool" / "tool.exe", 1_MiB, days_ago(10));
   usage().add_process_folder(temp / "tool");

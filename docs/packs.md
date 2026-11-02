@@ -80,13 +80,23 @@ A few variables are read from a tool's own files, not the environment, and have 
 a clean target or attribution path naming one is expanded once per value (`clean::tool_variable`,
 `src/core/clean/tool_variables.hpp`). `%STEAM_LIBRARY%` is every library folder of Steam's
 `libraryfolders.vdf` (Steam's own folder among them); it has no value, so the target selects
-nothing, when Steam is not installed or the file cannot be read.
+nothing, when Steam is not installed or the file cannot be read. `%DOCKER_WSL_DATA%` is every
+folder Docker Desktop's settings name for its data (`CustomWslDistroDir` of
+`%APPDATA%\Docker\settings-store.json` and of the legacy `settings.json`) and its default
+`%LOCALAPPDATA%\Docker\wsl`; it has no value when neither file exists or one that exists cannot
+be read or parsed.
 A project rule with `require.git_ignored` may add `require.outside_git = true` when its targets
 are written only by a tool: a project outside any git work tree is then offered on the other
 conditions, while inside one git must still ignore the folder and track nothing in it.
-`require.contains = "<file name>"` (project rules only) keeps only the matched folders that hold
-that file: `targets = ['build\*']` with `contains = "CMakeCache.txt"` selects CMake build trees
-and never a `build\_deps` or a file such as `build.zig`.
+`require.contains = '<path>'` keeps only the matched folders that hold that file, named by a path
+relative to the folder: `targets = ['build\*']` with `contains = "CMakeCache.txt"` selects CMake
+build trees and never a `build\_deps` or a file such as `build.zig`; `contains =
+'disk\docker_data.vhdx'` recognises a Docker Desktop data folder. `require.outside_of = '<path>'`
+(rules without `project`; an absolute path without wildcards, usually a variable of several
+values) names folders the rule must keep: a match that lies in or holds one is never selected,
+and when the path names a variable without a value the rule selects nothing. With
+`outside_of = '%DOCKER_WSL_DATA%'`, `wsl-docker/docker-data-copy` offers only the Docker data
+folders that Docker's settings no longer name.
 A `handler` case of the `Recycle Bin` handler with `require.min_age_days` stands for the owner's
 Recycle Bin items deleted at least that many days ago on every fixed volume, counted from each
 item's deletion time (its `$I` record), never from file times. The service sizes it from those
@@ -365,5 +375,5 @@ the new ones.
 | `vscode` | clean: old version data, extension packages, stale workspace storage, Chromium caches, webview resource cache (ask); attribution: web storage, extensions and Cursor data (review); kb: Code, Copilot runtime |
 | `windows` | clean: temp folders, crash dumps, error reports, icon cache, PowerToys update installers, the Windows cleanup handlers, the Recycle Bin items deleted 30 days ago or earlier (auto), DISM component cleanup; attribution: system files and folders, programs, the owner's folders, MyClean's quarantine; kb: Windows, PowerToys, OneDrive and other Microsoft processes |
 | `windows-setup-logs` | clean: the Setup Log Files and Windows Upgrade Log Files handlers; attribution: Panther (the upgrade-log handler), setup logs |
-| `wsl-docker` | relocate: WSL 2 distributions (`wsl --manage --move`), WSL 1 distributions (`wsl-import`); clean: `docker system prune`, `wsl tmp prune` (entries of a WSL 1 distribution's /tmp older than 7 days, deleted from inside Linux); attribution: distribution disks, WSL 1 file systems and their /tmp, Docker Desktop disk (also in a custom location, and copies left by a move); kb: WSL and Docker processes |
+| `wsl-docker` | relocate: WSL 2 distributions (`wsl --manage --move`), WSL 1 distributions (`wsl-import`); clean: `docker system prune`, `wsl tmp prune` (entries of a WSL 1 distribution's /tmp older than 7 days, deleted from inside Linux), a copy of Docker Desktop's data folder that no Docker setting names (ask, 30 days); attribution: distribution disks, WSL 1 file systems and their /tmp, Docker Desktop disk (also in a custom location, and copies left by a move); kb: WSL and Docker processes |
 | `zig` | clean: global cache entries, the `.zig-cache` of Zig projects inactive 7 days; attribution: global cache, project caches |
