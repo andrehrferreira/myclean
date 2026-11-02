@@ -247,6 +247,28 @@ TEST_F(ArtifactScanTest, ProcessInTheProjectBlocksWholeArtifactsButNotStaleIncre
   EXPECT_EQ(dropped_at(evaluation, incremental / "engine-b")->reason, "in_use");
 }
 
+// Cleaning spec, "Idle build tree of an active CMake project": only a folder holding
+// CMakeCache.txt is a build tree; one no build wrote for 14 days goes while the project is active.
+TEST_F(ArtifactScanTest, ContainsSelectsOnlyFoldersHoldingTheFile) {
+  add_project(R"(F:\engine)", "CMakeLists.txt", 1);
+  const fs::path build = R"(F:\engine\build)";
+  tree().add_file(build / "asan" / "CMakeCache.txt", 1_KiB, days_ago(20));
+  tree().add_file(build / "asan" / "engine.exe", 4_MiB, days_ago(20));
+  tree().add_file(build / "debug" / "CMakeCache.txt", 1_KiB, days_ago(1));
+  tree().add_file(build / "_deps" / "fmt-src" / "fmt.h", 1_KiB, days_ago(40));
+  tree().add_file(build / "build.ninja", 1_KiB, days_ago(40));
+  git().ignore(build);
+  for (const char* name : {"asan", "debug", "_deps", "build.ninja"}) {
+    git().ignore(build / name);
+  }
+
+  const Evaluation evaluation = scan();
+
+  EXPECT_EQ(paths_of(evaluation), (std::vector<fs::path>{build / "asan"}));
+  EXPECT_EQ(dropped_at(evaluation, build / "_deps"), nullptr);
+  EXPECT_EQ(dropped_at(evaluation, build / "build.ninja"), nullptr);
+}
+
 TEST_F(ArtifactScanTest, GitFailureProposesNothingFromThatRepository) {
   add_project(R"(F:\app)", "package.json", 45);
   tree().add_file(R"(F:\app\node_modules\x\index.js)", 1_MiB, days_ago(45));

@@ -1,5 +1,5 @@
 id          = "zig"
-version     = "1.2.0"
+version     = "1.3.0"
 title       = "Zig"
 description = "Zig's global build cache (compiled outputs, hash manifests and ZIR caches that zig rebuilds when missing) and the .zig-cache of Zig projects inactive for 7 days."
 sources     = [

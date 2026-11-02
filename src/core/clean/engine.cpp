@@ -228,6 +228,15 @@ bool has_marker(const IFileTree& tree, const std::vector<Entry>& listed, const f
   });
 }
 
+// True when `entry` is a folder holding the file `name`.
+bool holds_file(const IFileTree& tree, const Entry& entry, const fs::path& name) {
+  if (!enterable(entry)) {
+    return false;
+  }
+  const Result<Entry> inner = tree.stat(entry.path / name);
+  return inner && inner->stat.kind == os::EntryKind::file;
+}
+
 // The folder holding the `.git` that `dir` belongs to, if any.
 std::optional<fs::path> work_tree_of(const IFileTree& tree, const fs::path& dir) {
   for (fs::path folder = dir;; folder = folder.parent_path()) {
@@ -387,6 +396,10 @@ Project find_project(const IFileTree& tree, Session& session,
       Matches matches = resolve(tree, folder, from_utf8(target));
       session.drop_links(*rule, matches);
       for (Entry& entry : matches.entries) {
+        if (rule->require.contains &&
+            !holds_file(tree, entry, from_utf8(*rule->require.contains))) {
+          continue;
+        }
         project.found.push_back(Found{.rule = rule, .entry = std::move(entry)});
       }
     }

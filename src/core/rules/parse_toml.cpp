@@ -258,7 +258,7 @@ CleaningRule parse_rule(const toml::table& table, Location& location) {
   if (const toml::table* require = fields.table("require")) {
     const Fields require_fields(*require, location, "require.");
     require_fields.only(
-        {"git_ignored", "outside_git", "not_in_use", "inactive_days", "min_age_days"});
+        {"git_ignored", "outside_git", "not_in_use", "inactive_days", "min_age_days", "contains"});
     constexpr int max_days = 36500;
     rule.require.git_ignored = require_fields.boolean("git_ignored").value_or(false);
     rule.require.outside_git = require_fields.boolean("outside_git").value_or(false);
@@ -269,6 +269,12 @@ CleaningRule parse_rule(const toml::table& table, Location& location) {
     rule.require.not_in_use = require_fields.boolean("not_in_use").value_or(false);
     rule.require.inactive_days = require_fields.integer("inactive_days", 0, max_days);
     rule.require.min_age_days = require_fields.integer("min_age_days", 0, max_days);
+    rule.require.contains = require_fields.string("contains");
+    if (rule.require.contains &&
+        (!rule.project_marker || rule.require.contains->empty() ||
+         rule.require.contains->find_first_of("\\/*?") != std::string::npos)) {
+      require_fields.fail("contains", "is only allowed on a project rule and names one file");
+    }
   }
   return rule;
 }

@@ -263,6 +263,28 @@ TEST(ParseRules, OutsideGitOnlyOnProjectRulesWithGitIgnored) {
   }
 }
 
+// require.contains narrows a project rule's matches to folders holding one named file.
+TEST(ParseRules, ContainsOnlyOnProjectRulesAndNamesOneFile) {
+  const std::string head =
+      "[[rule]]\nid = \"x\"\ncategory = \"c\"\ntier = \"auto\"\nscope = \"user\"\n"
+      "strategy = \"delete\"\n";
+  const std::string project = "project = { marker = \"CMakeLists.txt\" }\ntargets = ['build\\*']\n";
+  const Result<std::vector<CleaningRule>> rules =
+      parse_rule_file(head + project + "require = { contains = \"CMakeCache.txt\" }\n", rule_file);
+  ASSERT_TRUE(rules.has_value()) << rules.error().message;
+  EXPECT_EQ(rules->front().require.contains, "CMakeCache.txt");
+
+  for (const std::string& rule :
+       {head + "targets = ['%TEMP%\\x']\nrequire = { contains = \"CMakeCache.txt\" }\n",
+        head + project + "require = { contains = \"CMakeFiles\\\\x.txt\" }\n",
+        head + project + "require = { contains = \"*.txt\" }\n"}) {
+    EXPECT_NE(rejection(rule).find(
+                  "field 'require.contains' is only allowed on a project rule and names one file"),
+              std::string::npos)
+        << rule;
+  }
+}
+
 TEST(ParseRules, StrategySpecificFieldsEnforced) {
   const std::string head =
       "[[rule]]\nid = \"x\"\ncategory = \"c\"\ntier = \"ask\"\nscope = \"user\"\n";

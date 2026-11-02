@@ -9,9 +9,10 @@ path = 'D:\caches\zig\o\4c2f9a\main.obj'
 path = 'D:\caches\zig\h\4c2f9a.txt'
 
 [[expect]]
-kind  = "clean"
-case  = "global-cache"
-match = ['D:\caches\zig\o\4c2f9a', 'D:\caches\zig\h\4c2f9a.txt']
+kind     = "clean"
+case     = "global-cache"
+match    = ['D:\caches\zig\h\4c2f9a.txt']
+no_match = ['D:\caches\zig\o\4c2f9a']
 
 [[expect]]
 kind  = "attribution"

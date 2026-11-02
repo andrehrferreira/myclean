@@ -1,7 +1,8 @@
 # The global cache (source: introspect.zig, see pack.toml): o holds compiled outputs, h hash
-# manifests, z cached ZIR and tmp work files, one entry per hash. Zig rebuilds an entry that is
-# gone (observed on reference machine), so each entry unchanged for 30 days is one item; a
-# running build keeps its entries recent or open.
+# manifests, z cached ZIR and tmp work files, one entry per hash. A missing manifest is a cache
+# miss and a missing ZIR file is regenerated, so each h, z and tmp entry unchanged for 30 days is
+# one item. o is left alone: a manifest a build still hits names its o entry, which no build
+# rewrites, so an old o entry may be in use (analysis E 09, item 6); the folder is small.
 
 [[rule]]
 id       = "global-cache"
@@ -9,10 +10,8 @@ category = "dev-caches"
 tier     = "auto"
 scope    = "user"
 strategy = "delete"
-targets  = ['%LOCALAPPDATA%\zig\o\*', '%LOCALAPPDATA%\zig\h\*', '%LOCALAPPDATA%\zig\z\*',
-            '%LOCALAPPDATA%\zig\tmp\*',
-            '%ZIG_GLOBAL_CACHE_DIR%\o\*', '%ZIG_GLOBAL_CACHE_DIR%\h\*', '%ZIG_GLOBAL_CACHE_DIR%\z\*',
-            '%ZIG_GLOBAL_CACHE_DIR%\tmp\*']
+targets  = ['%LOCALAPPDATA%\zig\h\*', '%LOCALAPPDATA%\zig\z\*', '%LOCALAPPDATA%\zig\tmp\*',
+            '%ZIG_GLOBAL_CACHE_DIR%\h\*', '%ZIG_GLOBAL_CACHE_DIR%\z\*', '%ZIG_GLOBAL_CACHE_DIR%\tmp\*']
 require  = { min_age_days = 30, not_in_use = true }
 
 # The local cache of a Zig project (source: Zig build system guide, see pack.toml): zig build

@@ -1,0 +1,54 @@
+# An active CMake project with several build trees: the one no build wrote for 20 days goes, the
+# one built yesterday and a build subfolder without CMakeCache.txt (FetchContent's _deps) stay.
+
+[workspace]
+roots = ['F:\']
+
+[[entry]]
+path = 'F:\code\engine\.git'
+folder = true
+age_days = 1
+[[entry]]
+path = 'F:\code\engine\CMakeLists.txt'
+age_days = 1
+[[entry]]
+path = 'F:\code\engine\src\main.cpp'
+age_days = 1
+[[entry]]
+path = 'F:\code\engine\build'
+folder = true
+git_ignored = true
+[[entry]]
+path = 'F:\code\engine\build\asan'
+folder = true
+git_ignored = true
+age_days = 20
+[[entry]]
+path = 'F:\code\engine\build\asan\CMakeCache.txt'
+age_days = 20
+[[entry]]
+path = 'F:\code\engine\build\asan\engine.exe'
+age_days = 20
+size = 40000000
+[[entry]]
+path = 'F:\code\engine\build\debug'
+folder = true
+git_ignored = true
+age_days = 1
+[[entry]]
+path = 'F:\code\engine\build\debug\CMakeCache.txt'
+age_days = 1
+[[entry]]
+path = 'F:\code\engine\build\_deps'
+folder = true
+git_ignored = true
+age_days = 40
+[[entry]]
+path = 'F:\code\engine\build\_deps\fmt-src\CMakeLists.txt'
+age_days = 40
+
+[[expect]]
+kind     = "clean"
+case     = "stale-build-tree"
+match    = ['F:\code\engine\build\asan']
+no_match = ['F:\code\engine\build\debug', 'F:\code\engine\build\_deps']

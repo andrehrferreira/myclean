@@ -25,3 +25,17 @@ strategy = "delete"
 project  = { marker = "CMakeLists.txt" }
 targets  = ["build*", "out", "cmake-build-*"]
 require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+
+# One configuration of a project with several (build\debug, build\release, out\build\x64-Debug):
+# a folder holding CMakeCache.txt that no build wrote for 14 days goes even while the project is
+# active. Removing a whole build tree is how CMake starts over (cmake --fresh recreates
+# CMakeCache.txt and CMakeFiles; source: pack.toml); the next configure and build recreate it.
+[[rule]]
+id       = "stale-build-tree"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "CMakeLists.txt" }
+targets  = ['build\*', 'out\build\*']
+require  = { git_ignored = true, not_in_use = true, inactive_days = 0, min_age_days = 14, contains = "CMakeCache.txt" }

@@ -60,6 +60,9 @@ struct Requirements {
   bool not_in_use = false;           // no process has its current directory or a file open in it
   std::optional<int> inactive_days;  // project untouched (last commit, newest source) this long
   std::optional<int> min_age_days;   // the item itself is at least this old
+  // Project rules only: a selected item is a folder holding this file (a CMake build tree holds
+  // CMakeCache.txt); any other match is not an artifact.
+  std::optional<std::string> contains;
 };
 
 struct CleaningRule {

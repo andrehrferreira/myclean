@@ -79,6 +79,9 @@ with `project`, a pattern relative to the project root. A target that could neve
 A project rule with `require.git_ignored` may add `require.outside_git = true` when its targets
 are written only by a tool: a project outside any git work tree is then offered on the other
 conditions, while inside one git must still ignore the folder and track nothing in it.
+`require.contains = "<file name>"` (project rules only) keeps only the matched folders that hold
+that file: `targets = ['build\*']` with `contains = "CMakeCache.txt"` selects CMake build trees
+and never a `build\_deps` or a file such as `build.zig`.
 
 ### relocate.toml: relocation recipes
 
@@ -322,7 +325,7 @@ the new ones.
 | `asus` | kb: Armoury Crate, Aura, ASUS services, A-Volute (Nahimic, Sonic Studio) |
 | `browsers` | clean: HTTP, code and GPU caches of Chrome, Edge, Brave, Firefox; attribution: profiles and service worker caches (review); kb: Edge, WebView2 |
 | `chrome` | clean: per-profile WebGPU (Dawn) caches; attribution: on-device AI model (review); kb: chrome.exe |
-| `cpp` | clean: build output of inactive vcxproj and CMake projects |
+| `cpp` | clean: build output of inactive vcxproj and CMake projects; CMake build trees (`CMakeCache.txt`) no build wrote for 14 days, also in active projects |
 | `databases` | attribution (uninstall): MongoDB and PostgreSQL servers, pgAdmin 4 |
 | `creative-apps` | clean: Reallusion Hub downloads, Autodesk installer leftovers (ask); attribution: Reallusion, ZBrush, Marvelous Designer and Gaea content and autosaves (review), ArtEngine (uninstall); kb: Autodesk, FlexNet, Maxon, Reallusion processes |
 | `dev-tools` | clean: Trivy's Java database; attribution (review/uninstall): source projects, SDKs and toolchains, ~/.cache; kb: Git |
