@@ -57,6 +57,11 @@ Given a process whose parent has exited and whose parent PID now belongs to a pr
 When trees are built
 Then the process is not attached to the newer process and becomes the root of its own tree
 
+#### Scenario: MyClean's own use is recorded
+Given myclean-svc.exe and myclean-tray.exe are running
+When the process table is sampled
+Then self.cpu (share of all processors) and self.memory (private working set) are recorded for the entities "myclean-svc" and "myclean-tray", so NFR-PERF-1 can be checked over any window with `myclean metrics query`
+
 ### Requirement: Process Events
 The service SHALL receive process start and stop events in real time from the ETW `Microsoft-Windows-Kernel-Process` provider, each with image, command line, parent and signer, and SHALL persist every start in `proc_start`.
 

@@ -56,4 +56,9 @@ inline constexpr std::string_view process_count = "process.count";
 inline constexpr std::string_view process_threads = "process.threads";
 inline constexpr std::string_view process_handles = "process.handles";
 
+// MyClean's own processes, every 1 s, entity "myclean-svc" or "myclean-tray" (NFR-PERF-1: under
+// 1 % average CPU and 150 MB of RAM together).
+inline constexpr std::string_view self_cpu = "self.cpu";        // %, share of all processors
+inline constexpr std::string_view self_memory = "self.memory";  // bytes, private working set
+
 }  // namespace myclean::telemetry::metric

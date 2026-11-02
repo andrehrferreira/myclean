@@ -4,9 +4,11 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -184,6 +186,31 @@ TEST_F(ProcessCollectorTest, RecordsTotalsTheProcessorQueueAndTheCompressedMemor
   for (const Measurement& measurement : last()) {
     EXPECT_EQ(measurement.key.entity, metric::system);
   }
+}
+
+TEST_F(ProcessCollectorTest, RecordsMyCleansOwnCpuAndMemory) {
+  processes() = {process(700, 600, 10s, "myclean-svc.exe"),
+                 process(800, 1000, 20s, "myclean-tray.exe"), process(900, 4, 30s, "other.exe")};
+  processes()[1].private_working_set = 20_MiB;
+  static_cast<void>(sample());
+  // 0.32 s of 32 processors over 1 s: 1 %.
+  advance(1s);
+  processes()[0].cpu_time = 320ms;
+  static_cast<void>(sample());
+
+  std::map<std::pair<std::string, std::string>, double> self;
+  for (const Measurement& measurement : last()) {
+    if (measurement.key.metric.starts_with("self.")) {
+      self[{measurement.key.metric, measurement.key.entity}] = measurement.value;
+    }
+  }
+  ASSERT_EQ(self.size(), 4U);  // other.exe is not recorded
+  EXPECT_DOUBLE_EQ((self[{std::string(metric::self_cpu), "myclean-svc"}]), 1.0);
+  EXPECT_DOUBLE_EQ((self[{std::string(metric::self_cpu), "myclean-tray"}]), 0.0);
+  EXPECT_EQ((self[{std::string(metric::self_memory), "myclean-svc"}]),
+            static_cast<double>((80_MiB).count()));
+  EXPECT_EQ((self[{std::string(metric::self_memory), "myclean-tray"}]),
+            static_cast<double>((20_MiB).count()));
 }
 
 }  // namespace

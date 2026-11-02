@@ -24,6 +24,8 @@ namespace {
 
 constexpr std::array<std::string_view, 5> launchers{"explorer.exe", "services.exe", "svchost.exe",
                                                     "wininit.exe", "winlogon.exe"};
+// MyClean's own processes, recorded as self.cpu and self.memory.
+constexpr std::array<std::string_view, 2> self_images{"myclean-svc.exe", "myclean-tray.exe"};
 
 bool equal_ignoring_case(std::string_view left, std::string_view right) {
   const auto lower = [](char c) { return c >= 'A' && c <= 'Z' ? static_cast<char>(c + 32) : c; };
@@ -138,6 +140,14 @@ Result<std::vector<Measurement>> ProcessCollector::collect(WallTime now, MonoTim
     if (row.info.pid != 0 && row.info.image == "Memory Compression") {
       measurements.push_back(measure(metric::memory_compressed, std::string(metric::system),
                                      static_cast<double>(row.info.working_set.count())));
+    }
+    for (const std::string_view self : self_images) {
+      if (row.info.image == self) {
+        const std::string entity(self.substr(0, self.size() - 4));  // without ".exe"
+        measurements.push_back(measure(metric::self_cpu, entity, row.cpu_percent));
+        measurements.push_back(measure(metric::self_memory, entity,
+                                       static_cast<double>(row.info.private_working_set.count())));
+      }
     }
   }
   measurements.push_back(measure(metric::process_count, std::string(metric::system),
