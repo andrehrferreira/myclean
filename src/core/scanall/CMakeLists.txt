@@ -1,8 +1,10 @@
 # `myclean scan-all` analyses (scan-all spec): cold data, placement advice, cross-drive
-# duplicates, the findings of the map, rules, compression and maintenance analyses, and the
+# duplicates, archives already extracted, merged idle worktrees, the findings of the map, rules, compression and maintenance analyses, and the
 # unified report with its precedence rule. Read-only; the CLI does the I/O.
 myclean_add_library(scanall
   SOURCES
+    archives.cpp
+    archives.hpp
     cold.cpp
     cold.hpp
     drive_health.cpp
@@ -17,6 +19,8 @@ myclean_add_library(scanall
     report.hpp
     sources.cpp
     sources.hpp
+    worktrees.cpp
+    worktrees.hpp
   DEPENDS
     myclean::clean
     myclean::compress

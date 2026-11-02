@@ -1,6 +1,6 @@
 # Cleaning through Windows and the tools themselves (C3): disk-cleanup handlers, native prune
-# commands under the user token and DISM component cleanup, as Actions over the runner and
-# handler-host interfaces that src/platform/cleanup implements.
+# commands under the user token, DISM component cleanup and the aged Recycle Bin items, as Actions
+# over the runner, handler-host and Recycle Bin interfaces that src/platform/cleanup implements.
 myclean_add_library(cleanup
   SOURCES
     command_runner.hpp
@@ -11,6 +11,8 @@ myclean_add_library(cleanup
     handler_host.hpp
     native_command.cpp
     native_command.hpp
+    recycle_bin.cpp
+    recycle_bin.hpp
     support.cpp
     support.hpp
   DEPENDS

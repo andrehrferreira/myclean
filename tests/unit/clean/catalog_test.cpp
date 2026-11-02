@@ -88,6 +88,9 @@ TEST(ShippedCatalog, HandlersHaveTheirScopeAndForbiddenOnesAreAbsent) {
     EXPECT_EQ(rule.scope, user_handlers.contains(rule.handler) ? ExecutionContext::user
                                                                : ExecutionContext::service)
         << rule.id;
+    if (rule.require.min_age_days) {
+      continue;  // the aged Recycle Bin items, below
+    }
     EXPECT_EQ(rule.tier, auto_handlers.contains(rule.handler) ? Tier::automatic : Tier::ask)
         << rule.id;
   }
@@ -95,6 +98,27 @@ TEST(ShippedCatalog, HandlersHaveTheirScopeAndForbiddenOnesAreAbsent) {
   EXPECT_EQ(shipped_rule("windows/recycle-bin").tier, Tier::ask);
   EXPECT_EQ(shipped_rule("windows/memory-dumps").tier, Tier::ask);
   EXPECT_EQ(shipped_rule("windows/update-cleanup").handler, "Update Cleanup");
+}
+
+// Cleaning spec, "Aged Recycle Bin Items": of the handler cases, only the Recycle Bin's sets a
+// requirement, min_age_days, counted from each item's deletion time; it is auto only past the
+// auto tier's floor of 7 days. The whole bin stays ask.
+TEST(ShippedCatalog, OnlyTheAgedRecycleBinCaseSetsAHandlerRequirement) {
+  for (const CleaningRule& rule : shipped_rules()) {
+    if (rule.strategy != Strategy::handler || rule.handler == "Recycle Bin") {
+      continue;
+    }
+    EXPECT_FALSE(rule.require.min_age_days) << rule.id;
+    EXPECT_FALSE(rule.require.inactive_days) << rule.id;
+    EXPECT_FALSE(rule.require.not_in_use || rule.require.git_ignored) << rule.id;
+  }
+  const CleaningRule& aged = shipped_rule("windows/recycle-bin-aged");
+  EXPECT_EQ(aged.strategy, Strategy::handler);
+  EXPECT_EQ(aged.handler, "Recycle Bin");
+  EXPECT_EQ(aged.scope, ExecutionContext::user);
+  EXPECT_EQ(aged.tier, Tier::automatic);
+  EXPECT_EQ(aged.require.min_age_days, 30);
+  EXPECT_FALSE(shipped_rule("windows/recycle-bin").require.min_age_days);
 }
 
 // Cleaning spec, "Browser rule limits": no browser or Electron target names profile data.

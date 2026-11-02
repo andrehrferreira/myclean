@@ -28,7 +28,16 @@ namespace myclean::cleaning {
 // Tables cleaning_candidate and cleaning_item (component "cleaning").
 [[nodiscard]] const store::MigrationSet& cleaning_migrations();
 
-enum class PlanKind { cleanup, handler, native, relocate, system_setting, quarantine_restore };
+// recycle_bin: the Recycle Bin items deleted long ago, removed by the tray.
+enum class PlanKind {
+  cleanup,
+  handler,
+  native,
+  relocate,
+  system_setting,
+  quarantine_restore,
+  recycle_bin
+};
 
 [[nodiscard]] std::string_view to_string(PlanKind kind);
 [[nodiscard]] std::optional<PlanKind> parse_plan_kind(std::string_view text);

@@ -208,9 +208,9 @@ const Json& tool_list() {
            object_schema({{"refresh", refresh_property()}})),
       tool("list_plans",
            "MyClean's plans, newest first: id, title, kind (cleanup, handler, native, relocate, "
-           "system_setting, quarantine_restore), tier, scope, state, proposer, items, bytes and "
-           "whether a restart is needed. Plans in 'awaiting_approval' wait for the owner in the "
-           "MyClean tray. Reads only.",
+           "system_setting, quarantine_restore, recycle_bin), tier, scope, state, proposer, "
+           "items, bytes and whether a restart is needed. Plans in 'awaiting_approval' wait for "
+           "the owner in the MyClean tray. Reads only.",
            object_schema({{"state",
                            {{"type", "string"},
                             {"enum",

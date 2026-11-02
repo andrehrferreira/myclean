@@ -1,15 +1,18 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
 
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/space/content.hpp"
 #include "core/space/downloads.hpp"
 #include "core/space/duplicates.hpp"
 
-// The readers of file content behind the space analyses. Both check the entry before opening
+// The readers of file content behind the space analyses. All check the entry before opening
 // it and refuse a link or a cloud file (RECALL_ON_DATA_ACCESS, RECALL_ON_OPEN, OFFLINE), so
 // nothing is followed or downloaded; files are opened for reading only and never written.
 namespace myclean::platform {
@@ -32,6 +35,15 @@ class Win32ContentHasher final : public space::IContentHasher {
 
   [[nodiscard]] Result<space::Digest> hash(const std::filesystem::path& file,
                                            std::optional<Bytes> limit) const override;
+};
+
+// Reads byte ranges at low I/O priority, through a filter in place as the hasher does.
+class Win32ContentReader final : public space::IContentReader {
+ public:
+  Win32ContentReader() = default;
+
+  [[nodiscard]] Result<std::string> read(const std::filesystem::path& file, std::uint64_t offset,
+                                         std::size_t length) const override;
 };
 
 // The current user's Downloads folder (FOLDERID_Downloads).

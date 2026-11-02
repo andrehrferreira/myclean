@@ -57,6 +57,7 @@
 #include "core/rules/data_files.hpp"
 #include "core/rules/schema.hpp"
 #include "core/safety/deny_list.hpp"
+#include "core/scanall/archives.hpp"
 #include "core/scanall/cold.hpp"
 #include "core/scanall/drive_health.hpp"
 #include "core/scanall/duplicates.hpp"
@@ -64,6 +65,7 @@
 #include "core/scanall/placement.hpp"
 #include "core/scanall/report.hpp"
 #include "core/scanall/sources.hpp"
+#include "core/scanall/worktrees.hpp"
 #include "core/space/scanner.hpp"
 #include "core/space/text.hpp"
 #include "core/telemetry/volume_info.hpp"
@@ -478,6 +480,25 @@ void estimate_compression(Run& run, const space::ScanResult& tree, const map::Di
   }
 }
 
+// Merged idle worktrees, asking git as this process's user (the owner).
+void find_worktrees(Run& run, const space::ScanResult& tree, const scanall::FolderTimes& times,
+                    DriveInfo& drive) {
+  const std::optional<fs::path> git = platform::find_git();
+  if (!git) {
+    return;
+  }
+  const platform::GitCli cli(*git);
+  scanall::WorktreeRun found = scanall::find_worktrees(tree, times, drive, cli, run.now);
+  if (found.worktrees + found.errors > 0) {
+    drive.notes.push_back(std::format(
+        "worktrees: {} idle linked worktrees, {} merged with nothing to commit{}", found.worktrees,
+        found.findings.size(),
+        found.errors > 0 ? std::format("; git could not answer for {} folders", found.errors)
+                         : ""));
+  }
+  append(run.findings, std::move(found.findings));
+}
+
 void analyze_drive(Run& run, std::size_t index, const scanall::DuplicateOptions& duplicates) {
   DriveInfo& drive = run.drives[index];
   *run.err << std::format("[{}/{}] {}\n", index + 1, run.drives.size(), space::utf8(drive.root));
@@ -497,8 +518,10 @@ void analyze_drive(Run& run, std::size_t index, const scanall::DuplicateOptions&
   }
   append(run.findings, scanall::advise_placement(*tree, times, map ? &*map : nullptr, drive,
                                                  run.targets, run.now));
+  find_worktrees(run, *tree, times, drive);
   estimate_compression(run, *tree, map ? &*map : nullptr, drive);
-  // Only files that can be duplicates stay in memory for the search across drives.
+  // Only files that can be duplicates (or archives and their unpacked members) stay in memory
+  // for the searches across drives.
   for (space::Folder& folder : tree->folders) {
     std::erase_if(folder.files, [&duplicates](const space::FileItem& file) {
       return file.size < duplicates.min_size;
@@ -601,6 +624,25 @@ void find_duplicates(Run& run, const scanall::DuplicateOptions& options,
       scanall::size_text(options.budget),
       found.skipped > 0 ? std::format("; {} hashes did not fit the budget", found.skipped) : "",
       deadline.expired() ? "; stopped by the time budget" : "", found.errors));
+  append(run.findings, std::move(found.findings));
+}
+
+void find_extracted_archives(Run& run, const scanall::DuplicateOptions& duplicates,
+                             std::vector<std::string>& notes) {
+  *run.err << "archives already extracted\n";
+  const platform::Win32ContentReader reader;
+  const Deadline deadline(run.request->budget);
+  // The trees keep only the files duplicates may compare: no member below that can match.
+  const scanall::ArchiveOptions options{.min_member = duplicates.min_size};
+  scanall::ArchiveRun found =
+      scanall::find_extracted_archives(run.trees, reader, options, deadline.token());
+  notes.push_back(std::format(
+      "archives: {} zip and rar sets of at least {} listed, {} of member lists read of a {} "
+      "budget{}{}, {} unreadable or encrypted; 7z archives are not listed",
+      found.listed, scanall::size_text(options.min_size), scanall::size_text(found.read),
+      scanall::size_text(options.budget),
+      found.skipped > 0 ? std::format("; {} sets did not fit the budget", found.skipped) : "",
+      deadline.expired() ? "; stopped by the time budget" : "", found.unreadable));
   append(run.findings, std::move(found.findings));
 }
 
@@ -751,6 +793,7 @@ int scan_all_command(std::span<const std::string> args, std::ostream& out, std::
   evaluate_rules(run);
   analyze_maintenance(run, states);
   find_duplicates(run, duplicates, notes);
+  find_extracted_archives(run, duplicates, notes);
 
   scanall::Report report =
       scanall::build_report(std::move(run.drives), std::move(run.findings), run.trees, run.now);

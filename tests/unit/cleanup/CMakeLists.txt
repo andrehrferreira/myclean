@@ -1,11 +1,13 @@
-# The cleanup actions over a fake runner, a fake handler host and FakeFileSystem; DISM output
-# from the fixtures folder (see dism_cleanup_test.cpp for where each one comes from).
+# The cleanup actions over a fake runner, a fake handler host, a fake Recycle Bin and
+# FakeFileSystem, and the $I records of the Recycle Bin; DISM output from the fixtures folder (see
+# dism_cleanup_test.cpp for where each one comes from).
 myclean_add_test(cleanup
   SOURCES
     dism_cleanup_test.cpp
     fakes.hpp
     handler_cleanup_test.cpp
     native_command_test.cpp
+    recycle_bin_test.cpp
   DEPENDS
     myclean::cleanup
     myclean::fakes)

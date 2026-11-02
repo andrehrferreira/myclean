@@ -44,14 +44,17 @@ using IdentitySource = std::function<Result<ProcessIdentity>()>;
 // The first git.exe in the folders of PATH; nullopt when there is none.
 [[nodiscard]] std::optional<std::filesystem::path> find_git();
 
-// IGit through the git command line. Every command is read-only and runs as
+// IGit and IWorktreeGit through the git command line. Every command is read-only and runs as
 //   git --no-optional-locks -c core.fsmonitor=false -C <work tree> ...
 // so it takes no index lock and starts no fsmonitor daemon. Commands: rev-parse -q --verify
-// HEAD, log -1 --format=%ct HEAD, check-ignore -q -- <path>, ls-files -z -- :(literal)<path>.
+// HEAD, log -1 --format=%ct HEAD, check-ignore -q -- <path>, ls-files -z -- :(literal)<path>;
+// for worktrees rev-parse --path-format=absolute --git-dir --git-common-dir, symbolic-ref -q
+// --short HEAD and refs/remotes/origin/HEAD, rev-parse -q --verify refs/heads/main (master),
+// merge-base --is-ancestor HEAD <base> and status --porcelain.
 // git's own safety checks apply: a repository git refuses (such as one owned by another user)
 // fails with io_error, and the engine then proposes nothing from it. So the service runs git as
 // the owner (`identity`); a command whose identity cannot be read fails the same way.
-class GitCli final : public clean::IGit {
+class GitCli final : public clean::IGit, public clean::IWorktreeGit {
  public:
   explicit GitCli(std::filesystem::path git, IdentitySource identity = {},
                   std::chrono::milliseconds timeout = std::chrono::seconds{60});
@@ -62,10 +65,20 @@ class GitCli final : public clean::IGit {
                                      const std::filesystem::path& entry) const override;
   [[nodiscard]] Result<bool> tracks_files(const std::filesystem::path& work_tree,
                                           const std::filesystem::path& entry) const override;
+  [[nodiscard]] Result<std::optional<clean::Worktree>> worktree(
+      const std::filesystem::path& folder) const override;
 
  private:
   [[nodiscard]] Result<ProcessOutput> run(const std::filesystem::path& work_tree,
                                           std::vector<std::wstring> arguments) const;
+  // The short name `ref` points to; nullopt when it is not a symbolic ref.
+  [[nodiscard]] Result<std::optional<std::string>> symbolic_ref(
+      const std::filesystem::path& work_tree, const std::wstring& ref) const;
+  // origin/HEAD's branch, else main, else master; empty when there is none.
+  [[nodiscard]] Result<std::string> default_branch(const std::filesystem::path& work_tree) const;
+  // Whether HEAD is `base` or an ancestor of it, and then whether nothing is to commit.
+  [[nodiscard]] Result<void> merged_and_clean(const std::filesystem::path& work_tree,
+                                              clean::Worktree& worktree) const;
 
   std::filesystem::path git_;
   IdentitySource identity_;

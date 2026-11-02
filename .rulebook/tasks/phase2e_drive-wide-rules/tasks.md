@@ -10,9 +10,9 @@
 - [x] 1.9 Rules acting inside active projects (inactive_days 0, e.g. rust/stale-incremental) count only a process inside the item itself as using it, not one anywhere in the project (Smoke run: 0 selected, 1,286 dropped in_use by idle terminals)
 - [x] 1.10 myclean map attributes the artifact folders the project rules find on workspace roots (E: 569 GiB, G: 115 GiB unexplained today) — E 09, G 08; done as map::project_areas over the scan itself (myclean map and scan-all)
 - [x] 1.11 A rule can target the folder holding its marker (CMakeCache.txt, CACHEDIR.TAG): idle build configurations inside active projects — F 04, E 09; done as require.contains and cpp/stale-build-tree (auto, 14 days)
-- [ ] 1.12 windows/recycle-bin: items deleted more than 30 days ago (deletion time from the $I record) as an auto case — E 04
-- [ ] 1.13 Findings: archive already extracted (G: 75.6 GiB), merged clean idle git worktree (E: 13.7 GiB) — G 08, E 09
-- [ ] 1.14 Cold-data report proposes folders below a mixed top-level tree (G:\ToS mixes backups and live projects) — G 08
+- [x] 1.12 windows/recycle-bin: items deleted more than 30 days ago (deletion time from the $I record) as an auto case — E 04; done as windows/recycle-bin-aged (auto, 30 days): the service sizes a user-scope recycle_bin plan from the owner's $I records, the tray deletes the items through the shell's Recycle Bin folder (RecycleBinCleanup)
+- [x] 1.13 Findings: archive already extracted (G: 75.6 GiB), merged clean idle git worktree (E: 13.7 GiB) — G 08, E 09; done as scanall::find_extracted_archives (zip/rar member lists, manual-review) and scanall::find_worktrees (remove, plan remove_worktree, 14 days)
+- [x] 1.14 Cold-data report proposes folders below a mixed top-level tree (G:\ToS mixes backups and live projects) — G 08; done in find_cold: a cold folder holding backup-like folders (*backup*, or mostly .zip/.rar/.7z) next to 1 GiB or more of other content is judged by its subfolders
 - [ ] 1.15 Docker: a data-disk folder that is not CustomWslDistroDir becomes an ask case — F 07
 - [x] 1.16 Review the shipped zig/global-cache per-entry deletion and cpp/cmake-artifacts matching files such as build.zig — E open risks; zig/global-cache no longer deletes o entries one by one (h, z, tmp only); cpp/cmake-artifacts build* still relies on git_ignored for files such as build.zig
 - [ ] 1.17 Measure the hourly artifact scan over D:, E:, F:, G:, W: and bound it if it is heavy (a read-only walk of those roots at depth 8 took 86 min in the debug ASan build)

@@ -10,9 +10,9 @@
 #include "core/model/units.hpp"
 #include "core/os/file_system.hpp"
 
-// What the cleaning rule engine reads from the machine. Every interface is read-only: nothing
-// here deletes, moves, writes or reads file content. Implemented by src/platform/clean and
-// src/platform/git, and by in-memory fakes in tests.
+// What the cleaning rule engine and scan-all read from the machine. Every interface is
+// read-only: nothing here deletes, moves, writes or reads file content. Implemented by
+// src/platform/clean and src/platform/git, and by in-memory fakes in tests.
 namespace myclean::clean {
 
 // One file system entry with the time it last changed.
@@ -107,6 +107,38 @@ class IGit {
 
  protected:
   IGit() = default;
+};
+
+// A linked worktree (`git worktree add`): a work tree whose `.git` is a file naming a folder
+// inside its repository's git folder.
+struct Worktree {
+  std::filesystem::path repository;  // the repository's git folder (`--git-common-dir`)
+  std::string branch;                // the branch checked out; empty for a detached HEAD
+  // The default branch HEAD was compared with: origin/HEAD's branch, else main, else master;
+  // empty when the repository has none of them.
+  std::string base;
+  bool merged = false;  // HEAD is `base` or an ancestor of it
+  // `git status --porcelain` lists nothing: no change and no untracked file (ignored files are
+  // not listed). Asked only when merged.
+  bool clean = false;
+};
+
+// Read-only questions to git about linked worktrees, with the guarantees of IGit (scan-all).
+class IWorktreeGit {
+ public:
+  virtual ~IWorktreeGit() = default;
+  IWorktreeGit(const IWorktreeGit&) = delete;
+  IWorktreeGit& operator=(const IWorktreeGit&) = delete;
+  IWorktreeGit(IWorktreeGit&&) = delete;
+  IWorktreeGit& operator=(IWorktreeGit&&) = delete;
+
+  // The linked worktree whose top is `folder`; nullopt when `folder` is another kind of work
+  // tree (a repository's main work tree, a submodule).
+  [[nodiscard]] virtual Result<std::optional<Worktree>> worktree(
+      const std::filesystem::path& folder) const = 0;
+
+ protected:
+  IWorktreeGit() = default;
 };
 
 }  // namespace myclean::clean

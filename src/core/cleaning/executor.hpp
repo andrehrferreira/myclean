@@ -20,6 +20,7 @@
 #include "core/cleaning/records.hpp"
 #include "core/cleanup/command_runner.hpp"
 #include "core/cleanup/handler_host.hpp"
+#include "core/cleanup/recycle_bin.hpp"
 #include "core/model/actor.hpp"
 #include "core/model/ids.hpp"
 #include "core/model/plan.hpp"
@@ -37,13 +38,15 @@ namespace myclean::cleaning {
 
 // The machine as the executor sees it. Every pointer must outlive the executor; a null one
 // disables what needs it (no git: no developer artifacts; no handlers: no handler sizes or
-// purges; no drives: every item is quarantined on its own volume).
+// purges; no bin: no aged Recycle Bin items; no drives: every item is quarantined on its own
+// volume).
 struct Probes {
   const clean::IFileTree* tree = nullptr;
   const clean::IEnvironment* environment = nullptr;  // the owner's variables
   const clean::IUsage* usage = nullptr;
   const clean::IGit* git = nullptr;
   cleanup::IHandlerHost* handlers = nullptr;    // system-area handlers, run by the service
+  const cleanup::IBinRecords* bin = nullptr;    // the owner's $I records: aged Recycle Bin sizes
   cleanup::ICommandRunner* commands = nullptr;  // DISM, run by the service
   std::filesystem::path dism;
   placement::ISystemSpace* system = nullptr;
@@ -99,11 +102,12 @@ class Executor {
            actions::Quarantine& quarantine, Probes probes, safety::ProtectedLocations locations,
            ExecutorOptions options);
 
-  // Evaluates `rules`, sizes the system-area handlers, replaces the candidates of source "scan"
-  // and records report-tier ones as findings. Then one plan per group that has no open plan
-  // yet: ask-tier items by category (quarantine), native commands, handlers by scope, DISM,
-  // all waiting for approval; when `with_auto`, also the auto-tier items, approved at once
-  // (deleted by the service, or run by the tray for user scope).
+  // Evaluates `rules`, sizes the system-area handlers and the aged Recycle Bin items, replaces
+  // the candidates of source "scan" and records report-tier ones as findings. Then one plan per
+  // group that has no open plan yet: ask-tier items by category (quarantine), native commands,
+  // handlers by scope, the aged Recycle Bin items, DISM, all waiting for approval; when
+  // `with_auto`, also the auto-tier items, approved at once (deleted by the service, or run by
+  // the tray for user scope).
   [[nodiscard]] Result<ScanResult> scan(const RuleSet& rules, bool with_auto,
                                         const std::stop_token& stop);
 
@@ -141,8 +145,8 @@ class Executor {
   [[nodiscard]] std::optional<Applying> applying() const { return progress_.now(); }
 
  private:
-  // What the rules select now, the system-area handlers sized; a handler that cannot be sized
-  // is a problem and no candidate.
+  // What the rules select now, the system-area handlers and the aged Recycle Bin items sized; a
+  // handler or bin that cannot be sized is a problem and no candidate.
   [[nodiscard]] Result<std::vector<Candidate>> evaluate(const RuleSet& rules, WallTime now,
                                                         const std::stop_token& stop,
                                                         std::vector<std::string>& problems) const;

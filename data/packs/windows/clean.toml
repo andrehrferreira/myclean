@@ -205,6 +205,19 @@ scope    = "user"
 strategy = "handler"
 handler  = "Recycle Bin"
 
+# What the owner deleted more than 30 days ago, from the bin of every fixed volume. With the
+# Recycle Bin handler, min_age_days counts from each item's deletion time (its $I record), never
+# from file times, and MyClean deletes the items itself through the shell, not through the
+# handler (core/cleanup/recycle_bin.hpp). Analysis E 04: 49.1 GiB in E:'s bin.
+[[rule]]
+id       = "recycle-bin-aged"
+category = "windows"
+tier     = "auto"
+scope    = "user"
+strategy = "handler"
+handler  = "Recycle Bin"
+require  = { min_age_days = 30 }
+
 # Superseded components of the component store (WinSxS), removed by DISM (source: pack.toml).
 [[rule]]
 id       = "component-store"

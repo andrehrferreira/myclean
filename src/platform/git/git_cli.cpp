@@ -10,6 +10,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -70,6 +71,22 @@ tl::unexpected<Error> git_failed(const fs::path& work_tree, const char* command,
                                  std::uint32_t exit_code) {
   return fail(Errc::io_error, std::string("git ") + command + " failed in " + utf8(work_tree) +
                                   " with exit code " + std::to_string(exit_code));
+}
+
+// The lines of git's output, without their line ends.
+std::vector<std::string> output_lines(const std::string& text) {
+  std::vector<std::string> lines;
+  for (std::size_t start = 0; start < text.size();) {
+    std::size_t end = text.find('\n', start);
+    end = end == std::string::npos ? text.size() : end;
+    std::string line = text.substr(start, end - start);
+    if (line.ends_with('\r')) {
+      line.pop_back();
+    }
+    lines.push_back(std::move(line));
+    start = end + 1;
+  }
+  return lines;
 }
 
 }  // namespace
@@ -274,6 +291,100 @@ Result<bool> GitCli::tracks_files(const fs::path& work_tree, const fs::path& ent
     return git_failed(work_tree, "ls-files", listed->exit_code);
   }
   return !listed->out.empty();
+}
+
+Result<std::optional<std::string>> GitCli::symbolic_ref(const fs::path& work_tree,
+                                                        const std::wstring& ref) const {
+  const Result<ProcessOutput> name = run(work_tree, {L"symbolic-ref", L"-q", L"--short", ref});
+  if (!name) {
+    return tl::unexpected(name.error());
+  }
+  if (name->exit_code == 1) {
+    return std::nullopt;
+  }
+  const std::vector<std::string> lines = output_lines(name->out);
+  if (name->exit_code != 0 || lines.size() != 1) {
+    return git_failed(work_tree, "symbolic-ref", name->exit_code);
+  }
+  return lines.front();
+}
+
+Result<std::string> GitCli::default_branch(const fs::path& work_tree) const {
+  const Result<std::optional<std::string>> origin =
+      symbolic_ref(work_tree, L"refs/remotes/origin/HEAD");
+  if (!origin) {
+    return tl::unexpected(origin.error());
+  }
+  if (*origin) {
+    return **origin;
+  }
+  for (const std::string_view branch : {"main", "master"}) {
+    const Result<ProcessOutput> found =
+        run(work_tree, {L"rev-parse", L"-q", L"--verify",
+                        L"refs/heads/" + std::wstring(branch.begin(), branch.end())});
+    if (!found) {
+      return tl::unexpected(found.error());
+    }
+    if (found->exit_code == 0) {
+      return std::string(branch);
+    }
+  }
+  return std::string();
+}
+
+Result<void> GitCli::merged_and_clean(const fs::path& work_tree, clean::Worktree& worktree) const {
+  const Result<ProcessOutput> ancestor = run(
+      work_tree, {L"merge-base", L"--is-ancestor", L"HEAD",
+                  fs::path{std::u8string(worktree.base.begin(), worktree.base.end())}.native()});
+  if (!ancestor) {
+    return tl::unexpected(ancestor.error());
+  }
+  if (ancestor->exit_code > 1) {
+    return git_failed(work_tree, "merge-base", ancestor->exit_code);
+  }
+  worktree.merged = ancestor->exit_code == 0;
+  if (!worktree.merged) {
+    return {};
+  }
+  const Result<ProcessOutput> status = run(work_tree, {L"status", L"--porcelain"});
+  if (!status) {
+    return tl::unexpected(status.error());
+  }
+  if (status->exit_code != 0) {
+    return git_failed(work_tree, "status", status->exit_code);
+  }
+  worktree.clean = status->out.empty();
+  return {};
+}
+
+Result<std::optional<clean::Worktree>> GitCli::worktree(const fs::path& folder) const {
+  const Result<ProcessOutput> dirs =
+      run(folder, {L"rev-parse", L"--path-format=absolute", L"--git-dir", L"--git-common-dir"});
+  if (!dirs) {
+    return tl::unexpected(dirs.error());
+  }
+  const std::vector<std::string> lines = output_lines(dirs->out);
+  if (dirs->exit_code != 0 || lines.size() != 2) {
+    return git_failed(folder, "rev-parse", dirs->exit_code);
+  }
+  if (lines[0] == lines[1]) {
+    return std::nullopt;  // the repository's own work tree, or a submodule
+  }
+  clean::Worktree worktree{
+      .repository = fs::path{std::u8string(lines[1].begin(), lines[1].end())}.make_preferred()};
+  const Result<std::optional<std::string>> branch = symbolic_ref(folder, L"HEAD");
+  Result<std::string> base = default_branch(folder);
+  if (!branch || !base) {
+    return tl::unexpected(branch ? base.error() : branch.error());
+  }
+  worktree.branch = branch->value_or(std::string());
+  worktree.base = *std::move(base);
+  if (!worktree.base.empty()) {
+    if (Result<void> checked = merged_and_clean(folder, worktree); !checked) {
+      return tl::unexpected(checked.error());
+    }
+  }
+  return worktree;
 }
 
 }  // namespace myclean::platform

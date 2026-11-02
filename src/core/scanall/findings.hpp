@@ -53,6 +53,7 @@ enum class PlanKind {
   defrag_volume,     // drives DefragVolume
   move_folder,       // no MyClean action: the owner (or the app's own mover) moves the folder
   uninstall,         // the program's own uninstaller, after the owner's review
+  remove_worktree,   // git worktree remove: the owner runs it; the commits stay in the repository
   review,            // nothing automatic: the owner decides
 };
 
@@ -76,7 +77,7 @@ struct Item {
 struct Finding {
   ActionGroup group = ActionGroup::manual_review;
   std::string source;           // the analyzer: map, rules, artifacts, compress, maintenance,
-                                // cold, placement or duplicates
+                                // cold, placement, duplicates, archives or worktrees
   std::filesystem::path drive;  // the volume it frees space on ("C:\")
   std::filesystem::path path;   // what it acts on; empty for a whole volume
   // What it covers, by precedence (see build_report). Empty: nothing in the drive's tree, so

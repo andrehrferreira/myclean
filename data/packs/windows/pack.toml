@@ -1,5 +1,5 @@
 id          = "windows"
-version     = "1.2.0"
+version     = "1.3.0"
 title       = "Windows"
 description = "Windows' own temporary files, crash data and servicing areas (cleaned through Windows' cleanup handlers and DISM where Windows owns them), PowerToys' leftover update installers (cleaned), the system files and folders of a volume, MyClean's quarantine, the owner's folders, and what the Windows processes are."
 sources     = [
@@ -12,5 +12,6 @@ sources     = [
   "observed on reference machine: a cumulative update (RollupFix 26100.9711) downloaded on 2026-10-13 waits in SoftwareDistribution, 6.3 GiB, the PC not restarted since 2026-09-30",
   "https://learn.microsoft.com/windows/win32/msi/rollback-installation (the installer keeps rollback scripts and backed-up files until the installation commits)",
   "observed on reference machine: G:\\Config.Msi (hidden, access denied to the owner)",
+  "observed on reference machine: E:\\$RECYCLE.BIN held 49.1 GiB; each deleted item's $I record holds its size and deletion time, read without Explorer (docs/analysis/e-drive-reclaim/04-recycle-bin.md)",
 ]
 min_myclean = "0.1.0"

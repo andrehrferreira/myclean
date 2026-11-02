@@ -19,6 +19,7 @@
 
 #include "core/cleanup/handler_cleanup.hpp"
 #include "core/cleanup/native_command.hpp"
+#include "core/cleanup/recycle_bin.hpp"
 #include "core/cleanup/support.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/model/action.hpp"
@@ -85,6 +86,9 @@ std::optional<TaskKind> parse_kind(std::string_view text) {
   if (text == "relocate") {
     return TaskKind::relocate;
   }
+  if (text == "recycle_bin") {
+    return TaskKind::recycle_bin;
+  }
   return std::nullopt;
 }
 
@@ -110,6 +114,9 @@ void parse_action(const Json& action, UserTask& task) {
     case TaskKind::handler:
       task.volume = path_of(action.at("volume"));
       task.handlers = action.at("handlers").get<std::vector<std::string>>();
+      break;
+    case TaskKind::recycle_bin:
+      task.deleted_days = action.at("deleted_days").get<int>();
       break;
     case TaskKind::relocate:
       if (const auto recipe = action.find("recipe"); recipe != action.end()) {
@@ -151,6 +158,7 @@ Undo parse_undo(const Json& undo) {
 struct Built {
   std::unique_ptr<Action> action;
   const cleanup::HandlerCleanup* handlers = nullptr;  // set for a handler task
+  const cleanup::RecycleBinCleanup* bin = nullptr;    // set for a recycle_bin task
 };
 
 Result<Built> build(const UserTask& task, const Toolbox& tools, const std::stop_token& stop) {
@@ -175,6 +183,19 @@ Result<Built> build(const UserTask& task, const Toolbox& tools, const std::stop_
       const cleanup::HandlerCleanup* handlers = action.get();
       return Built{.action = std::move(action), .handlers = handlers};
     }
+    case TaskKind::recycle_bin: {
+      if (task.deleted_days < cleanup::min_bin_days) {
+        return fail(Errc::refused, "the tray deletes no Recycle Bin item deleted less than " +
+                                       std::to_string(cleanup::min_bin_days) + " days ago");
+      }
+      if (tools.recycle_bin == nullptr || tools.clock == nullptr) {
+        return fail(Errc::invalid_state, "no Recycle Bin to clean");
+      }
+      auto action = std::make_unique<cleanup::RecycleBinCleanup>(
+          *tools.recycle_bin, *tools.clock, task.deleted_days, task.tier, stop);
+      const cleanup::RecycleBinCleanup* bin = action.get();
+      return Built{.action = std::move(action), .bin = bin};
+    }
     case TaskKind::relocate:
       if (task.recipe) {
         return Built{.action = std::make_unique<placement::RecipeAction>(
@@ -188,7 +209,8 @@ Result<Built> build(const UserTask& task, const Toolbox& tools, const std::stop_
 
 // The preview items to apply, under their plan item ids. A native command acts on the tool's
 // whole cache and a relocation on the one folder, so they run once any item is left, under that
-// item's id (by path when it matches); handlers run only when their own item is left.
+// item's id (by path when it matches); handlers and the Recycle Bin items run only when their own
+// item is left.
 Result<Preview> select(const UserTask& task, const Preview& preview) {
   if (task.items.empty()) {
     return fail(Errc::refused, "no item of the plan was approved");
@@ -198,7 +220,8 @@ Result<Preview> select(const UserTask& task, const Preview& preview) {
     const auto match = std::ranges::find_if(task.items, [&](const TaskItem& approved) {
       return placement::same_path(approved.path, item.path);
     });
-    if (match == task.items.end() && task.kind == TaskKind::handler) {
+    if (match == task.items.end() &&
+        (task.kind == TaskKind::handler || task.kind == TaskKind::recycle_bin)) {
       continue;
     }
     item.id = PlanItemId{match == task.items.end() ? task.items.front().id : match->id};
@@ -393,6 +416,9 @@ TaskReport run(const UserTask& task, const Toolbox& tools, const std::stop_token
   }
   if (built->handlers != nullptr) {
     report.skipped = built->handlers->skipped();
+  }
+  if (built->bin != nullptr) {
+    report.skipped = built->bin->skipped();
   }
   return report;
 }

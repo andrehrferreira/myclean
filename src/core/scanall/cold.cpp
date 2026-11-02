@@ -8,6 +8,7 @@
 #include <format>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/clean/patterns.hpp"
@@ -26,6 +27,40 @@ namespace fs = std::filesystem;
 constexpr std::array<placement::DriveClass, 3> ssd_classes = {
     placement::DriveClass::nvme, placement::DriveClass::sata_ssd, placement::DriveClass::nvme_qlc};
 constexpr std::array<placement::DriveClass, 1> hdd_classes = {placement::DriveClass::hdd};
+
+constexpr std::array<std::wstring_view, 3> archive_patterns = {L"*.zip", L"*.rar", L"*.7z"};
+
+// A backup or a store of archives: named like a backup, or at least half of it is archives
+// lying directly inside. Such a folder belongs on an HDD as a whole.
+bool backup_like(const space::Folder& folder) {
+  if (clean::wildcard_match(folder.path.filename().native(), L"*backup*")) {
+    return true;
+  }
+  Bytes archives;
+  for (const space::FileItem& file : folder.files) {
+    if (std::ranges::any_of(archive_patterns, [&file](std::wstring_view pattern) {
+          return clean::wildcard_match(file.name.native(), pattern);
+        })) {
+      archives += file.size_on_disk;
+    }
+  }
+  return archives.count() > 0 && archives.count() * 2 >= folder.size_on_disk.count();
+}
+
+// By folder index: the bytes of the backup-like folders at or below it (the outermost only).
+std::vector<Bytes> backup_bytes(const space::ScanResult& tree) {
+  std::vector<Bytes> bytes(tree.folders.size());
+  for (std::size_t index = tree.folders.size(); index-- > 0;) {
+    const space::Folder& folder = tree.folders[index];
+    if (backup_like(folder)) {
+      bytes[index] = folder.size_on_disk;
+    }
+    if (folder.parent != space::no_parent) {
+      bytes[folder.parent] += bytes[index];
+    }
+  }
+  return bytes;
+}
 
 bool used_inside(std::span<const fs::path> in_use, const fs::path& folder) {
   return std::ranges::any_of(
@@ -94,6 +129,7 @@ std::vector<Finding> find_cold(const space::ScanResult& tree, const FolderTimes&
   }
   const WallTime cutoff = now - std::chrono::duration_cast<WallTime::duration>(
                                     std::chrono::months{options.min_age_months});
+  const std::vector<Bytes> backups = backup_bytes(tree);
   // Closed: the folder and everything below it are decided (proposed, excluded or too small).
   std::vector<bool> closed(tree.folders.size(), false);
   for (std::size_t index = 1; index < tree.folders.size(); ++index) {
@@ -103,7 +139,10 @@ std::vector<Finding> find_cold(const space::ScanResult& tree, const FolderTimes&
       closed[index] = true;
       continue;
     }
-    if (times.complete[index] && times.newest[index] < cutoff &&
+    // Backups next to min_size or more of other content (project trees): its parts are judged.
+    const bool mixed =
+        backups[index].count() > 0 && folder.size_on_disk >= backups[index] + options.min_size;
+    if (!mixed && times.complete[index] && times.newest[index] < cutoff &&
         !used_inside(in_use, folder.path)) {
       findings.push_back(cold_finding(folder, times.newest[index], drive, drives));
       closed[index] = true;

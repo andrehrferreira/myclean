@@ -30,6 +30,7 @@
 #include "core/cleaning/records.hpp"
 #include "core/cleanup/dism_cleanup.hpp"
 #include "core/cleanup/handler_cleanup.hpp"
+#include "core/cleanup/recycle_bin.hpp"
 #include "core/model/action.hpp"
 #include "core/model/actor.hpp"
 #include "core/model/finding.hpp"
@@ -91,6 +92,47 @@ std::string reason_of(const clean::Candidate& candidate, WallTime now) {
     reason += ", Windows handler \"" + candidate.handler + "\"";
   }
   return reason;
+}
+
+// The deletion age of the aged Recycle Bin case that selected `candidate`: a user-scope
+// "Recycle Bin" handler case with require.min_age_days; nullopt for any other candidate.
+std::optional<int> bin_age(std::span<const rules::CleaningRule> rules,
+                           const clean::Candidate& candidate) {
+  if (candidate.strategy != rules::Strategy::handler ||
+      candidate.handler != cleanup::recycle_bin_handler ||
+      candidate.scope != ExecutionContext::user) {
+    return std::nullopt;
+  }
+  const auto rule = std::ranges::find(rules, candidate.rule_id, &rules::CleaningRule::id);
+  return rule == rules.end() ? std::nullopt : rule->require.min_age_days;
+}
+
+// Sizes `candidate`, the aged Recycle Bin case of `days`, from the owner's $I records and sets its
+// item and `reason`; false when it is no candidate: nothing deleted that long ago, or (a problem)
+// too young an age or a bin that cannot be read.
+bool size_aged_bin(const cleanup::IBinRecords& bin, int days, WallTime now,
+                   const std::stop_token& stop, clean::Candidate& candidate, std::string& reason,
+                   std::vector<std::string>& problems) {
+  if (days < cleanup::min_bin_days) {
+    problems.push_back("Recycle Bin: " + candidate.rule_id + " asks for items deleted " +
+                       std::to_string(days) + " days ago; at least " +
+                       std::to_string(cleanup::min_bin_days) + " are required");
+    return false;
+  }
+  const Result<std::vector<cleanup::BinFile>> files = bin.read(stop);
+  if (!files) {
+    problems.push_back("Recycle Bin: " + files.error().message);
+    return false;
+  }
+  const cleanup::AgedItems aged = cleanup::aged_records(*files, now, std::chrono::days{days});
+  if (aged.bytes.count() == 0) {
+    return false;
+  }
+  candidate.size = aged.bytes;
+  candidate.path = cleanup::recycle_bin_item(days);
+  reason = candidate.category + ", " + std::to_string(aged.count) + " items deleted " +
+           std::to_string(days) + " days ago or earlier";
+  return true;
 }
 
 // One plan a scan builds.
@@ -184,6 +226,8 @@ Slot slot_of(const Candidate& candidate, const fs::path& system_root) {
   Slot slot{.spec = PlanSpec{.tier = candidate.tier, .scope = ExecutionContext::service},
             .item = PlanItem{.path = candidate.path, .size = candidate.size}};
   PlanSpec& spec = slot.spec;
+  const std::optional<int> bin_days =
+      candidate.strategy == "handler" ? cleanup::recycle_bin_days(candidate.path) : std::nullopt;
   if (candidate.strategy == "native" && candidate.scope == ExecutionContext::service) {
     slot.key = tier + ":dism";
     slot.action = "DismCleanup";
@@ -202,6 +246,19 @@ Slot slot_of(const Candidate& candidate, const fs::path& system_root) {
     spec.commands = {candidate.command};
     spec.undo = "not reversible: the tool downloads what it needs again";
     spec.params = Json{{"command", candidate.command}};
+  } else if (bin_days) {
+    const std::string days = std::to_string(*bin_days);
+    slot.key = tier + ":recycle-bin";
+    slot.action = "RecycleBinCleanup";
+    spec.kind = PlanKind::recycle_bin;
+    spec.scope = ExecutionContext::user;
+    spec.title = "Empty the Recycle Bin of items deleted " + days + " days ago or earlier";
+    spec.commands = {
+        "IFileOperation permanent delete with FOF_NO_UI of the Recycle Bin items of "
+        "every fixed volume deleted at least " +
+        days + " days ago"};
+    spec.undo = "not reversible: the items are deleted permanently";
+    spec.params = Json{{"deleted_days", *bin_days}};
   } else if (candidate.strategy == "handler") {
     slot.key = tier + ":handler:" + std::string(scope_name(candidate.scope));
     slot.action = "HandlerCleanup";
@@ -324,8 +381,15 @@ Result<std::vector<Candidate>> Executor::evaluate(const RuleSet& rules, WallTime
   }
   std::vector<Candidate> found;
   for (clean::Candidate& candidate : evaluation.candidates) {
-    if (candidate.strategy == rules::Strategy::handler &&
-        candidate.scope == ExecutionContext::service) {
+    std::string reason = reason_of(candidate, now);
+    if (const std::optional<int> days = bin_age(rules.rules, candidate)) {
+      // The aged Recycle Bin items, sized from the owner's $I records: none, no candidate.
+      if (probes_.bin == nullptr ||
+          !size_aged_bin(*probes_.bin, *days, now, stop, candidate, reason, problems)) {
+        continue;
+      }
+    } else if (candidate.strategy == rules::Strategy::handler &&
+               candidate.scope == ExecutionContext::service) {
       // The service sizes the system-area handlers; one without a host, or with nothing to
       // free, is no candidate.
       if (probes_.handlers == nullptr) {
@@ -350,7 +414,7 @@ Result<std::vector<Candidate>> Executor::evaluate(const RuleSet& rules, WallTime
                               .size = candidate.size,
                               .command = candidate.command,
                               .handler = candidate.handler,
-                              .reason = reason_of(candidate, now),
+                              .reason = std::move(reason),
                               .found_at = now});
   }
   return found;

@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -11,6 +12,7 @@
 #include <windows.h>
 
 #include "core/clean/engine.hpp"
+#include "core/clean/probes.hpp"
 #include "core/clean/workspaces.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
@@ -130,13 +132,16 @@ class SandboxRepository : public ::testing::Test {
   }
 
   // Runs a setup command in the project, isolated from the owner's hooks and signing.
-  void git(std::vector<std::wstring> arguments) const {
+  void git(std::vector<std::wstring> arguments) const { git_at(project_, std::move(arguments)); }
+
+  // The same in `folder` (a worktree of the project).
+  void git_at(const fs::path& folder, std::vector<std::wstring> arguments) const {
     std::vector<std::wstring> full = {
         L"-c", L"user.name=MyClean Test",
         L"-c", L"user.email=test@example.invalid",
         L"-c", L"commit.gpgsign=false",
         L"-c", L"core.hooksPath=" + (sandbox_.root() / "no-hooks").native(),
-        L"-C", project_.native()};
+        L"-C", folder.native()};
     full.insert(full.end(), arguments.begin(), arguments.end());
     const Result<ProcessOutput> output = run_hidden(git_path_, full, 60s);
     ASSERT_TRUE(output.has_value()) << output.error().message;
@@ -205,6 +210,62 @@ TEST_F(SandboxRepository, RepositoryWithoutCommitsHasNoLastCommit) {
   EXPECT_FALSE(GitCli{git_path()}.last_commit(sandbox().root() / "no-repo").has_value());
 }
 
+// The linked worktree git describes at `folder`; the test fails when git cannot answer or
+// describes none.
+clean::Worktree described(const GitCli& git, const fs::path& folder) {
+  const Result<std::optional<clean::Worktree>> worktree = git.worktree(folder);
+  EXPECT_TRUE(worktree.has_value() && worktree->has_value())
+      << (worktree ? "not a linked worktree" : worktree.error().message);
+  return worktree.value_or(std::nullopt).value_or(clean::Worktree{});
+}
+
+TEST_F(SandboxRepository, DescribesLinkedWorktrees) {
+  git({L"branch", L"-M", L"main"});
+  const fs::path merged = sandbox().root() / "merged";
+  const fs::path detached = sandbox().root() / "detached";
+  const fs::path ahead = sandbox().root() / "ahead";
+  const fs::path dirty = sandbox().root() / "dirty";
+  git({L"worktree", L"add", L"-q", L"-b", L"done", merged.native()});
+  git({L"worktree", L"add", L"-q", L"--detach", detached.native()});
+  git({L"worktree", L"add", L"-q", L"-b", L"ahead", ahead.native()});
+  git_at(ahead, {L"commit", L"-q", L"--allow-empty", L"-m", L"not merged"});
+  git({L"worktree", L"add", L"-q", L"-b", L"dirty", dirty.native()});
+  write_text(dirty / "new.txt", "untracked");
+  const GitCli git{git_path()};
+
+  const clean::Worktree done = described(git, merged);
+  EXPECT_TRUE(fs::equivalent(done.repository, project() / ".git"));
+  EXPECT_EQ(done.branch, "done");
+  EXPECT_EQ(done.base, "main");
+  EXPECT_TRUE(done.merged);
+  EXPECT_TRUE(done.clean);
+  const clean::Worktree head = described(git, detached);
+  EXPECT_EQ(head.branch, "");
+  EXPECT_TRUE(head.merged && head.clean);
+  EXPECT_FALSE(described(git, ahead).merged);
+  const clean::Worktree changed = described(git, dirty);
+  EXPECT_TRUE(changed.merged);
+  EXPECT_FALSE(changed.clean);
+  // The repository's own work tree is not a linked worktree; one whose gitdir is gone fails.
+  const Result<std::optional<clean::Worktree>> own = git.worktree(project());
+  ASSERT_TRUE(own.has_value()) << own.error().message;
+  EXPECT_FALSE(own->has_value());
+  write_text(sandbox().root() / "stale" / ".git",
+             "gitdir: " + sandbox().root().string() + "/gone\n");
+  EXPECT_FALSE(git.worktree(sandbox().root() / "stale").has_value());
+}
+
+TEST_F(SandboxRepository, ComparesWithTheBranchOfOriginHead) {
+  const fs::path merged = sandbox().root() / "merged";
+  git({L"worktree", L"add", L"-q", L"-b", L"done", merged.native()});
+  git({L"update-ref", L"refs/remotes/origin/trunk", L"HEAD"});
+  git({L"symbolic-ref", L"refs/remotes/origin/HEAD", L"refs/remotes/origin/trunk"});
+
+  const clean::Worktree done = described(GitCli{git_path()}, merged);
+
+  EXPECT_EQ(done.base, "origin/trunk");
+  EXPECT_TRUE(done.merged && done.clean);
+}
 // The developer-artifact scan end to end on the real file system and git, with the shipped
 // rules, two months from now: only the ignored, untracked node_modules is proposed.
 TEST_F(SandboxRepository, ScanProposesOnlyIgnoredUntrackedArtifacts) {

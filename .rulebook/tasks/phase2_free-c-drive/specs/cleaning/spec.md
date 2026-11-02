@@ -126,6 +126,27 @@ Given a handler that the X3 spike found cannot run without UI
 When the catalog is loaded
 Then that handler is not offered as a cleaning item
 
+### Requirement: Aged Recycle Bin Items
+The system SHALL treat a `Recycle Bin` handler case with `require.min_age_days` as the owner's Recycle Bin items deleted at least that many days ago on every fixed volume, judged by the deletion time each item's `$I` record holds and never by file times. The service SHALL size the plan from the owner's `$I` records (items whose `$R` content is gone count nothing) and propose it as one user-scope `recycle_bin` plan; the tray SHALL delete those items permanently through the shell's Recycle Bin folder with the owner's token and no UI. The deny-list keeps `?:\$Recycle.Bin` out of MyClean's own delete path, and an age below 7 days MUST NOT be proposed or run. The whole bin stays the `ask` handler case.
+
+#### Scenario: Only items deleted long enough ago
+Given the owner's bin on E: holds items deleted 31, 30 and 12 days ago, and one deleted 140 days ago whose content Windows already removed
+When the scan evaluates `windows/recycle-bin-aged` (auto, 30 days)
+Then one approved user-scope plan is sized by the items deleted 31 and 30 days ago
+And the tray deletes only the items the shell lists as deleted 30 days ago or earlier
+
+#### Scenario: Never through the delete path
+Given an approved aged Recycle Bin plan
+When it runs
+Then the tray deletes each item with IFileOperation, FOF_NO_UI and no FOFX_RECYCLEONDELETE, on a private desktop
+And the plan is recorded as not reversible and the tray offers no undo
+
+#### Scenario: Too young an age
+Given a case asking for items deleted 3 days ago
+When the scan evaluates it
+Then no plan is proposed and the scan reports a problem
+And the tray refuses such a task without reading the bin
+
 ### Requirement: Cleaning Tiers
 The system SHALL assign every cleaning item a tier: `auto` items run on schedule without a prompt, `ask` items are scanned on schedule and wait in the approval inbox, and `report` items are only shown and never acted on by MyClean; the owner MAY promote or demote any rule.
 

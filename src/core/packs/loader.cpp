@@ -110,7 +110,14 @@ std::vector<Claim> claims_of(const Pack& pack) {
       claim(claims, rule.id, "native command", rule.command);
     }
     if (!rule.handler.empty()) {
-      claim(claims, rule.id, "cleanup handler", rule.handler);
+      // The Recycle Bin items deleted long ago are not the whole bin (core/cleanup/recycle_bin).
+      std::string handler_kind = "cleanup handler";
+      if (const std::optional<int> days = rule.require.min_age_days) {
+        handler_kind.append(" for items deleted ")
+            .append(std::to_string(*days))
+            .append(" days ago");
+      }
+      claim(claims, rule.id, handler_kind, rule.handler);
     }
   }
   for (const map::Area& area : pack.attribution) {

@@ -1,17 +1,24 @@
 #pragma once
 
+#include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
+#include <ratio>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "core/cleanup/command_runner.hpp"
+#include "core/cleanup/handler_cleanup.hpp"
 #include "core/cleanup/handler_host.hpp"
+#include "core/cleanup/recycle_bin.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 
@@ -86,6 +93,93 @@ class FakeHost final : public IHandlerHost {
   std::map<std::string, Error> failures;
   std::vector<std::string> purged;
   std::vector<std::filesystem::path> volumes;
+};
+
+// FILETIME ticks of `time`.
+inline std::uint64_t filetime_of(WallTime time) {
+  constexpr std::uint64_t epoch_ticks = 116444736000000000ULL;
+  const auto ticks =
+      std::chrono::duration_cast<std::chrono::duration<std::int64_t, std::ratio<1, 10'000'000>>>(
+          time.time_since_epoch());
+  return epoch_ticks + static_cast<std::uint64_t>(ticks.count());
+}
+
+// A $I record as Explorer writes it: version 2 (int32 length, the path and its NUL) or 1 (the
+// path NUL-padded to 260 code units).
+inline std::vector<std::uint8_t> bin_record(int version, std::uint64_t size, WallTime deleted,
+                                            std::wstring_view original) {
+  std::vector<std::uint8_t> data;
+  const auto put = [&data](std::uint64_t value, int width) {
+    for (int index = 0; index < width; ++index) {
+      data.push_back(static_cast<std::uint8_t>(value >> (8U * static_cast<unsigned>(index))));
+    }
+  };
+  put(static_cast<std::uint64_t>(version), 8);
+  put(size, 8);
+  put(filetime_of(deleted), 8);
+  const std::size_t units = version == 1 ? 260 : original.size() + 1;
+  if (version != 1) {
+    put(units, 4);
+  }
+  for (std::size_t index = 0; index < units; ++index) {
+    put(index < original.size() ? static_cast<std::uint64_t>(original[index]) : 0U, 2);
+  }
+  return data;
+}
+
+// The owner's $I files, fixed.
+class FakeBinRecords final : public IBinRecords {
+ public:
+  [[nodiscard]] Result<std::vector<BinFile>> read(const std::stop_token& /*stop*/) const override {
+    ++reads;
+    if (failure) {
+      return tl::unexpected(*failure);
+    }
+    return files;
+  }
+
+  std::vector<BinFile> files;
+  std::optional<Error> failure;
+  mutable int reads = 0;
+};
+
+// A Recycle Bin of fixed items; remove() takes them out unless they fail.
+class FakeRecycleBin final : public IRecycleBin {
+ public:
+  [[nodiscard]] Result<std::vector<BinItem>> items(const std::stop_token& /*stop*/) override {
+    if (failure) {
+      return tl::unexpected(*failure);
+    }
+    return contents;
+  }
+
+  [[nodiscard]] Result<std::vector<Skipped>> remove(std::span<const std::string> ids,
+                                                    const std::stop_token& /*stop*/) override {
+    if (failure) {
+      return tl::unexpected(*failure);
+    }
+    std::vector<Skipped> left;
+    for (const std::string& id : ids) {
+      removed.push_back(id);
+      const auto item = std::ranges::find(contents, id, &BinItem::id);
+      if (const auto error = failures.find(id); error != failures.end()) {
+        left.push_back(
+            {.target = item == contents.end() ? id : item->name, .error = error->second});
+      } else if (item == contents.end()) {
+        left.push_back(
+            {.target = id,
+             .error = {.code = Errc::not_found, .message = "no longer in the Recycle Bin"}});
+      } else {
+        contents.erase(item);
+      }
+    }
+    return left;
+  }
+
+  std::vector<BinItem> contents;
+  std::map<std::string, Error> failures;
+  std::optional<Error> failure;  // the bin cannot be read
+  std::vector<std::string> removed;
 };
 
 }  // namespace myclean::cleanup::testing

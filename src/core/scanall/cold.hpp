@@ -33,7 +33,9 @@ struct ColdOptions {
 // min_size whose newest change is older than min_age_months, on an NVMe or SATA SSD. A folder
 // is proposed only when its whole subtree was listed, and never below a system_location() or
 // when a running process uses a folder inside it (`in_use`: their current and image folders);
-// only the outermost cold folder is proposed. Each is an archive finding with a move_folder plan
+// only the outermost cold folder is proposed, unless it holds backup-like folders (named like
+// *backup*, or at least half .zip, .rar or .7z files directly inside) next to min_size or more of
+// other content: then its subfolders are judged. Each is an archive finding with a move_folder plan
 // to the healthy HDD with the most room that keeps 10 % free afterwards, or a manual-review
 // finding when no HDD qualifies.
 [[nodiscard]] std::vector<Finding> find_cold(const space::ScanResult& tree,

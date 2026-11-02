@@ -152,6 +152,30 @@ TEST(Cold, HddAndUnreadableSubtreesAreNotJudged) {
   EXPECT_TRUE(find_cold(tree, folder_times(tree), drives[1], drives, in_use, now).empty());
 }
 
+TEST(Cold, BackupsNextToOtherContentAreProposedApartFromIt) {
+  FakeDirectoryReader reader;
+  reader.listings[LR"(C:\)"] = {folder("Old"), folder("ToS")};
+  // Only backups: proposed whole.
+  reader.listings[LR"(C:\Old)"] = {folder("Backup 2023"), folder("Backup 2024")};
+  reader.listings[LR"(C:\Old\Backup 2023)"] = {file("a.bin", 2_GiB, long_ago, 1)};
+  reader.listings[LR"(C:\Old\Backup 2024)"] = {file("b.bin", 2_GiB, long_ago, 2)};
+  // A store of archives next to a project tree: each is proposed on its own.
+  reader.listings[LR"(C:\ToS)"] = {folder("Client"), folder("Packs")};
+  reader.listings[LR"(C:\ToS\Client)"] = {file("c.uasset", 3_GiB, long_ago, 3)};
+  reader.listings[LR"(C:\ToS\Packs)"] = {file("d.zip", 2_GiB, long_ago, 4),
+                                         file("readme.txt", 1_MiB, long_ago, 5)};
+  const space::ScanResult tree = scan_ok(reader, LR"(C:\)");
+  const std::vector<DriveInfo> drives = {drive(LR"(C:\)", DriveClass::nvme),
+                                         drive(LR"(K:\)", DriveClass::hdd)};
+
+  const std::vector<Finding> cold = find_cold(tree, folder_times(tree), drives[0], drives, {}, now);
+
+  ASSERT_EQ(cold.size(), 3U);
+  EXPECT_EQ(cold[0].path, fs::path(LR"(C:\Old)"));
+  EXPECT_EQ(cold[1].path, fs::path(LR"(C:\ToS\Client)"));
+  EXPECT_EQ(cold[2].path, fs::path(LR"(C:\ToS\Packs)"));
+}
+
 TEST(Placement, FailingDriveMovesItsDataOffFirst) {
   FakeDirectoryReader reader;
   reader.listings[LR"(K:\)"] = {folder("Media"), folder("Windows"), folder("tiny")};

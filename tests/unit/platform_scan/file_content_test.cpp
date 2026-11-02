@@ -101,6 +101,40 @@ TEST(Win32ContentHasher, RefusesALinkAFolderAndACloudFile) {
   EXPECT_EQ(hasher.hash(sandbox.root() / "cloud.bin", std::nullopt).error().code, Errc::refused);
 }
 
+TEST(Win32ContentReader, ReadsARangeShortAtTheEndAndNothingPastIt) {
+  const Sandbox sandbox;
+  write_file(sandbox.root() / "a.zip", 3'000'000, 'a');
+  {
+    std::ofstream file(extended(sandbox.root() / "a.zip"), std::ios::binary | std::ios::in);
+    file.seekp(2'999'990);
+    file.write("0123456789", 10);
+  }
+  const Win32ContentReader reader;
+
+  EXPECT_EQ(reader.read(sandbox.root() / "a.zip", 2'999'990, 4).value(), "0123");
+  EXPECT_EQ(reader.read(sandbox.root() / "a.zip", 2'999'995, 100).value(), "56789");
+  EXPECT_EQ(reader.read(sandbox.root() / "a.zip", 3'000'000, 10).value(), "");
+  EXPECT_EQ(reader.read(sandbox.root() / "a.zip", 5'000'000, 10).value(), "");
+  // Longer than one read chunk.
+  const Result<std::string> long_read = reader.read(sandbox.root() / "a.zip", 0, 2'500'000);
+  ASSERT_TRUE(long_read.has_value()) << long_read.error().message;
+  EXPECT_EQ(long_read->size(), 2'500'000U);
+  EXPECT_EQ(long_read->find_first_not_of('a'), std::string::npos);
+}
+
+TEST(Win32ContentReader, RefusesALinkAFolderAndACloudFile) {
+  const Sandbox sandbox;
+  write_file(sandbox.root() / "target" / "a.rar", 10);
+  ASSERT_TRUE(make_junction(sandbox.root() / "link", sandbox.root() / "target"));
+  write_file(sandbox.root() / "cloud.rar", 10);
+  ASSERT_TRUE(mark_offline(sandbox.root() / "cloud.rar"));
+  const Win32ContentReader reader;
+
+  EXPECT_EQ(reader.read(sandbox.root() / "link", 0, 8).error().code, Errc::invalid_argument);
+  EXPECT_EQ(reader.read(sandbox.root() / "target", 0, 8).error().code, Errc::invalid_argument);
+  EXPECT_EQ(reader.read(sandbox.root() / "cloud.rar", 0, 8).error().code, Errc::refused);
+}
+
 TEST(Win32ZoneIdentifierReader, ReadsTheStreamInUtf8OrUtf16) {
   const Sandbox sandbox;
   write_file(sandbox.root() / "setup.zip", 10);

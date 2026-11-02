@@ -82,6 +82,13 @@ conditions, while inside one git must still ignore the folder and track nothing 
 `require.contains = "<file name>"` (project rules only) keeps only the matched folders that hold
 that file: `targets = ['build\*']` with `contains = "CMakeCache.txt"` selects CMake build trees
 and never a `build\_deps` or a file such as `build.zig`.
+A `handler` case of the `Recycle Bin` handler with `require.min_age_days` stands for the owner's
+Recycle Bin items deleted at least that many days ago on every fixed volume, counted from each
+item's deletion time (its `$I` record), never from file times. The service sizes it from those
+records and the tray deletes the items through the shell with the owner's token
+(`core/cleanup/recycle_bin.hpp`), not through the handler; at least 7 days, or the scan reports a
+problem. It claims `cleanup handler for items deleted <days> days ago`, so it does not conflict
+with the case of the whole bin.
 
 ### relocate.toml: relocation recipes
 
@@ -350,7 +357,7 @@ the new ones.
 | `vcpkg` | clean: build trees, packages and downloads of the usual roots and of clones in the workspaces, binary cache archives; attribution (installed libraries: uninstall; roots: review) |
 | `visual-studio` | clean: component (MEF) cache, the installer's package payloads, IntelliSense, browse-database, Copilot and search caches inside .vs of solutions inactive 7 days (also outside git), .vs state of inactive solutions; attribution: installations (uninstall), per-user data (review); kb: vctip |
 | `vscode` | clean: old version data, extension packages, stale workspace storage, Chromium caches, webview resource cache (ask); attribution: web storage, extensions and Cursor data (review); kb: Code, Copilot runtime |
-| `windows` | clean: temp folders, crash dumps, error reports, icon cache, PowerToys update installers, the Windows cleanup handlers, DISM component cleanup; attribution: system files and folders, programs, the owner's folders, MyClean's quarantine; kb: Windows, PowerToys, OneDrive and other Microsoft processes |
+| `windows` | clean: temp folders, crash dumps, error reports, icon cache, PowerToys update installers, the Windows cleanup handlers, the Recycle Bin items deleted 30 days ago or earlier (auto), DISM component cleanup; attribution: system files and folders, programs, the owner's folders, MyClean's quarantine; kb: Windows, PowerToys, OneDrive and other Microsoft processes |
 | `windows-setup-logs` | clean: the Setup Log Files and Windows Upgrade Log Files handlers; attribution: Panther (the upgrade-log handler), setup logs |
 | `wsl-docker` | relocate: WSL 2 distributions (`wsl --manage --move`), WSL 1 distributions (`wsl-import`); clean: `docker system prune`, `wsl tmp prune` (entries of a WSL 1 distribution's /tmp older than 7 days, deleted from inside Linux); attribution: distribution disks, WSL 1 file systems and their /tmp, Docker Desktop disk (also in a custom location, and copies left by a move); kb: WSL and Docker processes |
 | `zig` | clean: global cache entries, the `.zig-cache` of Zig projects inactive 7 days; attribution: global cache, project caches |

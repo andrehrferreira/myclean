@@ -23,10 +23,10 @@ constexpr std::array<std::string_view, action_group_count> group_names = {
     "remove",   "deduplicate", "relocate",         "archive",
     "compress", "defrag-trim", "uninstall-review", "manual-review"};
 
-constexpr std::array<std::string_view, 14> plan_names = {
+constexpr std::array<std::string_view, 15> plan_names = {
     "delete_items",   "quarantine_items", "native_command", "cleanup_handler", "compress_folder",
     "relocate_cache", "hibernation",      "page_file",      "shadow_storage",  "retrim_volume",
-    "defrag_volume",  "move_folder",      "uninstall",      "review"};
+    "defrag_volume",  "move_folder",      "uninstall",      "remove_worktree", "review"};
 
 // Lower case; the folders Windows keeps in the root of a volume.
 constexpr std::array<std::string_view, 12> system_folders = {"windows",

@@ -1,12 +1,15 @@
 #include "core/user_tasks/task.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -27,6 +30,7 @@
 #include "core/placement/recipe.hpp"
 #include "core/placement/relocation.hpp"
 #include "core/placement/settings.hpp"
+#include "fakes/fake_clock.hpp"
 #include "fakes/fake_file_system.hpp"
 
 namespace myclean::user_tasks {
@@ -46,6 +50,17 @@ Json handler_task(const std::vector<std::string>& handlers, const std::vector<Js
               {"kind", "handler"}, {"operation", "apply"},
               {"tier", "ask"},     {"action", {{"volume", "C:\\"}, {"handlers", handlers}}},
               {"items", items}};
+}
+
+Json recycle_bin_task(int days, Json approved) {
+  return Json{
+      {"plan", 6},
+      {"title", "Empty the Recycle Bin of items deleted 30 days ago or earlier"},
+      {"kind", "recycle_bin"},
+      {"operation", "apply"},
+      {"tier", "auto"},
+      {"action", {{"deleted_days", days}}},
+      {"items", Json::array({item(61, "recycle-bin:deleted-30-days-ago", std::move(approved))})}};
 }
 
 Json relocate_task(std::string_view operation) {
@@ -77,6 +92,8 @@ class UserTaskTest : public ::testing::Test {
 
   cleanup::testing::FakeRunner& runner() { return runner_; }
   cleanup::testing::FakeHost& host() { return host_; }
+  cleanup::testing::FakeRecycleBin& bin() { return bin_; }
+  [[nodiscard]] WallTime now() const { return clock_.now(); }
   fakes::FakeFileSystem& fs() { return fs_; }
   placement::testing::FakeUserEnvironment& env() { return env_; }
   placement::testing::FakeDriveFacts& drives() { return drives_; }
@@ -84,6 +101,8 @@ class UserTaskTest : public ::testing::Test {
  private:
   cleanup::testing::FakeRunner runner_;
   cleanup::testing::FakeHost host_;
+  cleanup::testing::FakeRecycleBin bin_;
+  fakes::FakeClock clock_{std::chrono::sys_days{std::chrono::November / 2 / 2026}};
   fakes::FakeFileSystem fs_;
   placement::testing::FakeUserEnvironment env_;
   placement::testing::FakeTextFiles files_;
@@ -91,6 +110,8 @@ class UserTaskTest : public ::testing::Test {
   placement::testing::FakeDriveFacts drives_;
   Toolbox tools_{.runner = &runner_,
                  .handlers = &host_,
+                 .recycle_bin = &bin_,
+                 .clock = &clock_,
                  .file_system = &fs_,
                  .placement = {.environment = &env_,
                                .files = &files_,
@@ -253,6 +274,61 @@ TEST_F(UserTaskTest, AFailedPurgeIsReportedWithTheHandlersLeftOut) {
       (Json::array({Json{
           {"target", "Thumbnail Cache"}, {"code", "refused"}, {"message", "showed a window"}}})));
   EXPECT_EQ(ipc::check_task_result(report_record(report)), "");
+}
+
+TEST(ParseTaskTest, ReadsARecycleBinTask) {
+  const Result<UserTask> task = parse_task(recycle_bin_task(30, true));
+  ASSERT_TRUE(task.has_value()) << task.error().message;
+  EXPECT_EQ(task->kind, TaskKind::recycle_bin);
+  EXPECT_EQ(task->tier, Tier::automatic);
+  EXPECT_EQ(task->deleted_days, 30);
+  ASSERT_EQ(task->items.size(), 1U);
+  EXPECT_EQ(task->items[0].path, std::filesystem::path(L"recycle-bin:deleted-30-days-ago"));
+
+  Json broken = recycle_bin_task(30, true);
+  broken["action"].erase("deleted_days");
+  EXPECT_EQ(parse_task(broken).error().code, Errc::invalid_data);
+}
+
+// Cleaning spec, "Aged Recycle Bin Items": only what was deleted 30 days ago or earlier goes.
+TEST_F(UserTaskTest, TheRecycleBinTaskDeletesOnlyTheItemsDeletedLongAgo) {
+  using namespace std::chrono_literals;
+  bin().contents = {{.id = "old", .name = R"(E:\old)", .deleted = now() - 31 * 24h, .size = 5_GiB},
+                    {.id = "new", .name = R"(E:\new)", .deleted = now() - 2 * 24h, .size = 1_GiB}};
+  const TaskReport report = run_json(recycle_bin_task(30, true));
+  EXPECT_EQ(report.state, PlanState::verified) << report.error;
+  EXPECT_EQ(bin().removed, std::vector<std::string>{"old"});
+  EXPECT_EQ(report.undo.not_reversible, "deleted permanently");
+  ASSERT_EQ(report.undo.items.size(), 1U);
+  EXPECT_EQ(report.undo.items[0].item, PlanItemId{61});
+  const Json record = report_record(report);
+  EXPECT_EQ(record.at("verification").at("metric"), "recycle_bin_aged_bytes");
+  EXPECT_EQ(record.at("verification").at("effect"), "better");
+  EXPECT_EQ(ipc::check_task_result(record), "");
+}
+
+TEST_F(UserTaskTest, ARejectedOrTooYoungRecycleBinTaskDeletesNothing) {
+  using namespace std::chrono_literals;
+  bin().contents = {{.id = "old", .name = R"(E:\old)", .deleted = now() - 31 * 24h, .size = 5_GiB}};
+  const TaskReport rejected = run_json(recycle_bin_task(30, false));
+  EXPECT_EQ(rejected.state, PlanState::failed);
+
+  const TaskReport young = run_json(recycle_bin_task(6, true));
+  EXPECT_EQ(young.state, PlanState::failed);
+  EXPECT_NE(young.error.find("less than 7 days ago"), std::string::npos) << young.error;
+  EXPECT_TRUE(bin().removed.empty());
+}
+
+TEST_F(UserTaskTest, ARecycleBinItemTheShellKeepsIsReportedAsSkipped) {
+  using namespace std::chrono_literals;
+  bin().contents = {{.id = "a", .name = R"(E:\a)", .deleted = now() - 40 * 24h, .size = 2_GiB},
+                    {.id = "b", .name = R"(E:\b)", .deleted = now() - 40 * 24h, .size = 3_GiB}};
+  bin().failures.insert_or_assign("b", Error{.code = Errc::io_error, .message = "in use"});
+  const TaskReport report = run_json(recycle_bin_task(30, true));
+  EXPECT_EQ(report.state, PlanState::verified) << report.error;
+  EXPECT_EQ(
+      report_record(report).at("skipped"),
+      (Json::array({Json{{"target", R"(E:\b)"}, {"code", "io_error"}, {"message", "in use"}}})));
 }
 
 // Placement spec, "Exact Relocation Undo": the tray applies, reports the undo data, and later

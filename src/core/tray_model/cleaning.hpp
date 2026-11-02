@@ -61,7 +61,8 @@ struct CleaningStatus {
 struct PlanRow {
   std::int64_t id = 0;
   std::string title;
-  std::string kind;   // cleanup, handler, native, relocate, system_setting, quarantine_restore
+  std::string kind;   // cleanup, handler, native, relocate, system_setting, quarantine_restore,
+                      // recycle_bin
   std::string tier;   // auto, ask, report
   std::string scope;  // user (run by the tray) or service
   std::string state;  // core/model/plan.hpp text forms: awaiting_approval, applied, ...

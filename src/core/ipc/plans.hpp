@@ -18,7 +18,8 @@ namespace myclean::ipc {
 //
 // PlanSummary:
 //   {"id": int, "title": string,
-//    "kind": "cleanup"|"handler"|"native"|"relocate"|"system_setting"|"quarantine_restore",
+//    "kind": "cleanup"|"handler"|"native"|"relocate"|"system_setting"|"quarantine_restore"|
+//            "recycle_bin",
 //    "tier": "auto"|"ask"|"report", "scope": "user"|"service",
 //    "state": "proposed"|"auto"|"awaiting_approval"|"approved"|"applying"|"applied"|"verified"|
 //             "rolled_back"|"failed"|"rejected",
@@ -27,7 +28,8 @@ namespace myclean::ipc {
 //   kind: cleanup = files deleted, quarantined or recycled; handler = Windows disk-cleanup
 //   handlers or DISM; native = a package manager's prune command; relocate = a cache or TEMP
 //   moved through its setting; system_setting = hibernation, page file or shadow storage;
-//   quarantine_restore = quarantined items moved back.
+//   quarantine_restore = quarantined items moved back; recycle_bin = the Recycle Bin items the
+//   owner deleted long ago, deleted permanently.
 //   scope: "service" plans run in the service; "user" plans run in the tray with the owner's
 //   token (user_tasks.*).
 //
@@ -35,7 +37,8 @@ namespace myclean::ipc {
 //   {"id": int, "path": string, "bytes": int, "rule": string|null, "reason": string,
 //    "approved": true|false|null (null: not decided yet)}
 //   path is a file system path, or "handler:<name>" / "dism:component-store" /
-//   "relocate:<cache>" / "relocate:<pack>/<case>[:<instance>]" for items that are not files.
+//   "relocate:<cache>" / "relocate:<pack>/<case>[:<instance>]" /
+//   "recycle-bin:deleted-<days>-days-ago" for items that are not files.
 
 // ---- cleaning.* -------------------------------------------------------------------------------
 
@@ -135,7 +138,8 @@ inline constexpr std::string_view plans_recycle_method = "plans.recycle";
 
 // TRAY ONLY. No parameters. The oldest user-scope plan to run now, or null:
 //   {"task": null | {"plan": int, "title": string,
-//    "kind": "native"|"handler"|"relocate"|"cleanup", "operation": "apply"|"undo",
+//    "kind": "native"|"handler"|"relocate"|"cleanup"|"recycle_bin",
+//    "operation": "apply"|"undo",
 //    "tier": "auto"|"ask"|"report",
 //    "items": [{"id": int, "path": string, "bytes": int, "approved": bool|null,
 //               "volume_serial": int, "file_id": hex string (both 0/"" for non-files)}],
@@ -144,7 +148,9 @@ inline constexpr std::string_view plans_recycle_method = "plans.recycle";
 //            | {"cache", "target", "content": "move"|"regenerate"}   (relocate)
 //            | {"recipe": {the recipe's fields}, "instance", "target", "content"}
 //                                                             (relocate by a recipe)
-//            | {"recycle": true}                              (cleanup: to the Recycle Bin),
+//            | {"recycle": true}                              (cleanup: to the Recycle Bin)
+//            | {"deleted_days": int}  (recycle_bin: the items of every fixed volume's bin deleted
+//                                      at least that many days ago, deleted permanently),
 //    "undo": {"not_reversible": string, "items": [{"item", "data"}]} (undo only: as reported)}}
 // An apply task lists the items not rejected; the tray acts on no other. A task handed out is
 // not handed out again for task_claim_minutes unless reported.

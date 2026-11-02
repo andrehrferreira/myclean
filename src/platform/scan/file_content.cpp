@@ -207,6 +207,36 @@ Result<space::Digest> Win32ContentHasher::hash(const fs::path& file,
   return digest;
 }
 
+Result<std::string> Win32ContentReader::read(const fs::path& file, std::uint64_t offset,
+                                             std::size_t length) const {
+  const Result<wil::unique_hfile> handle = open_content(file);
+  if (!handle) {
+    return tl::unexpected(handle.error());
+  }
+  FILE_IO_PRIORITY_HINT_INFO priority{.PriorityHint = IoPriorityHintLow};
+  ::SetFileInformationByHandle(handle->get(), FileIoPriorityHintInfo, &priority, sizeof(priority));
+
+  const LARGE_INTEGER start{.QuadPart = static_cast<LONGLONG>(offset)};
+  if (::SetFilePointerEx(handle->get(), start, nullptr, FILE_BEGIN) == FALSE) {
+    return tl::unexpected(os_error(::GetLastError(), "cannot seek in", file));
+  }
+  std::string bytes(length, '\0');
+  std::size_t done = 0;
+  while (done < length) {
+    const auto wanted = static_cast<DWORD>(std::min<std::size_t>(length - done, read_chunk_bytes));
+    DWORD read = 0;
+    if (::ReadFile(handle->get(), &bytes[done], wanted, &read, nullptr) == FALSE) {
+      return tl::unexpected(os_error(::GetLastError(), "cannot read", file));
+    }
+    if (read == 0) {
+      break;  // the end of the file
+    }
+    done += read;
+  }
+  bytes.resize(done);
+  return bytes;
+}
+
 Result<fs::path> downloads_folder() {
   PWSTR path = nullptr;
   const HRESULT result =

@@ -15,6 +15,7 @@
 #include "core/cleaning/service.hpp"
 #include "core/cleanup/command_runner.hpp"
 #include "core/cleanup/handler_host.hpp"
+#include "core/cleanup/recycle_bin.hpp"
 #include "core/ipc/status.hpp"
 #include "core/model/result.hpp"
 #include "core/os/file_system.hpp"
@@ -56,6 +57,8 @@ struct CleaningSources {
   std::function<std::unique_ptr<packs::IMachine>(std::string_view owner_sid)> machine;
   // The owner's override packs folder (platform/packs); empty: no owner packs.
   std::function<Result<std::optional<std::filesystem::path>>()> owner_packs;
+  // The $I records of the bins of the owner with this SID; empty: no aged Recycle Bin items.
+  std::function<std::unique_ptr<cleanup::IBinRecords>(std::string_view owner_sid)> bin;
 };
 
 // How this service runs cleaning.
@@ -99,6 +102,7 @@ class CleaningComponent final : public IComponent {
   CleaningSources sources_;
   const packs::IPackFiles* files_;
   std::unique_ptr<packs::IMachine> machine_;
+  std::unique_ptr<cleanup::IBinRecords> bin_;
   CleaningMode mode_;
   std::unique_ptr<cleaning::CleaningService> service_;
   std::mutex mutex_;
