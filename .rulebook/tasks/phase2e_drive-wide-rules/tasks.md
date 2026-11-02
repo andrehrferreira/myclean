@@ -15,11 +15,11 @@
 - [x] 1.14 Cold-data report proposes folders below a mixed top-level tree (G:\ToS mixes backups and live projects) — G 08; done in find_cold: a cold folder holding backup-like folders (*backup*, or mostly .zip/.rar/.7z) next to 1 GiB or more of other content is judged by its subfolders
 - [x] 1.15 Docker: a data-disk folder that is not CustomWslDistroDir becomes an ask case — F 07; done as wsl-docker/docker-data-copy (ask, delete, 30 days, not in use): a DockerDesktopWSL* folder up to two levels below a volume root holding disk\docker_data.vhdx (require.contains, now for any rule) and outside every folder %DOCKER_WSL_DATA% names (require.outside_of; CustomWslDistroDir of settings-store.json and settings.json, and the default; unreadable settings: no value, nothing offered)
 - [x] 1.16 Review the shipped zig/global-cache per-entry deletion and cpp/cmake-artifacts matching files such as build.zig — E open risks; zig/global-cache no longer deletes o entries one by one (h, z, tmp only); cpp/cmake-artifacts build* still relies on git_ignored for files such as build.zig
-- [ ] 1.17 Measure the hourly artifact scan over D:, E:, F:, G:, W: and bound it if it is heavy (a read-only walk of those roots at depth 8 took 86 min in the debug ASan build)
+- [x] 1.17 Measure the hourly artifact scan over D:, E:, F:, G:, W: and bound it if it is heavy (a read-only walk of those roots at depth 8 took 86 min in the debug ASan build); measured: the 16:00 hourly run of the deployed release build (every workspace root, git as the owner) took 2 min 50 s, so no bound is needed
 - [x] 1.19 The service runs git as the owner (owner session token and environment): as SYSTEM git refused every owner repository, so no rule needing git ever proposed anything (0 rust/target items in the first deployed scans)
-- [ ] 1.18 Tail: docs/packs.md, the cleaning spec, CHANGELOG, full quality gate, deploy
+- [x] 1.18 Tail: docs/packs.md, the cleaning spec, CHANGELOG, full quality gate, deploy; done: docs/packs.md and the cleaning and scan-all specs updated per item, CHANGELOG "Drive-wide rules (M2e)", full gate on every commit, deployed
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 2.1 Update or create documentation covering the implementation
-- [ ] 2.2 Write tests covering the new behavior
-- [ ] 2.3 Run tests and confirm they pass
+- [x] 2.1 Update or create documentation covering the implementation; docs/packs.md, cleaning and scan-all specs, CHANGELOG
+- [x] 2.2 Write tests covering the new behavior; tests with every item (engine, parse, catalog, pack fixtures, scanall, platform)
+- [x] 2.3 Run tests and confirm they pass; full gate (1708+ tests) green on each commit

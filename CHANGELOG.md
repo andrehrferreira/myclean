@@ -74,6 +74,28 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `data/packs/`. Each pack has its own fixtures. Owner packs in
   `%ProgramData%\MyClean\packs` override built-ins. `myclean packs list | validate`.
   Guide: `docs/packs.md`.
+- **Drive-wide rules (M2e):**
+  - Clean targets accept `?:\` (every fixed volume); rules may opt in to projects outside
+    git (`require.outside_git`) and select only folders holding a file (`require.contains`).
+  - New cases: Visual Studio IntelliSense caches, Zig project caches, pip uninstall
+    leftovers, idle CMake build trees of active projects, Unreal cooked/staged output (ask),
+    Steam's shader pre-cache in every library (`%STEAM_LIBRARY%`, read from
+    `libraryfolders.vdf`),
+    and the Recycle Bin items deleted more than 30 days ago (auto: sized from the `$I`
+    records by the service, deleted through the shell by the tray as the owner).
+  - The service runs git as the owner (session token and environment), so project
+    artifacts inside repositories are proposed again; it never sets `safe.directory`.
+  - `myclean map` and `scan-all` name the artifact folders the project rules find.
+  - `scan-all` finds archives already extracted on a drive (zip incl. ZIP64, RAR4, RAR5;
+    manual review) and merged, clean, idle git worktrees (`git worktree remove`), and
+    proposes the parts of a cold tree that mixes backups with other content apart.
+  - A copy of Docker Desktop's data folder that its settings no longer name is offered for
+    deletion (ask; `%DOCKER_WSL_DATA%` and `require.outside_of` keep the live one out).
+  - MyClean records its own CPU and memory (`self.cpu`, `self.memory`) for NFR-PERF-1.
+  - New attribution areas: custom Docker data disks, SDKs under `?:\LLVM`, databases
+    (MongoDB, PostgreSQL, pgAdmin), the Megascans library, installer rollback folders.
+  - Every executable carries the application icon; the tray shows it with the state as a
+    dot.
 - Spike notes X1–X8 under `docs/spikes/`.
 
 ### Fixed
@@ -84,3 +106,11 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the injected clock.
 - CI: clang-tidy is pinned to major 19, and STL container annotations are disabled under
   ASan, so CI no longer fails on code that is clean locally.
+- CI: the core include check sets its CMake policies (it failed on the runner's CMake), and
+  the CPU-share test allows for clock-tick rounding on a 4-processor runner.
+- `myclean map` spells its root with long names: under an 8.3 path such as
+  `C:\Users\RUNNER~1` nothing was attributed.
+- Rules acting inside active projects count only a process inside the item as using it, not
+  one anywhere in the project (idle terminals kept every incremental cache).
+- `zig/global-cache` deletes only the `h`, `z` and `tmp` entries, never `o` entries one by
+  one.
