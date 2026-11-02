@@ -2,6 +2,7 @@ myclean_add_test(map
   SOURCES
     attribution_test.cpp
     disk_map_test.cpp
+    project_areas_test.cpp
   DEPENDS
     myclean::map
     myclean::packs

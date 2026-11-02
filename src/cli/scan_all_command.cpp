@@ -45,6 +45,7 @@
 #include "core/ipc/disk_health.hpp"
 #include "core/map/attribution.hpp"
 #include "core/map/disk_map.hpp"
+#include "core/map/project_areas.hpp"
 #include "core/mcp/client.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
@@ -363,8 +364,14 @@ Result<space::ScanResult> build_tree(Run& run, DriveInfo& drive) {
 
 std::optional<map::DiskMap> map_drive(const Run& run, const space::ScanResult& tree,
                                       DriveInfo& drive) {
+  // The artifact folders of the projects in the tree explain what no fixed location names.
+  std::vector<map::Area> areas = run.knowledge->areas;
+  const std::vector<std::wstring> skip =
+      run.knowledge->workspaces ? run.knowledge->workspaces->skip : default_skip();
+  std::ranges::move(map::project_areas(tree, run.knowledge->rules, skip),
+                    std::back_inserter(areas));
   Result<map::DiskMap> map =
-      map::build_map(tree, run.knowledge->areas, *run.environment,
+      map::build_map(tree, std::move(areas), *run.environment,
                      map::VolumeSpace{.total = drive.size, .free = drive.free},
                      {.min_size = min_compress_folder, .depth = 0});
   if (!map) {

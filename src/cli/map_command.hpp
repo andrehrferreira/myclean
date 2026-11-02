@@ -4,6 +4,7 @@
 #include <iosfwd>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace myclean::cli {
 
@@ -25,5 +26,9 @@ struct MapRequest {
 
 // MyClean's data folder next to this executable: <executable>\..\..\data.
 [[nodiscard]] std::filesystem::path default_data_dir();
+
+// The folder names the project search of a map skips when workspaces.toml cannot be read: git
+// data and installed packages, never project roots of their own.
+[[nodiscard]] std::vector<std::wstring> default_skip();
 
 }  // namespace myclean::cli

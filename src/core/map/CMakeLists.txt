@@ -8,6 +8,8 @@ myclean_add_library(map
     disk_map.hpp
     json.cpp
     json.hpp
+    project_areas.cpp
+    project_areas.hpp
   DEPENDS
     myclean::clean
     myclean::rules

@@ -1,10 +1,12 @@
 #include "cli/map_command.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <format>
+#include <iterator>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -18,11 +20,14 @@
 #include "cli/cli.hpp"
 #include "cli/packs_command.hpp"
 #include "cli/text.hpp"
+#include "core/clean/workspaces.hpp"
 #include "core/map/attribution.hpp"
 #include "core/map/disk_map.hpp"
 #include "core/map/json.hpp"
+#include "core/map/project_areas.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/rules/data_files.hpp"
 #include "core/space/scanner.hpp"
 #include "platform/clean/win32_probes.hpp"
 #include "platform/scan/directory_reader.hpp"
@@ -99,6 +104,17 @@ Result<fs::path> scan_root(const std::optional<std::string>& target) {
   return path;
 }
 
+// The folder names the artifact scanner never enters (data_dir\workspaces.toml), or
+// default_skip() without a readable file.
+std::vector<std::wstring> workspace_skip(const fs::path& data_dir) {
+  const rules::DiskDataFiles files;
+  const fs::path file = data_dir / "workspaces.toml";
+  const Result<std::string> text = files.read(file);
+  const Result<clean::Workspaces> parsed =
+      text ? clean::parse_workspace_file(*text, file) : tl::unexpected(text.error());
+  return parsed ? parsed->skip : default_skip();
+}
+
 std::optional<map::VolumeSpace> volume_space(const fs::path& root) {
   ULARGE_INTEGER total{};
   ULARGE_INTEGER free{};
@@ -121,6 +137,10 @@ fs::path default_data_dir() {
     }
     buffer.resize(buffer.size() * 2);
   }
+}
+
+std::vector<std::wstring> default_skip() {
+  return {L".git", L"node_modules"};
 }
 
 int map_command(const MapRequest& request, std::ostream& out, std::ostream& err) {
@@ -161,8 +181,12 @@ int map_command(const MapRequest& request, std::ostream& out, std::ostream& err)
   const map::MapOptions options{
       .min_size = Bytes{static_cast<std::uint64_t>(std::llround(request.min_gb * gib))},
       .depth = request.depth};
-  const Result<map::DiskMap> disk_map = map::build_map(*scan, std::move(local.registry.attribution),
-                                                       environment, volume_space(*root), options);
+  // The artifact folders of the projects in the scan explain what no fixed location names.
+  std::vector<map::Area> areas = std::move(local.registry.attribution);
+  std::ranges::move(map::project_areas(*scan, local.registry.clean, workspace_skip(data_dir)),
+                    std::back_inserter(areas));
+  const Result<map::DiskMap> disk_map =
+      map::build_map(*scan, std::move(areas), environment, volume_space(*root), options);
   if (!disk_map) {
     err << "myclean: map: " << disk_map.error().message << '\n';
     return exit_usage;
