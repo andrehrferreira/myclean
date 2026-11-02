@@ -1,0 +1,3 @@
+// The application icon of every MyClean executable: Explorer, the taskbar and Apps show it.
+// Drawn with the Astra image tool (variation A, 2026-11-02); 16 to 256 px.
+1 ICON "myclean.ico"

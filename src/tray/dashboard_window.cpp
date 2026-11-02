@@ -46,6 +46,9 @@ Result<void> register_class(HINSTANCE instance, WNDPROC procedure) {
   window_class.hInstance = instance;
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast): IDC_ARROW is a Win32 resource macro
   window_class.hCursor = ::LoadCursorW(nullptr, IDC_ARROW);
+  // The application icon (src/resources/myclean.rc) in the title bar and on the taskbar.
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast,performance-no-int-to-ptr): a resource id
+  window_class.hIcon = ::LoadIconW(instance, MAKEINTRESOURCEW(1));
   window_class.lpszClassName = class_name;
   if (::RegisterClassExW(&window_class) == 0 && ::GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
     return fail(Errc::io_error, "RegisterClassEx failed");

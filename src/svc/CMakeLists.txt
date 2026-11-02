@@ -38,6 +38,7 @@ myclean_add_library(svc
     myclean::packs
     myclean::platform_clean
     myclean::platform_fs
+    myclean::platform_git
     myclean::platform_ipc
     myclean::platform_scan
     myclean::platform_service
@@ -50,7 +51,7 @@ myclean_add_library(svc
     wtsapi32)
 target_compile_definitions(myclean_svc PRIVATE MYCLEAN_VERSION="${PROJECT_VERSION}")
 
-add_executable(myclean-svc main.cpp)
+add_executable(myclean-svc main.cpp ${PROJECT_SOURCE_DIR}/src/resources/myclean.rc)
 target_link_libraries(myclean-svc PRIVATE
   myclean::svc myclean::platform_cleanup myclean::platform_disk myclean::platform_disk_health
   myclean::platform_etw myclean::platform_games myclean::platform_git myclean::platform_jobs

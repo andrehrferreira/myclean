@@ -51,7 +51,8 @@ myclean_add_library(tray
     shell32
     user32)
 
-add_executable(myclean-tray WIN32 main.cpp myclean-tray.manifest)
+add_executable(myclean-tray WIN32 main.cpp myclean-tray.manifest
+                            ${PROJECT_SOURCE_DIR}/src/resources/myclean.rc)
 target_link_libraries(myclean-tray PRIVATE myclean::tray)
 if(MYCLEAN_ASAN)
   add_custom_command(TARGET myclean-tray POST_BUILD

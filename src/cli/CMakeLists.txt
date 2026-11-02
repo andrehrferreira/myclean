@@ -32,7 +32,7 @@ myclean_add_library(cli
     myclean::scanall)
 target_compile_definitions(myclean_cli PRIVATE MYCLEAN_VERSION="${PROJECT_VERSION}")
 
-add_executable(myclean main.cpp)
+add_executable(myclean main.cpp ${PROJECT_SOURCE_DIR}/src/resources/myclean.rc)
 target_link_libraries(myclean PRIVATE myclean::cli)
 if(MYCLEAN_ASAN)
   add_custom_command(TARGET myclean POST_BUILD
