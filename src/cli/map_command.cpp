@@ -79,7 +79,24 @@ class BackgroundPriority {
   bool background_;
 };
 
-// The folder to scan: `target` made absolute ("C:" is the volume "C:\"), or the system drive.
+// `path` with its 8.3 short names spelled out (C:\Users\RUNNER~1 is C:\Users\runneradmin), as
+// the attribution areas spell their folders; `path` itself when it cannot be resolved.
+fs::path long_path(const fs::path& path) {
+  const DWORD needed = ::GetLongPathNameW(path.c_str(), nullptr, 0);
+  if (needed == 0) {
+    return path;
+  }
+  std::wstring buffer(needed, L'\0');
+  const DWORD length = ::GetLongPathNameW(path.c_str(), buffer.data(), needed);
+  if (length == 0 || length >= needed) {
+    return path;
+  }
+  buffer.resize(length);
+  return fs::path{std::move(buffer)};
+}
+
+// The folder to scan: `target` made absolute ("C:" is the volume "C:\") with its short names
+// spelled out, or the system drive.
 Result<fs::path> scan_root(const std::optional<std::string>& target) {
   fs::path path;
   if (target) {
@@ -101,7 +118,7 @@ Result<fs::path> scan_root(const std::optional<std::string>& target) {
   if (!path.has_filename() && path.has_relative_path()) {
     path = path.parent_path();
   }
-  return path;
+  return long_path(path);
 }
 
 // The folder names the artifact scanner never enters (data_dir\workspaces.toml), or

@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -57,6 +58,9 @@ class CleaningSmokeTest : public ::testing::Test {
     const std::string unique =
         std::to_string(::GetCurrentProcessId()) + "-" + std::to_string(::GetTickCount64());
     sandbox_ = fs::temp_directory_path() / "myclean-it" / ("smoke-" + unique);
+    // Spelled with long names, as packs spell their targets (on CI %TEMP% is C:\Users\RUNNER~1).
+    fs::create_directories(sandbox_);
+    sandbox_ = fs::canonical(sandbox_);
     pipe_ = L"myclean-it-" + std::wstring(unique.begin(), unique.end());
     write(sandbox_ / "items" / "old.bin", std::string(4096, 'o'));
     write(sandbox_ / "items" / "keep.bin", std::string(4096, 'k'));
@@ -124,6 +128,18 @@ class CleaningSmokeTest : public ::testing::Test {
 
   [[nodiscard]] const fs::path& sandbox() const { return sandbox_; }
 
+  // The child service's log files, for a failure message.
+  [[nodiscard]] std::string service_log() const {
+    std::string text;
+    std::error_code error;
+    for (const fs::directory_entry& entry :
+         fs::directory_iterator(sandbox_ / "state" / "logs", error)) {
+      std::ifstream in(entry.path(), std::ios::binary);
+      text += utf8(entry.path()) + ":\n" + std::string(std::istreambuf_iterator<char>(in), {});
+    }
+    return text;
+  }
+
  private:
   fs::path sandbox_;
   std::wstring pipe_;
@@ -136,7 +152,9 @@ TEST_F(CleaningSmokeTest, ScansApprovesQuarantinesAndRestoresInsideTheSandbox) {
   ASSERT_EQ(call("cleaning.scan").value(), (Json{{"started", true}}));
   const std::optional<Json> listed = until(
       "plans.list", Json::object(), [](const Json& list) { return !list.at("plans").empty(); });
-  ASSERT_TRUE(listed.has_value());
+  ASSERT_TRUE(listed.has_value()) << "status: " << call("cleaning.status").value_or(Json{}).dump()
+                                  << "\nservice log:\n"
+                                  << service_log();
   const Json plan = listed.value_or(Json{{"plans", {Json::object()}}}).at("plans")[0];
   EXPECT_EQ(plan.at("state"), "awaiting_approval");
   EXPECT_EQ(plan.at("items"), 2);

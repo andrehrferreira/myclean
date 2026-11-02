@@ -97,9 +97,11 @@ TEST(NtProcessTable, CollectorMeasuresThisProcessBusyLoopAsCpuShare) {
     }
   }
   // With the idle process the shares add up to at most the whole machine; processes that
-  // started or exited between the samples are missing from the sum.
+  // started or exited between the samples are missing from the sum. Thread times advance by
+  // clock ticks (15.6 ms), so over 200 ms on few processors (CI has 4) the sum can round up by
+  // a few percent.
   EXPECT_GT(total, 0.0);
-  EXPECT_LE(total, 101.0);
+  EXPECT_LE(total, 105.0);
   EXPECT_FALSE(view->trees.empty());
 }
 

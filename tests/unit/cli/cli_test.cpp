@@ -391,7 +391,8 @@ TEST(CliStatusTest, UsageErrorsExitThree) {
   }
 }
 
-// A folder of its own under %TEMP%\myclean-it, removed afterwards.
+// A folder of its own under %TEMP%\myclean-it, removed afterwards. Its path is spelled with long
+// names, as map reports its root (on CI %TEMP% is C:\Users\RUNNER~1\...).
 class MapSandbox {
  public:
   MapSandbox()
@@ -400,6 +401,7 @@ class MapSandbox {
                ::testing::UnitTest::GetInstance()->current_test_info()->name())) {
     std::filesystem::remove_all(path_);
     std::filesystem::create_directories(path_ / "work" / "deep");
+    path_ = std::filesystem::canonical(path_);
     write(path_ / "work" / "deep" / "data.bin", 200'000);
     write(path_ / "loose.bin", 50'000);
   }

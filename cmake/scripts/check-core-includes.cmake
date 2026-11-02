@@ -4,6 +4,9 @@
 #
 # Usage: cmake -DSOURCE_DIR=<repo> -P check-core-includes.cmake
 
+# A script sets no policies of its own: without this, if(IN_LIST) is not an operator.
+cmake_minimum_required(VERSION 3.25)
+
 if(NOT SOURCE_DIR)
   message(FATAL_ERROR "SOURCE_DIR is not set")
 endif()
