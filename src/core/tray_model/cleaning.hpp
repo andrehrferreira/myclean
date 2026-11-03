@@ -62,7 +62,7 @@ struct PlanRow {
   std::int64_t id = 0;
   std::string title;
   std::string kind;   // cleanup, handler, native, relocate, system_setting, quarantine_restore,
-                      // recycle_bin
+                      // recycle_bin, archive, uninstall
   std::string tier;   // auto, ask, report
   std::string scope;  // user (run by the tray) or service
   std::string state;  // core/model/plan.hpp text forms: awaiting_approval, applied, ...
@@ -147,6 +147,28 @@ struct UsedInstallerRow {
   std::string installed_as;
 };
 
+// The owner decisions (space.owner_decisions); `id` is the candidate id plans.owner_action takes.
+// A cold folder of the owner's profile, with the archive folder it would move to.
+struct ColdFolderRow {
+  std::int64_t id = 0;
+  std::string path;
+  Bytes bytes;
+  std::string target;        // empty when no healthy HDD keeps 10 % free after taking it
+  std::string reason;        // since when nothing changed in it
+  std::string protected_by;  // the deny-list entry that refuses it; empty when it can move
+};
+// An installed program in an area the knowledge packs mark for uninstall review.
+struct ProgramRow {
+  std::int64_t id = 0;
+  std::string program;
+  std::string publisher;
+  std::string version;
+  std::string location;
+  Bytes bytes;
+  std::string area;
+  std::string reason;
+};
+
 // The copy to keep: the oldest, most likely the original.
 [[nodiscard]] const DuplicateFileRow* keep_hint(const DuplicateGroupRow& group);
 
@@ -154,7 +176,7 @@ struct UsedInstallerRow {
 [[nodiscard]] std::string_view protected_text(std::string_view rule);
 
 // What the owner can ask for in the Space view.
-enum class SpaceList { top, old_downloads, duplicates, used_installers };
+enum class SpaceList { top, old_downloads, duplicates, used_installers, owner_decisions };
 
 // One answer of a space method, or why the call failed.
 struct SpaceReply {
@@ -168,6 +190,9 @@ struct SpaceReply {
   std::vector<OldDownloadRow> downloads;
   std::vector<DuplicateGroupRow> duplicates;
   std::vector<UsedInstallerRow> installers;
+  std::vector<ColdFolderRow> cold;
+  std::vector<ProgramRow> programs;
+  std::vector<std::string> notes;  // owner decisions: what could not be judged, and why
 };
 
 [[nodiscard]] Result<CleaningStatus> parse_cleaning_status(const nlohmann::json& reply);
@@ -194,6 +219,8 @@ struct Selection {
 [[nodiscard]] nlohmann::json plans_approve_params(std::int64_t id, const Selection& selection);
 // plans.propose_cleanup of Space candidates (the tray proposes as the owner).
 [[nodiscard]] nlohmann::json propose_cleanup_params(const std::vector<std::int64_t>& ids);
+// plans.owner_action of one owner-decision candidate: the owner's click is the approval.
+[[nodiscard]] nlohmann::json owner_action_params(std::int64_t candidate);
 
 [[nodiscard]] Result<std::vector<QuarantineRun>> parse_quarantine_list(const nlohmann::json& reply);
 // quarantine.restore of every held item of a run, or of one item.
@@ -212,8 +239,9 @@ inline constexpr std::string_view awaiting_approval = "awaiting_approval";
 [[nodiscard]] bool pending(const PlanRow& plan);
 [[nodiscard]] int pending_count(const std::vector<PlanRow>& plans);
 // Whether the owner may ask to undo `plan`: it was applied, and it is a relocation, a system
-// setting or a quarantine (an `ask` cleanup). Deletions, native commands and handlers regenerate
-// and cannot be undone. The service decides; this only offers the button.
+// setting, a quarantine (an `ask` cleanup) or a folder moved to the HDD archive. Deletions, native
+// commands and handlers regenerate and cannot be undone. The service decides; this only offers the
+// button.
 [[nodiscard]] bool undoable(const PlanRow& plan);
 // The bytes of the pending plans per tier, and per kind, in order of first appearance.
 using ByteTotals = std::vector<std::pair<std::string, Bytes>>;
@@ -264,7 +292,7 @@ class CleanupView {
   std::vector<PlanDetail> details_;
   std::optional<std::vector<QuarantineRun>> quarantine_;
   std::string action_error_;
-  std::array<std::optional<SpaceReply>, 4> space_;
+  std::array<std::optional<SpaceReply>, 5> space_;
   std::string task_activity_;
   std::string task_note_;
 };

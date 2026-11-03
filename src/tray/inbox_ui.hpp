@@ -15,8 +15,10 @@ namespace myclean::tray {
 void draw_cleanup(const tray_model::DashboardModel& model, const std::chrono::time_zone& zone,
                   UiState& state);
 
-// The read-only Space lists: the largest files and folders of a volume, old downloads with their
-// origin, duplicate groups with the copy to keep, and installers already used.
+// The Space lists: the largest files and folders of a volume, old downloads with their origin,
+// duplicate groups with the copy to keep, installers already used, and the owner's decisions
+// (cold folders with "Mover para o HD", programs to review with "Desinstalar"), each button the
+// owner's approval of that one plan.
 void draw_space(const tray_model::DashboardModel& model, const std::chrono::time_zone& zone,
                 UiState& state);
 

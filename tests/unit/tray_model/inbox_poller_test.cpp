@@ -158,6 +158,27 @@ TEST_F(InboxPollerTest, RejectUndoRestoreScanAndProposeSendTheirParameters) {
   EXPECT_EQ(link().calls_of("quarantine.purge")[0].params, (Json{{"plan", 4}}));
 }
 
+// Owner-decisions spec: one click sends plans.owner_action, and the plans are fetched again.
+TEST_F(InboxPollerTest, AnOwnerActionSendsItsCandidateAndRefreshesThePlans) {
+  (void)poll_at(start, true);
+  link().on("plans.owner_action",
+            [](const Json&) -> Result<Json> { return Json{{"plan", 12}, {"state", "approved"}}; });
+  link().clear_calls();
+  const PollResult result = poll_at(start + 1, true, {OwnerAction{.candidate = 901}});
+  ASSERT_EQ(link().calls_of("plans.owner_action").size(), 1U);
+  EXPECT_EQ(link().calls_of("plans.owner_action")[0].params, (Json{{"candidate", 901}}));
+  EXPECT_EQ(result.cleanup.action, std::string());
+  EXPECT_TRUE(result.cleanup.plans) << "fetched again after the click";
+
+  link().on("plans.owner_action", [](const Json&) -> Result<Json> {
+    return fail(Errc::invalid_state, "no healthy HDD keeps 10 % free after taking 11.2 GiB");
+  });
+  const PollResult refused = poll_at(start + 2, true, {OwnerAction{.candidate = 901}});
+  ASSERT_TRUE(refused.cleanup.action.has_value());
+  EXPECT_EQ(*refused.cleanup.action,
+            "Starting it failed: no healthy HDD keeps 10 % free after taking 11.2 GiB");
+}
+
 TEST_F(InboxPollerTest, ARefusedDecisionIsShownWithItsReason) {
   (void)poll_at(start, true);
   link().on("plans.approve", [](const Json&) -> Result<Json> {

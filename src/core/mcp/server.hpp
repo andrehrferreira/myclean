@@ -30,8 +30,10 @@ inline constexpr std::array<std::string_view, 4> protocol_versions{"2025-11-25",
 //   disk_health       disks.health
 //   list_alerts       alerts.list
 //   freeze_summary    input.summary
-//   storage_top, find_old_downloads, find_duplicates, find_used_installers
-//                     space.top, space.old_downloads, space.duplicates, space.used_installers
+//   storage_top, find_old_downloads, find_duplicates, find_used_installers,
+//   find_owner_decisions
+//                     space.top, space.old_downloads, space.duplicates, space.used_installers,
+//                     space.owner_decisions (listed only: the owner acts on them in the tray)
 //   list_plans, get_plan
 //                     plans.list, plans.get
 //   propose_cleanup, propose_optimization

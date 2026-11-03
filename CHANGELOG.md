@@ -96,6 +96,17 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     (MongoDB, PostgreSQL, pgAdmin), the Megascans library, installer rollback folders.
   - Every executable carries the application icon; the tray shows it with the state as a
     dot.
+- **Owner decisions (M2d):** the tray's Space view lists "Your decisions" from the
+  service (`space.owner_decisions`): folders of the owner's profile on an SSD that nothing
+  has written for six months, with the HDD archive folder each would move to, and the
+  installed programs whose install folder lies in an area the packs mark for uninstall
+  review, with their sizes. Each row has one button, and the click is the owner's approval
+  of exactly that plan (`plans.owner_action`, tray only), run by the tray with the owner's
+  token: "Mover para o HD" copies the folder to `<HDD>\Archive\<letter>\<path>`, checks
+  the copy holds the same files and bytes and only then removes the folder through
+  SafeRemove (refused while a program uses it; undo copies it back); "Desinstalar" starts
+  the program's own uninstaller and reports "launched; finish in the uninstaller" until its
+  Uninstall entry is gone. MCP tool `find_owner_decisions` lists them; no tool acts on them.
 - Spike notes X1–X8 under `docs/spikes/`.
 
 ### Fixed

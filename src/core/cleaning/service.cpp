@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -28,6 +29,7 @@
 #include "core/ipc/frame.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/plans.hpp"
+#include "core/map/attribution.hpp"
 #include "core/model/actor.hpp"
 #include "core/model/ids.hpp"
 #include "core/model/plan.hpp"
@@ -37,8 +39,14 @@
 #include "core/packs/loader.hpp"
 #include "core/packs/registry.hpp"
 #include "core/packs/schema.hpp"
+#include "core/placement/drives.hpp"
+#include "core/placement/relocation.hpp"
+#include "core/placement/settings.hpp"
 #include "core/safety/deny_list.hpp"
 #include "core/safety/safe_remove.hpp"
+#include "core/scanall/cold.hpp"
+#include "core/scanall/findings.hpp"
+#include "core/scanall/owner_decisions.hpp"
 #include "core/sched/schedule_repository.hpp"
 #include "core/space/downloads.hpp"
 #include "core/space/duplicates.hpp"
@@ -272,8 +280,13 @@ void CleaningService::reload_packs() {
         .applies = found && std::ranges::find(registry_.packs, outcome.id) != registry_.packs.end(),
         .message = outcome.message.empty() ? std::nullopt : std::optional(outcome.message)});
   }
+  std::vector<map::Area> uninstall_areas;
+  std::ranges::copy_if(
+      registry_.attribution, std::back_inserter(uninstall_areas),
+      [](const map::Area& area) { return area.reclaim.kind == map::ReclaimKind::uninstall; });
   const std::scoped_lock lock(mutex_);
   recipes_ = registry_.relocate;
+  uninstall_areas_ = std::move(uninstall_areas);
   pack_status_ = std::move(status);
 }
 
@@ -693,6 +706,9 @@ Result<Json> CleaningService::analyze(const std::string& key, const std::stop_to
   if (key == "duplicates") {
     return analyze_duplicates(stop);
   }
+  if (key == "owner_decisions") {
+    return analyze_decisions(stop);
+  }
   const std::optional<fs::path> downloads = owner_->downloads;
   if (!downloads) {
     return fail(Errc::not_found, "the owner's Downloads folder is unknown");
@@ -864,6 +880,142 @@ Result<Json> CleaningService::analyze_duplicates(const std::stop_token& stop) {
   return json;
 }
 
+Result<Json> CleaningService::analyze_decisions(const std::stop_token& stop) {
+  const fs::path profile = owner_->locations.owner_profile;
+  if (profile.empty()) {
+    return fail(Errc::not_found, "the owner's profile folder is unknown");
+  }
+  Result<space::ScanResult> scanned = scan_folder(profile, stop);
+  if (!scanned) {
+    return tl::unexpected(scanned.error());
+  }
+  const WallTime now = sources_.clock->now();
+  Json notes = Json::array();
+  std::vector<Candidate> found;
+  Json cold = Json::array();
+  for (const scanall::Finding& finding : cold_folders(*scanned, profile, now, notes)) {
+    const std::string* target = finding.plan.param("target");
+    found.push_back(Candidate{.source = std::string(owner_decisions_source),
+                              .category = "space",
+                              .tier = Tier::ask,
+                              .scope = ExecutionContext::user,
+                              .strategy = "archive",
+                              .path = finding.path,
+                              .size = finding.bytes,
+                              .reason = finding.reason,
+                              .found_at = now});
+    Json row{{"path", utf8(finding.path)},
+             {"bytes", finding.bytes.count()},
+             {"target", target != nullptr ? Json(*target) : Json(nullptr)},
+             {"reason", finding.reason}};
+    if (const std::optional<std::string_view> denied =
+            safety::denied_by(finding.path, owner_->locations)) {
+      row["protected"] = std::string(*denied);
+    }
+    cold.push_back(std::move(row));
+  }
+  Json programs = Json::array();
+  for (const scanall::ProgramFinding& finding : review_programs(notes, stop)) {
+    const scanall::UninstallEntry& program = finding.program;
+    const std::string reason = finding.area + (finding.note.empty() ? "" : ": " + finding.note);
+    found.push_back(Candidate{.source = std::string(owner_decisions_source),
+                              .category = "space",
+                              .tier = Tier::ask,
+                              .scope = ExecutionContext::user,
+                              .strategy = "uninstall",
+                              .path = program.location,
+                              .size = program.estimated,
+                              .command = program.key,
+                              .handler = program.name,
+                              .reason = reason,
+                              .found_at = now});
+    programs.push_back(Json{{"program", program.name},
+                            {"publisher", program.publisher},
+                            {"version", program.version},
+                            {"location", utf8(program.location)},
+                            {"bytes", program.estimated.count()},
+                            {"area", finding.area},
+                            {"reason", reason}});
+  }
+  if (Result<void> stored =
+          store_candidates(*sources_.store, std::string(owner_decisions_source), found);
+      !stored) {
+    return tl::unexpected(stored.error());
+  }
+  for (std::size_t index = 0; index < found.size(); ++index) {
+    Json& row = index < cold.size() ? cold[index] : programs[index - cold.size()];
+    row["id"] = found[index].id;
+  }
+  return Json{{"profile", utf8(profile)},
+              {"cold", std::move(cold)},
+              {"uninstall", std::move(programs)},
+              {"notes", std::move(notes)}};
+}
+
+std::vector<scanall::Finding> CleaningService::cold_folders(const space::ScanResult& tree,
+                                                            const fs::path& profile, WallTime now,
+                                                            Json& notes) const {
+  std::vector<scanall::DriveInfo> drives;
+  if (sources_.probes.drives == nullptr) {
+    notes.push_back("the drives cannot be read here, so no folder has an archive target");
+  } else if (Result<std::vector<placement::TargetVolume>> volumes =
+                 sources_.probes.drives->volumes();
+             volumes) {
+    drives = scanall::drive_infos(*volumes);
+  } else {
+    notes.push_back("drives: " + volumes.error().message);
+  }
+  const scanall::DriveInfo* drive = scanall::drive_of(drives, profile);
+  if (drive == nullptr) {
+    notes.push_back("the drive of " + utf8(profile) + " is unknown, so no folder is judged cold");
+    return {};
+  }
+  const std::vector<fs::path> in_use = sources_.probes.usage != nullptr
+                                           ? sources_.probes.usage->process_folders()
+                                           : std::vector<fs::path>{};
+  return scanall::find_cold(tree, scanall::folder_times(tree), *drive, drives, in_use, now);
+}
+
+std::vector<scanall::ProgramFinding> CleaningService::review_programs(
+    Json& notes, const std::stop_token& stop) const {
+  const placement::IRegistry* registry =
+      owner_->tools != nullptr ? owner_->tools->registry : nullptr;
+  if (registry == nullptr) {
+    notes.push_back("the owner's registry cannot be read here, so no program is listed");
+    return {};
+  }
+  Result<std::vector<scanall::UninstallEntry>> entries = scanall::uninstall_entries(*registry);
+  if (!entries) {
+    notes.push_back("installed programs: " + entries.error().message);
+    return {};
+  }
+  std::vector<map::Area> areas;
+  {
+    const std::scoped_lock lock(mutex_);
+    areas = uninstall_areas_;
+  }
+  std::vector<scanall::ProgramFinding> review =
+      scanall::uninstall_review(*entries, areas, *owner_->environment);
+  for (scanall::ProgramFinding& finding : review) {
+    if (stop.stop_requested()) {
+      break;
+    }
+    if (finding.program.estimated.count() == 0) {
+      finding.program.estimated =
+          placement::readable_size(*sources_.file_system, finding.program.location)
+              .value_or(Bytes{});
+    }
+  }
+  std::ranges::sort(review,
+                    [](const scanall::ProgramFinding& left, const scanall::ProgramFinding& right) {
+                      return left.program.estimated > right.program.estimated;
+                    });
+  if (review.size() > ipc::max_owner_programs) {
+    review.resize(ipc::max_owner_programs);
+  }
+  return review;
+}
+
 Json CleaningService::request_scan() {
   if (executor() == nullptr) {
     return Json{{"started", false}};
@@ -989,6 +1141,15 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
       },
       Access::tray));
   added.push_back(add(
+      ipc::plans_owner_action_method,
+      {Param{.name = "candidate", .type = ParamType::integer, .required = true}},
+      [this](const Json& params) {
+        return on_executor([&](Executor& executor) {
+          return plan_answer(executor.owner_action(params.at("candidate").get<std::int64_t>()));
+        });
+      },
+      Access::tray));
+  added.push_back(add(
       ipc::user_tasks_next_method, {}, [this](const Json&) { return tasks_.next(); },
       Access::tray));
   added.push_back(add(
@@ -1033,7 +1194,8 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
   for (const auto& [method, key] :
        {std::pair{ipc::space_old_downloads_method, "old_downloads"},
         std::pair{ipc::space_duplicates_method, "duplicates"},
-        std::pair{ipc::space_used_installers_method, "used_installers"}}) {
+        std::pair{ipc::space_used_installers_method, "used_installers"},
+        std::pair{ipc::space_owner_decisions_method, "owner_decisions"}}) {
     added.push_back(add(method, {refresh}, [this, key](const Json& params) {
       return space_answer(key, params.value("refresh", false));
     }));

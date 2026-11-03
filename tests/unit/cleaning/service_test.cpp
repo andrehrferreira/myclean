@@ -22,6 +22,7 @@
 #include "core/ipc/json_rpc.hpp"
 #include "core/model/units.hpp"
 #include "core/placement/settings.hpp"
+#include "scanall/scanall_fakes.hpp"
 
 namespace myclean::cleaning {
 namespace {
@@ -200,6 +201,7 @@ TEST_F(CleaningServiceTest, TrayOnlyMethodsRefuseEveryOtherCaller) {
       {"plans.reject", Json{{"id", id}}},
       {"plans.undo", Json{{"id", id}}},
       {"plans.recycle", Json{{"candidates", {{"ids", {1}}}}}},
+      {"plans.owner_action", Json{{"candidate", 1}}},
       {"user_tasks.next", Json::object()},
       {"user_tasks.report", Json{{"id", id}, {"result", {{"state", "verified"}}}}},
       {"quarantine.restore", Json{{"plan", id}}},
@@ -607,6 +609,116 @@ TEST_F(CleaningServiceTest, ReportViewDeletionIsARecycleTaskOfTheTray) {
   ASSERT_EQ(task.at("items").size(), 1U);
   EXPECT_EQ(task.at("items")[0].at("path"), "F:\\big.iso");
   EXPECT_EQ(task.at("items")[0].at("file_id").get<std::string>().size(), 32U);
+}
+
+// Owner-decisions spec: the cold folders of the owner's profile and the programs in uninstall
+// areas reach the tray, and one click is the approval of exactly that plan, run by the tray.
+TEST_F(CleaningServiceTest, OwnerDecisionsAreListedAndOneClickApprovesThatPlanForTheTray) {
+  pack_files().put(testing::data_dir / "packs" / "test" / "attribution.toml", R"toml(
+[[area]]
+id       = "games"
+paths    = ['?:\Games\*']
+category = "games"
+label    = "Games"
+reclaim  = { kind = "uninstall", note = "Uninstall games you no longer play." }
+)toml");
+  const std::string key = R"(HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GameX)";
+  placement::testing::FakeRegistry& registry = owner_registry();
+  registry.put(key, "DisplayName", placement::RegistryValue{.text = "Game X"});
+  registry.put(key, "UninstallString",
+               placement::RegistryValue{.text = R"(D:\Games\X\unins.exe /S)"});
+  registry.put(key, "InstallLocation", placement::RegistryValue{.text = R"(D:\Games\X)"});
+  registry.put(key, "EstimatedSize",
+               placement::RegistryValue{.text = "1048576", .type = placement::RegistryType::dword});
+  const WallTime old = testing::noon - std::chrono::days{400};
+  reader().listings[path(L"C:\\Users\\owner")] = {space::testing::folder("Documents"),
+                                                  space::testing::folder("Old")};
+  reader().listings[path(L"C:\\Users\\owner\\Documents")] = {
+      scanall::testing::file("thesis.bin", 2_GiB, old, 1)};
+  reader().listings[path(L"C:\\Users\\owner\\Old")] = {
+      scanall::testing::file("scene.bin", 2_GiB, old, 2)};
+  fs().add_file(L"C:\\Users\\owner\\Old\\scene.bin", 2_GiB);
+  fs().add_file(L"C:\\Users\\owner\\Documents\\thesis.bin", 2_GiB);
+  start();
+  work();
+
+  EXPECT_EQ(call("space.owner_decisions", Json::object(), false).at("state"), "scanning");
+  work_space();
+  const Json decisions = call("space.owner_decisions", Json::object(), false);
+  ASSERT_EQ(decisions.at("state"), "ready") << decisions.dump();
+  EXPECT_EQ(decisions.at("profile"), "C:\\Users\\owner");
+  const Json& cold = decisions.at("cold");
+  ASSERT_EQ(cold.size(), 2U) << decisions.dump();
+  EXPECT_EQ(cold[0].at("path"), "C:\\Users\\owner\\Documents");
+  EXPECT_EQ(cold[0].at("protected"), "user_known_folder");
+  EXPECT_EQ(cold[1].at("path"), "C:\\Users\\owner\\Old");
+  EXPECT_EQ(cold[1].at("target"), "L:\\Archive\\C\\Users\\owner\\Old");
+  EXPECT_FALSE(cold[1].contains("protected"));
+  const Json& programs = decisions.at("uninstall");
+  ASSERT_EQ(programs.size(), 1U) << decisions.dump();
+  EXPECT_EQ(programs[0].at("program"), "Game X");
+  EXPECT_EQ(programs[0].at("bytes"), (1_GiB).count());
+  EXPECT_EQ(programs[0].at("area"), "Games");
+  EXPECT_EQ(programs[0].at("reason"), "Games: Uninstall games you no longer play.");
+  EXPECT_TRUE(decisions.at("notes").empty()) << decisions.dump();
+
+  // Only the tray acts, and only on an owner decision that is not protected.
+  const Json folder{{"candidate", cold[1].at("id")}};
+  EXPECT_EQ(error_of("plans.owner_action", folder, false).at("data").at("errc"), "refused");
+  EXPECT_EQ(error_of("plans.owner_action", Json{{"candidate", cold[0].at("id")}}, true)
+                .at("data")
+                .at("errc"),
+            "refused");
+  EXPECT_EQ(error_of("plans.owner_action", Json{{"candidate", big_file_candidate()}}, true)
+                .at("data")
+                .at("errc"),
+            "invalid_argument");
+
+  const Json archived = call("plans.owner_action", folder);
+  EXPECT_EQ(archived.at("state"), "approved");
+  const Json plan = get(archived.at("plan").get<std::int64_t>());
+  EXPECT_EQ(plan.at("kind"), "archive");
+  EXPECT_EQ(plan.at("scope"), "user");
+  EXPECT_EQ(plan.at("proposer"), "owner");
+  EXPECT_EQ(plan.at("params"), (Json{{"source", "C:\\Users\\owner\\Old"},
+                                     {"target", "L:\\Archive\\C\\Users\\owner\\Old"}}));
+  const Json uninstalled = call("plans.owner_action", Json{{"candidate", programs[0].at("id")}});
+  EXPECT_EQ(uninstalled.at("state"), "approved");
+  const Json uninstall = get(uninstalled.at("plan").get<std::int64_t>());
+  EXPECT_EQ(uninstall.at("kind"), "uninstall");
+  EXPECT_EQ(uninstall.at("title"), "Uninstall Game X");
+  EXPECT_EQ(uninstall.at("commands"), Json::array({R"(D:\Games\X\unins.exe /S)"}));
+
+  work();  // the service runs neither
+  EXPECT_TRUE(fs().exists(L"C:\\Users\\owner\\Old\\scene.bin"));
+  const Json task = call("user_tasks.next").at("task");
+  EXPECT_EQ(task.at("kind"), "archive");
+  EXPECT_EQ(task.at("action"), plan.at("params"));
+  EXPECT_EQ(task.at("items")[0].at("file_id").get<std::string>().size(), 32U);
+  const Json next = call("user_tasks.next").at("task");
+  EXPECT_EQ(next.at("kind"), "uninstall");
+  EXPECT_EQ(next.at("action"), (Json{{"key", key}, {"name", "Game X"}}));
+
+  // A program uninstalled since the list was made gets no plan.
+  registry.drop(key);
+  EXPECT_EQ(error_of("plans.owner_action", Json{{"candidate", programs[0].at("id")}}, true)
+                .at("data")
+                .at("errc"),
+            "not_found");
+}
+
+TEST_F(CleaningServiceTest, OwnerDecisionsSayWhatCouldNotBeJudged) {
+  reader().listings[path(L"C:\\Users\\owner")] = {};
+  start();
+  work();
+  call("space.owner_decisions");
+  work_space();
+  const Json decisions = call("space.owner_decisions");
+  ASSERT_EQ(decisions.at("state"), "ready") << decisions.dump();
+  EXPECT_TRUE(decisions.at("cold").empty());
+  EXPECT_TRUE(decisions.at("uninstall").empty());
+  ASSERT_EQ(decisions.at("notes").size(), 1U);
+  EXPECT_NE(decisions.at("notes")[0].get<std::string>().find("registry"), std::string::npos);
 }
 
 TEST_F(CleaningServiceTest, UserScopePlansRunInTheTrayAndAreRecordedFromItsReport) {

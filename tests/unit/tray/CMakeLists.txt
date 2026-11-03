@@ -2,7 +2,8 @@
 # (GDI objects only), the pipe link against an in-process service on a unique pipe name, the
 # poll thread with the user-task worker (fake actions), and the dashboard drawn by Dear ImGui
 # without a window or renderer, approval inbox included. Nothing here shows a window, an icon or a
-# notification, and no real cleanup or setting change runs.
+# notification, no real cleanup or setting change runs, and the uninstaller launcher is only
+# asked to start programs that do not exist.
 myclean_add_test(tray
   SOURCES
     dashboard_ui_test.cpp
@@ -11,6 +12,7 @@ myclean_add_test(tray
     pipe_link_test.cpp
     poll_thread_test.cpp
     task_worker_test.cpp
+    uninstall_launcher_test.cpp
   DEPENDS
     myclean::tray
     myclean::fakes)

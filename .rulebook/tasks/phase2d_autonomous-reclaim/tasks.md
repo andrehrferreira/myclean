@@ -6,11 +6,11 @@
 - [x] 1.5 scan-all takes disk health from the service; archive/relocate targets on healthy HDDs (scanall-health); done in bf535e7
 - [x] 1.6 Automatic hibernation reduce and page file moved (system-managed) to a healthy NVMe with room, small one kept on C: for dumps, when the system volume is below 10 % free; never shrink below the commit the machine uses (~202 GB on 128 GB RAM); done as Executor::reclaim_system_space, run by every scheduled scan before the approved plans (the page file keeps 4096 MB on C: and goes system-managed to the best healthy volume, so its capacity never shrinks; tried at most once a week)
 - [x] 1.7 Automatic WSL distro move and RUSTUP_HOME relocation to a healthy drive when not in use; done as relocate.toml `automatic` (wsl-docker/distro, rust/rustup-home): Executor::reclaim_system_space proposes an automatic tray plan per instance on C: while C: is below 10 % free and no image of `needs` runs; the service reads the owner's hive and variables (OwnerContext::tools)
-- [ ] 1.8 One-click tray actions for owner-decision findings: move to HDD archive, launch uninstaller
+- [x] 1.8 One-click tray actions for owner-decision findings: move to HDD archive, launch uninstaller; done as space.owner_decisions (cold folders of the owner's profile via scanall::find_cold, programs whose InstallLocation lies in an uninstall area, read from the owner's Uninstall keys) and the tray-only plans.owner_action (the click approves exactly that user-scope plan); the tray runs user_tasks::ArchiveAction (tree copier, totals check, SafeRemove; undo copies back) and UninstallAction (the UninstallString through ShellExecuteEx; verified when the entry is gone); Space > Your decisions with "Mover para o HD" / "Desinstalar"; MCP find_owner_decisions lists only
 - [x] 1.9 DISM StartComponentCleanup timeout raised (timed out at 30 min under load); done: analyze and cleanup timeouts are 90 min (dism_cleanup.hpp)
-- [ ] 1.10 Deploy and measure C: free space before/after
+- [x] 1.10 Deploy and measure C: free space before/after; deployed 20261103-065013 (4782eb2); C: from 51 GiB free (5.4 %, docs/analysis/c-drive-reclaim) to 298 GB free (31.3 %) on 2026-11-03
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 2.1 Update or create documentation covering the implementation
-- [ ] 2.2 Write tests covering the new behavior
-- [ ] 2.3 Run tests and confirm they pass
+- [x] 2.1 Update or create documentation covering the implementation; done as specs/owner-decisions/spec.md, the contracts in core/ipc/plans.hpp, README (Your decisions), CHANGELOG (Owner decisions, M2d) and docs/analysis/c-drive-reclaim/14-owner-decisions.md
+- [x] 2.2 Write tests covering the new behavior; done as scanall owner_decisions_test, user_tasks archive_test and uninstall_test (fakes only, no real uninstaller), cleaning service tests (listing, tray-only one click, user tasks), tray_model parsing and poller, the headless dashboard and the launcher's failure paths
+- [x] 2.3 Run tests and confirm they pass; done as the full debug (ASan) gate of the pre-commit hook

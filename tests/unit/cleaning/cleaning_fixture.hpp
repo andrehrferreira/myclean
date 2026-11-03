@@ -233,7 +233,11 @@ class CleaningFixture : public ::testing::Test {
           return OwnerContext{.environment = std::make_unique<clean::testing::FakeEnvironment>(),
                               .locations = actions::testing::owner_locations(),
                               .downloads = std::filesystem::path(L"C:\\Users\\owner\\Downloads"),
-                              .git = owner_git_ ? std::make_unique<ForwardingGit>(git_) : nullptr};
+                              .git = owner_git_ ? std::make_unique<ForwardingGit>(git_) : nullptr,
+                              .tools = owner_registry_
+                                           ? std::shared_ptr<const placement::Tools>(
+                                                 &owner_tools_, [](const placement::Tools*) {})
+                                           : nullptr};
         },
         .files = &files_,
         .data_dir = data_dir,
@@ -328,6 +332,11 @@ class CleaningFixture : public ::testing::Test {
     owner_git_ = true;
     return git_;
   }
+  // The owner context carries the owner's registry (the Uninstall entries of the programs).
+  placement::testing::FakeRegistry& owner_registry() {
+    owner_registry_ = true;
+    return registry_;
+  }
 
  private:
   void open_store() {
@@ -355,6 +364,9 @@ class CleaningFixture : public ::testing::Test {
   bool owner_available_ = true;
   clean::testing::FakeGit git_;
   bool owner_git_ = false;
+  placement::testing::FakeRegistry registry_;
+  placement::Tools owner_tools_{.registry = &registry_};
+  bool owner_registry_ = false;
 };
 
 }  // namespace myclean::cleaning::testing

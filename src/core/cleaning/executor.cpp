@@ -1,6 +1,7 @@
 #include "core/cleaning/executor.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -48,7 +49,11 @@
 #include "core/placement/settings.hpp"
 #include "core/placement/system_space.hpp"
 #include "core/rules/schema.hpp"
+#include "core/safety/deny_list.hpp"
+#include "core/safety/paths.hpp"
 #include "core/safety/safe_remove.hpp"
+#include "core/scanall/findings.hpp"
+#include "core/scanall/owner_decisions.hpp"
 #include "core/store/database.hpp"
 #include "core/store/plan_repository.hpp"
 
@@ -78,6 +83,23 @@ std::string utf8(const fs::path& path) {
 
 fs::path from_utf8(const std::string& text) {
   return {std::u8string(text.begin(), text.end())};
+}
+
+// `stored` with every item approved by the owner, whose click was the approval.
+Result<Plan> approved_by_owner(actions::PolicyEngine& engine, Result<Plan> stored) {
+  if (!stored) {
+    return stored;
+  }
+  std::vector<PlanItemId> all;
+  for (const PlanItem& item : stored->items) {
+    all.push_back(item.id);
+  }
+  Result<PlanState> approved = engine.approve(stored->id, all, Actor::owner());
+  if (!approved) {
+    return tl::unexpected(approved.error());
+  }
+  stored->state = *approved;
+  return stored;
 }
 
 // Why a rule selected `candidate`, for the owner.
@@ -836,19 +858,117 @@ Result<Plan> Executor::recycle(std::span<const std::int64_t> ids) {
                                     .created_at = environment_.clock->now(),
                                     .items = *std::move(items)},
                                spec, notes, actions::AutomationLevel::suggest);
-  if (!stored) {
-    return stored;
+  return approved_by_owner(*engine_, std::move(stored));
+}
+
+Result<std::pair<Plan, PlanSpec>> Executor::archive_plan(const Candidate& candidate) const {
+  const fs::path& source = candidate.path;
+  const Result<os::FileStat> status = environment_.file_system->stat(source);
+  if (!status) {
+    return fail(Errc::not_found, utf8(source) + " is gone since the list was made; refresh it");
   }
-  std::vector<PlanItemId> all;
-  for (const PlanItem& item : stored->items) {
-    all.push_back(item.id);
+  Result<fs::path> normalized = safety::normalize_path(source);
+  if (!normalized) {
+    return tl::unexpected(normalized.error());
   }
-  Result<PlanState> approved = engine_->approve(stored->id, all, Actor::owner());
-  if (!approved) {
-    return tl::unexpected(approved.error());
+  if (scanall::system_location(*normalized)) {
+    return fail(Errc::refused, utf8(source) + " holds the system or installed programs");
   }
-  stored->state = *approved;
-  return stored;
+  if (const std::optional<std::string_view> rule = safety::denied_by(*normalized, locations_)) {
+    return fail(Errc::refused,
+                "the deny-list protects " + utf8(source) + " (" + std::string(*rule) + ")");
+  }
+  if (probes_.drives == nullptr) {
+    return fail(Errc::invalid_state, "the drives cannot be read here");
+  }
+  Result<std::vector<placement::TargetVolume>> volumes = probes_.drives->volumes();
+  if (!volumes) {
+    return tl::unexpected(volumes.error());
+  }
+  const std::optional<fs::path> target =
+      scanall::archive_target(scanall::drive_infos(*volumes), *normalized, candidate.size);
+  if (!target) {
+    return fail(Errc::invalid_state, "no healthy HDD keeps 10 % free after taking " +
+                                         scanall::size_text(candidate.size));
+  }
+  const std::string from = utf8(*normalized);
+  const std::string to = utf8(*target);
+  return std::pair{
+      Plan{.action = "ArchiveFolder",
+           .proposer = Actor::owner(),
+           .created_at = environment_.clock->now(),
+           .items = {PlanItem{
+               .path = *normalized, .identity = status->identity, .size = candidate.size}}},
+      PlanSpec{.kind = PlanKind::archive,
+               .tier = Tier::ask,
+               .scope = ExecutionContext::user,
+               .title = "Move " + from + " to the HDD archive",
+               .commands = {"copy " + from + " to " + to +
+                            ", check that the copy holds the same files and bytes, then remove " +
+                            from + " through the safety checks"},
+               .undo = "copy it back from " + to + ", then remove the archive copy",
+               .params = Json{{"source", from}, {"target", to}}}};
+}
+
+Result<std::pair<Plan, PlanSpec>> Executor::uninstall_plan(const Candidate& candidate) const {
+  const std::string& key = candidate.command;
+  const std::string& name = candidate.handler;
+  std::string command = "the UninstallString of " + key;
+  if (probes_.owner_tools != nullptr && probes_.owner_tools->registry != nullptr) {
+    Result<std::optional<scanall::UninstallEntry>> entry =
+        scanall::uninstall_entry(*probes_.owner_tools->registry, key);
+    if (!entry) {
+      return tl::unexpected(entry.error());
+    }
+    const std::optional<scanall::UninstallEntry>& program = *entry;
+    if (!program) {
+      return fail(Errc::not_found, name + " is not installed any more; refresh the list");
+    }
+    command = program->uninstall;
+  }
+  return std::pair{
+      Plan{.action = "UninstallProgram",
+           .proposer = Actor::owner(),
+           .created_at = environment_.clock->now(),
+           .items = {PlanItem{.path = from_utf8("uninstall:" + name), .size = candidate.size}}},
+      PlanSpec{.kind = PlanKind::uninstall,
+               .tier = Tier::ask,
+               .scope = ExecutionContext::user,
+               .title = "Uninstall " + name,
+               .commands = {command},
+               .undo = "not possible: install it again with its installer",
+               .warnings = {"the program's own uninstaller opens on your desktop; finish it there"},
+               .params = Json{{"key", key}, {"name", name}}}};
+}
+
+Result<Plan> Executor::owner_action(std::int64_t id) {
+  const std::array<std::int64_t, 1> ids = {id};
+  Result<std::vector<Candidate>> candidates = fail(Errc::not_found, "not read");
+  if (Result<void> read = environment_.store->read([&](store::Database& db) -> Result<void> {
+        candidates = candidates_by_id(db, ids);
+        return {};
+      });
+      !read) {
+    return tl::unexpected(read.error());
+  }
+  if (!candidates) {
+    return tl::unexpected(candidates.error());
+  }
+  const Candidate& candidate = candidates->front();
+  Result<std::pair<Plan, PlanSpec>> built =
+      fail(Errc::invalid_argument, "candidate " + std::to_string(id) + " is no owner decision");
+  if (candidate.source == owner_decisions_source && candidate.strategy == "archive") {
+    built = archive_plan(candidate);
+  } else if (candidate.source == owner_decisions_source && candidate.strategy == "uninstall") {
+    built = uninstall_plan(candidate);
+  }
+  if (!built) {
+    return tl::unexpected(built.error());
+  }
+  const std::array<ItemNote, 1> notes = {ItemNote{.rule = {}, .reason = candidate.reason}};
+  return approved_by_owner(
+      *engine_, submit(*engine_, *environment_.store, std::move(built->first), built->second, notes,
+                       actions::AutomationLevel::suggest));
 }
 
 Result<Plan> Executor::submit_setting(Action& action, const std::string& name, const PlanSpec& spec,

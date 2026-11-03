@@ -34,6 +34,9 @@ struct UiState {
   tray_model::SpaceList space = tray_model::SpaceList::top;
   std::string space_volume;
   std::set<std::string> space_asked;
+  // The owner-decision candidates the owner clicked: their row says the plan started instead of
+  // offering the button again.
+  std::set<std::int64_t> acted;
   // What the owner asked of the service during the frame; the window sends and clears them.
   std::vector<tray_model::Request> requests;
 };

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <format>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -15,6 +16,7 @@
 #include "core/model/units.hpp"
 #include "core/placement/drives.hpp"
 #include "core/scanall/findings.hpp"
+#include "core/scanall/owner_decisions.hpp"
 #include "core/space/scanner.hpp"
 #include "core/space/text.hpp"
 
@@ -26,7 +28,6 @@ namespace fs = std::filesystem;
 
 constexpr std::array<placement::DriveClass, 3> ssd_classes = {
     placement::DriveClass::nvme, placement::DriveClass::sata_ssd, placement::DriveClass::nvme_qlc};
-constexpr std::array<placement::DriveClass, 1> hdd_classes = {placement::DriveClass::hdd};
 
 constexpr std::array<std::wstring_view, 3> archive_patterns = {L"*.zip", L"*.rar", L"*.7z"};
 
@@ -80,17 +81,15 @@ Finding cold_finding(const space::Folder& folder, WallTime newest, const DriveIn
                   .reason = std::format("nothing inside changed since {:%Y-%m-%d}; {} on {}",
                                         std::chrono::floor<std::chrono::days>(newest),
                                         size_text(size), placement::to_string(drive.drive_class))};
-  const DriveInfo* target = best_target(drives, folder.path, size, hdd_classes);
-  if (target == nullptr) {
+  const std::optional<fs::path> destination = archive_target(drives, folder.path, size);
+  if (!destination) {
     finding.group = ActionGroup::manual_review;
     finding.reason += "; no healthy HDD keeps 10 % free after taking it";
     return finding;
   }
-  const std::string letter = space::utf8(drive.root).substr(0, 1);
-  const fs::path destination = target->root / "Archive" / letter / folder.path.relative_path();
   finding.plan =
       Plan{.kind = PlanKind::move_folder,
-           .params = {{"source", space::utf8(folder.path)}, {"target", space::utf8(destination)}}};
+           .params = {{"source", space::utf8(folder.path)}, {"target", space::utf8(*destination)}}};
   return finding;
 }
 

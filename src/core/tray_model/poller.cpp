@@ -230,6 +230,10 @@ bool Poller::handle_cleanup(const Request& request, PollResult& result) {
     return decide("Proposing a cleanup", ipc::plans_propose_cleanup_method,
                   propose_cleanup_params(propose->candidates));
   }
+  if (const auto* action = std::get_if<OwnerAction>(&request)) {
+    return decide("Starting it", ipc::plans_owner_action_method,
+                  owner_action_params(action->candidate));
+  }
   if (const auto* open = std::get_if<OpenPlan>(&request)) {
     open_plans_.insert(open->id);
     if (std::optional<PlanDetail> detail =

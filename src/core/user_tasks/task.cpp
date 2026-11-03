@@ -31,6 +31,8 @@
 #include "core/placement/recipe.hpp"
 #include "core/placement/relocation.hpp"
 #include "core/safety/paths.hpp"
+#include "core/user_tasks/archive.hpp"
+#include "core/user_tasks/uninstall.hpp"
 
 namespace myclean::user_tasks {
 
@@ -89,6 +91,12 @@ std::optional<TaskKind> parse_kind(std::string_view text) {
   if (text == "recycle_bin") {
     return TaskKind::recycle_bin;
   }
+  if (text == "archive") {
+    return TaskKind::archive;
+  }
+  if (text == "uninstall") {
+    return TaskKind::uninstall;
+  }
   return std::nullopt;
 }
 
@@ -117,6 +125,14 @@ void parse_action(const Json& action, UserTask& task) {
       break;
     case TaskKind::recycle_bin:
       task.deleted_days = action.at("deleted_days").get<int>();
+      break;
+    case TaskKind::archive:
+      task.archive =
+          Archive{.source = path_of(action.at("source")), .target = path_of(action.at("target"))};
+      break;
+    case TaskKind::uninstall:
+      task.program_key = action.at("key").get<std::string>();
+      task.program_name = action.at("name").get<std::string>();
       break;
     case TaskKind::relocate:
       if (const auto recipe = action.find("recipe"); recipe != action.end()) {
@@ -161,6 +177,28 @@ struct Built {
   const cleanup::RecycleBinCleanup* bin = nullptr;    // set for a recycle_bin task
 };
 
+// The action of an owner's one-click decision: an archive or an uninstall task.
+Result<Built> build_decision(const UserTask& task, const Toolbox& tools,
+                             const std::stop_token& stop) {
+  if (task.kind == TaskKind::uninstall) {
+    if (tools.placement.registry == nullptr || tools.launcher == nullptr) {
+      return fail(Errc::invalid_state, "the tray cannot start uninstallers");
+    }
+    return Built{.action =
+                     std::make_unique<UninstallAction>(*tools.placement.registry, *tools.launcher,
+                                                       task.program_key, task.program_name, stop)};
+  }
+  if (tools.usage == nullptr || tools.locations == nullptr) {
+    return fail(Errc::invalid_state, "the tray cannot check the folder to archive");
+  }
+  return Built{
+      .action = std::make_unique<ArchiveAction>(
+          ArchiveTools{
+              .placement = &tools.placement, .usage = tools.usage, .locations = tools.locations},
+          PlanId{task.plan}, task.archive,
+          task.items.empty() ? std::nullopt : task.items.front().identity)};
+}
+
 Result<Built> build(const UserTask& task, const Toolbox& tools, const std::stop_token& stop) {
   switch (task.kind) {
     case TaskKind::native:
@@ -202,6 +240,9 @@ Result<Built> build(const UserTask& task, const Toolbox& tools, const std::stop_
                          tools.placement, *tools.runner, *task.recipe, stop)};
       }
       break;
+    case TaskKind::archive:
+    case TaskKind::uninstall:
+      return build_decision(task, tools, stop);
   }
   return Built{.action =
                    std::make_unique<placement::RelocateAction>(tools.placement, task.relocation)};
@@ -331,9 +372,12 @@ Result<UserTask> parse_task(const Json& task) {
     parsed.tier = parse_text(task, "tier", &parse_tier);
     for (const Json& item : task.at("items")) {
       if (item.at("approved") != false) {
-        parsed.items.push_back(TaskItem{.id = item.at("id").get<std::int64_t>(),
-                                        .path = path_of(item.at("path")),
-                                        .bytes = Bytes{item.at("bytes").get<std::uint64_t>()}});
+        parsed.items.push_back(
+            TaskItem{.id = item.at("id").get<std::int64_t>(),
+                     .path = path_of(item.at("path")),
+                     .bytes = Bytes{item.at("bytes").get<std::uint64_t>()},
+                     .identity = parse_identity(item.value("volume_serial", std::uint64_t{0}),
+                                                item.value("file_id", std::string{}))});
       }
     }
     parse_action(task.at("action"), parsed);

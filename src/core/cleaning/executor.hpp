@@ -9,6 +9,8 @@
 #include <span>
 #include <stop_token>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "core/actions/item_action.hpp"
@@ -65,6 +67,10 @@ struct ExecutorOptions {
   // False: Windows handlers, DISM and system settings are never applied (console runs).
   bool system_changes = true;
 };
+
+// The candidate source of the owner decisions (space.owner_decisions): cold folders (strategy
+// "archive") and installed programs to review (strategy "uninstall").
+inline constexpr std::string_view owner_decisions_source = "space.owner_decisions";
 
 // Below this share of free space a volume's quarantined items go to the overflow volume, and a
 // quarantine already on it is purged by the next scheduled purge.
@@ -128,6 +134,17 @@ class Executor {
   // An approved user-scope plan that sends candidates `ids` to the Recycle Bin (the owner's
   // explicit deletion from a report view).
   [[nodiscard]] Result<Plan> recycle(std::span<const std::int64_t> ids);
+  // An approved user-scope plan for owner-decision candidate `id` (owner_decisions_source): a
+  // cold folder moved to the HDD archive (action "ArchiveFolder", kind archive, params
+  // {"source", "target"}: its scanall::archive_folder on the healthy HDD with the most room that
+  // keeps 10 % free, judged now; the item records the folder's identity) or a program
+  // uninstalled by its own uninstaller (action "UninstallProgram", kind uninstall, one item
+  // "uninstall:<name>", params {"key", "name"}). The owner's click is the approval of exactly
+  // that plan. Fails with not_found for an unknown candidate, a folder gone or a program
+  // uninstalled since the list was made, invalid_argument for a candidate that is no owner
+  // decision, refused for a system or deny-list place, and invalid_state when no healthy HDD
+  // keeps 10 % free after taking the folder.
+  [[nodiscard]] Result<Plan> owner_action(std::int64_t id);
   // An approval-only plan for a system setting or a relocation (of a cache, or by a recipe: action
   // "RelocateRecipe", one item "relocate:<pack>/<case>[:<instance>]", the target folder
   // "<root>Relocated\<pack>\<case>[\<instance>]" on the best healthy volume, params
@@ -166,6 +183,9 @@ class Executor {
   // Replaces the scan's candidates (filling in their ids) and records the report-tier ones as
   // findings.
   [[nodiscard]] Result<void> record(std::vector<Candidate>& found, WallTime now) const;
+  // The plan and spec of owner-decision `candidate` (owner_action).
+  [[nodiscard]] Result<std::pair<Plan, PlanSpec>> archive_plan(const Candidate& candidate) const;
+  [[nodiscard]] Result<std::pair<Plan, PlanSpec>> uninstall_plan(const Candidate& candidate) const;
   [[nodiscard]] Result<Plan> submit_setting(Action& action, const std::string& name,
                                             const PlanSpec& spec, const Actor& proposer);
   // `spec` as an automatic plan of group `group` from the scheduler, approved at once.

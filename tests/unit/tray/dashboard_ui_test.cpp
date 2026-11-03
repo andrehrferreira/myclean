@@ -3,6 +3,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <format>
 #include <set>
 #include <string>
 #include <utility>
@@ -97,6 +98,7 @@ tray_model::CleanupPoll cleanup_poll() {
   space(tray_model::SpaceList::old_downloads, fixtures::old_downloads_json());
   space(tray_model::SpaceList::duplicates, fixtures::duplicates_json());
   space(tray_model::SpaceList::used_installers, fixtures::used_installers_json());
+  space(tray_model::SpaceList::owner_decisions, fixtures::owner_decisions_json());
   poll.task_activity = "Running plan 8: Run `pnpm store prune`";
   poll.task_note = "Plan 6 (Run `npm cache verify`): done, cache_bytes better";
   return poll;
@@ -261,7 +263,8 @@ TEST(DashboardUiTest, DrawsEverySpaceListAndAsksForEachOnceWhenShown) {
   const tray_model::DashboardModel model = full_model();
   for (const tray_model::SpaceList list :
        {tray_model::SpaceList::top, tray_model::SpaceList::old_downloads,
-        tray_model::SpaceList::duplicates, tray_model::SpaceList::used_installers}) {
+        tray_model::SpaceList::duplicates, tray_model::SpaceList::used_installers,
+        tray_model::SpaceList::owner_decisions}) {
     UiState state{.section = Section::space};
     state.space = list;
     EXPECT_GT(render(model, state), 0);
@@ -272,6 +275,21 @@ TEST(DashboardUiTest, DrawsEverySpaceListAndAsksForEachOnceWhenShown) {
     EXPECT_FALSE(load->refresh);
     EXPECT_EQ(load->volume, list == tray_model::SpaceList::top ? "C:" : "");
   }
+}
+
+// Owner-decisions spec: a row the owner clicked says its plan started; nothing is sent unasked.
+TEST(DashboardUiTest, DrawsTheOwnerDecisionsBeforeAndAfterAClick) {
+  const HeadlessUi ui;
+  apply_style(1.0F);
+  const tray_model::DashboardModel model = full_model();
+  UiState state{.section = Section::space};
+  state.space = tray_model::SpaceList::owner_decisions;
+  state.space_asked.insert(std::format("{}/", static_cast<int>(state.space)));
+  EXPECT_GT(render(model, state), 0);
+  EXPECT_TRUE(state.requests.empty());
+  state.acted = {901, 904};
+  EXPECT_GT(render(model, state), 0);
+  EXPECT_TRUE(state.requests.empty());
 }
 
 TEST(DashboardUiTest, DrawsTheInboxAndSpaceWhileTheServiceIsDownWithoutAskingForAnything) {

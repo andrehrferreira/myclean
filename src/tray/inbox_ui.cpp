@@ -521,6 +521,106 @@ void draw_installers(const std::vector<tray_model::UsedInstallerRow>& installers
   ImGui::EndTable();
 }
 
+// One owner decision's button: the click is the owner's approval of that one plan, which the tray
+// then runs; afterwards the row says so instead.
+void owner_button(std::int64_t candidate, const char* label, bool reachable, UiState& state) {
+  if (state.acted.contains(candidate)) {
+    colored_text(color::accent, "started: see Cleanup");
+    return;
+  }
+  ImGui::BeginDisabled(!reachable);
+  if (ImGui::SmallButton(label)) {
+    state.requests.emplace_back(tray_model::OwnerAction{.candidate = candidate});
+    state.acted.insert(candidate);
+  }
+  ImGui::EndDisabled();
+}
+
+void draw_cold(const std::vector<tray_model::ColdFolderRow>& folders, bool reachable,
+               UiState& state) {
+  ImGui::SeparatorText("Folders nothing has changed in for six months");
+  if (folders.empty()) {
+    muted_text("None of at least 1 GiB in your profile.");
+    return;
+  }
+  if (!ImGui::BeginTable("cold", 4, table_flags)) {
+    return;
+  }
+  ImGui::TableSetupColumn("Folder", ImGuiTableColumnFlags_WidthStretch, 4.0F);
+  ImGui::TableSetupColumn("On disk", ImGuiTableColumnFlags_WidthStretch, 0.8F);
+  ImGui::TableSetupColumn("Goes to", ImGuiTableColumnFlags_WidthStretch, 3.0F);
+  ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch, 1.4F);
+  ImGui::TableHeadersRow();
+  for (const tray_model::ColdFolderRow& folder : folders) {
+    ImGui::TableNextRow();
+    ImGui::PushID(std::to_string(folder.id).c_str());
+    ImGui::TableNextColumn();
+    wrapped_text(color::text, folder.path);
+    wrapped_text(color::muted, folder.reason);
+    ImGui::TableNextColumn();
+    text(size_text(folder.bytes));
+    ImGui::TableNextColumn();
+    wrapped_text(folder.target.empty() ? color::muted : color::text,
+                 folder.target.empty() ? "no healthy HDD has room" : folder.target);
+    ImGui::TableNextColumn();
+    if (!folder.protected_by.empty()) {
+      muted_text(tray_model::protected_text(folder.protected_by));
+    } else if (!folder.target.empty()) {
+      owner_button(folder.id, "Mover para o HD", reachable, state);
+    }
+    ImGui::PopID();
+  }
+  ImGui::EndTable();
+}
+
+void draw_programs(const std::vector<tray_model::ProgramRow>& programs, bool reachable,
+                   UiState& state) {
+  ImGui::SeparatorText("Installed programs to review");
+  if (programs.empty()) {
+    muted_text("None of the installed programs lies where the knowledge packs suggest a review.");
+    return;
+  }
+  if (!ImGui::BeginTable("programs", 4, table_flags)) {
+    return;
+  }
+  ImGui::TableSetupColumn("Program", ImGuiTableColumnFlags_WidthStretch, 3.0F);
+  ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthStretch, 0.8F);
+  ImGui::TableSetupColumn("Why", ImGuiTableColumnFlags_WidthStretch, 3.4F);
+  ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch, 1.2F);
+  ImGui::TableHeadersRow();
+  for (const tray_model::ProgramRow& program : programs) {
+    ImGui::TableNextRow();
+    ImGui::PushID(std::to_string(program.id).c_str());
+    ImGui::TableNextColumn();
+    wrapped_text(color::text,
+                 program.program + (program.version.empty() ? "" : " " + program.version));
+    wrapped_text(color::muted, program.publisher.empty()
+                                   ? program.location
+                                   : program.publisher + ", " + program.location);
+    ImGui::TableNextColumn();
+    text(size_text(program.bytes));
+    ImGui::TableNextColumn();
+    wrapped_text(color::muted, program.reason);
+    ImGui::TableNextColumn();
+    owner_button(program.id, "Desinstalar", reachable, state);
+    ImGui::PopID();
+  }
+  ImGui::EndTable();
+}
+
+void draw_owner_decisions(const tray_model::SpaceReply& reply, bool reachable, UiState& state) {
+  wrapped_text(color::accent,
+               "Each button is your approval of that one action. Mover para o HD copies the "
+               "folder to the archive on a healthy HDD, checks the copy and only then removes "
+               "the folder (Undo in Cleanup copies it back). Desinstalar opens the program's own "
+               "uninstaller on your desktop; finish it there.");
+  for (const std::string& note : reply.notes) {
+    wrapped_text(color::warning, note);
+  }
+  draw_cold(reply.cold, reachable, state);
+  draw_programs(reply.programs, reachable, state);
+}
+
 // The volume picker of the largest items; starts on the Windows volume.
 void draw_volume_picker(const DashboardModel& model, UiState& state) {
   if (state.space_volume.empty()) {
@@ -641,13 +741,15 @@ void draw_cleanup(const DashboardModel& model, const std::chrono::time_zone& zon
 void draw_space(const DashboardModel& model, const std::chrono::time_zone& zone, UiState& state) {
   const bool reachable = model.service_reachable();
   wrapped_text(color::muted,
-               "Read-only lists: nothing here changes a file. Propose cleanup creates a plan "
-               "that waits in Cleanup until you approve it.");
-  static constexpr std::array<std::pair<tray_model::SpaceList, const char*>, 4> lists = {{
+               "Nothing here changes a file by itself. Propose cleanup creates a plan that waits "
+               "in Cleanup until you approve it; in Your decisions each button is your approval "
+               "of that one action.");
+  static constexpr std::array<std::pair<tray_model::SpaceList, const char*>, 5> lists = {{
       {tray_model::SpaceList::top, "Largest"},
       {tray_model::SpaceList::old_downloads, "Old downloads"},
       {tray_model::SpaceList::duplicates, "Duplicates"},
       {tray_model::SpaceList::used_installers, "Installers already used"},
+      {tray_model::SpaceList::owner_decisions, "Your decisions"},
   }};
   for (const auto& [list, label] : lists) {
     if (ImGui::RadioButton(label, state.space == list)) {
@@ -682,6 +784,9 @@ void draw_space(const DashboardModel& model, const std::chrono::time_zone& zone,
       break;
     case tray_model::SpaceList::used_installers:
       draw_installers(reply->installers, reachable, state);
+      break;
+    case tray_model::SpaceList::owner_decisions:
+      draw_owner_decisions(*reply, reachable, state);
       break;
   }
 }

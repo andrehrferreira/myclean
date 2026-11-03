@@ -204,6 +204,43 @@ TEST(CleaningRepliesTest, RequestParameters) {
   EXPECT_EQ(space_params(SpaceList::top, "D:", true), (Json{{"path", "D"}, {"refresh", true}}));
   EXPECT_EQ(space_params(SpaceList::duplicates, "C:", false), Json::object());
   EXPECT_EQ(space_method(SpaceList::used_installers), "space.used_installers");
+  EXPECT_EQ(space_method(SpaceList::owner_decisions), "space.owner_decisions");
+  EXPECT_EQ(space_params(SpaceList::owner_decisions, "", true), (Json{{"refresh", true}}));
+  EXPECT_EQ(owner_action_params(901), (Json{{"candidate", 901}}));
+}
+
+TEST(CleaningRepliesTest, OwnerDecisionsWithTheirCandidateIds) {
+  SpaceReply decisions{.list = SpaceList::owner_decisions};
+  ASSERT_TRUE(parse_space(testing::owner_decisions_json(), decisions).has_value());
+  ASSERT_EQ(decisions.cold.size(), 3U);
+  EXPECT_EQ(decisions.cold[0].id, 901);
+  EXPECT_EQ(decisions.cold[0].target, R"(L:\Archive\C\Users\owner\AppData\Local\OldStudio)");
+  EXPECT_EQ(decisions.cold[0].bytes, Bytes{12'000'000'000});
+  EXPECT_TRUE(decisions.cold[0].protected_by.empty());
+  EXPECT_EQ(decisions.cold[1].protected_by, "user_known_folder");
+  EXPECT_TRUE(decisions.cold[2].target.empty()) << "no HDD has room";
+  ASSERT_EQ(decisions.programs.size(), 1U);
+  EXPECT_EQ(decisions.programs[0].id, 904);
+  EXPECT_EQ(decisions.programs[0].program, "AmpliTube 5");
+  EXPECT_EQ(decisions.programs[0].area, "Audio plug-ins");
+  EXPECT_EQ(decisions.notes, std::vector<std::string>{"the drive of D:\\ is unknown"});
+
+  SpaceReply first{.list = SpaceList::owner_decisions};
+  ASSERT_TRUE(parse_space(testing::space_state("scanning"), first).has_value());
+  EXPECT_TRUE(first.cold.empty());
+  Json bad = testing::owner_decisions_json();
+  bad["uninstall"][0].erase("program");
+  SpaceReply broken{.list = SpaceList::owner_decisions};
+  EXPECT_FALSE(parse_space(bad, broken).has_value());
+}
+
+TEST(CleaningRepliesTest, AnArchivedFolderCanBeUndoneAnUninstallCannot) {
+  PlanRow plan{.id = 1, .kind = "archive", .state = "verified"};
+  EXPECT_TRUE(undoable(plan));
+  plan.state = "approved";
+  EXPECT_FALSE(undoable(plan));
+  plan = PlanRow{.id = 2, .kind = "uninstall", .state = "applied"};
+  EXPECT_FALSE(undoable(plan));
 }
 
 TEST(CleaningRepliesTest, QuarantineRunsWithPurgeDates) {

@@ -25,11 +25,14 @@ myclean_add_library(tray
     tray_icon.cpp
     tray_icon.hpp
     ui_text.hpp
+    uninstall_launcher.cpp
+    uninstall_launcher.hpp
     user_tools.cpp
     user_tools.hpp
     window_object.hpp
   DEPENDS
     myclean::os
+    myclean::platform_clean
     myclean::platform_cleanup
     myclean::platform_fs
     myclean::platform_input
@@ -48,6 +51,7 @@ myclean_add_library(tray
     dwmapi
     dxgi
     gdi32
+    ole32
     shell32
     user32)
 

@@ -46,7 +46,8 @@ struct SelectRange {
   Range range = Range::live;
 };
 // The approval inbox: a cleaning scan, a plan's details shown or hidden, the owner's decision,
-// an undo, a restore from quarantine; a Space list, and a cleanup proposed from it.
+// an undo, a restore from quarantine; a Space list, a cleanup proposed from it, and the one-click
+// action of an owner decision.
 struct ScanNow {};
 struct OpenPlan {
   std::int64_t id = 0;
@@ -79,9 +80,15 @@ struct LoadSpace {
 struct ProposeCleanup {
   std::vector<std::int64_t> candidates;  // Space candidate ids
 };
-using Request = std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange, ScanNow,
-                             OpenPlan, ClosePlan, ApprovePlan, RejectPlan, UndoPlan,
-                             RestoreQuarantine, PurgeQuarantine, LoadSpace, ProposeCleanup>;
+// The owner's one click on an owner decision: moving a cold folder to the HDD archive, or
+// uninstalling a program (plans.owner_action creates the plan already approved).
+struct OwnerAction {
+  std::int64_t candidate = 0;  // an owner-decision candidate id
+};
+using Request =
+    std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange, ScanNow, OpenPlan,
+                 ClosePlan, ApprovePlan, RejectPlan, UndoPlan, RestoreQuarantine, PurgeQuarantine,
+                 LoadSpace, ProposeCleanup, OwnerAction>;
 
 // The tray's executor of user-scope plans, as the poller drives it: the poller takes a task
 // (user_tasks.next) only from a reachable service and only while the runner is idle, and

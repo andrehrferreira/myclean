@@ -1,6 +1,7 @@
 # `myclean scan-all` analyses (scan-all spec): cold data, placement advice, cross-drive
 # duplicates, archives already extracted, merged idle worktrees, the findings of the map, rules, compression and maintenance analyses, and the
-# unified report with its precedence rule. Read-only; the CLI does the I/O.
+# unified report with its precedence rule; the owner decisions the service lists for the tray (the
+# archive folder rule, installed programs to review). Read-only; the CLI does the I/O.
 myclean_add_library(scanall
   SOURCES
     archives.cpp
@@ -13,6 +14,8 @@ myclean_add_library(scanall
     duplicates.hpp
     findings.cpp
     findings.hpp
+    owner_decisions.cpp
+    owner_decisions.hpp
     placement.cpp
     placement.hpp
     report.cpp

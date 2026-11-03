@@ -77,6 +77,11 @@ On those machines the real problems are:
   - `auto`: regenerable data, on a schedule;
   - `ask`: quarantined and restorable;
   - `report`: shown only, never acted on.
+- **Your decisions, one click each** (Space > Your decisions): folders of
+  your profile untouched for six months get **Mover para o HD** (copied to
+  `<HDD>\Archive\<letter>\<path>`, checked, then removed; Undo copies them
+  back), and programs the knowledge packs suggest reviewing get
+  **Desinstalar** (their own uninstaller opens on your desktop).
 
 ### 🧭 Placement
 - **Relocation** of what keeps regrowing (TEMP, Gradle, Cargo, npm, NuGet,

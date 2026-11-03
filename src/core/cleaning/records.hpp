@@ -28,7 +28,9 @@ namespace myclean::cleaning {
 // Tables cleaning_candidate and cleaning_item (component "cleaning").
 [[nodiscard]] const store::MigrationSet& cleaning_migrations();
 
-// recycle_bin: the Recycle Bin items deleted long ago, removed by the tray.
+// recycle_bin: the Recycle Bin items deleted long ago, removed by the tray. archive: a cold folder
+// moved to the HDD archive, uninstall: a program's own uninstaller, both the owner's one-click
+// decisions run by the tray.
 enum class PlanKind {
   cleanup,
   handler,
@@ -36,7 +38,9 @@ enum class PlanKind {
   relocate,
   system_setting,
   quarantine_restore,
-  recycle_bin
+  recycle_bin,
+  archive,
+  uninstall
 };
 
 [[nodiscard]] std::string_view to_string(PlanKind kind);
@@ -94,8 +98,8 @@ struct Candidate {
   std::string strategy;        // rules::Strategy text form; "file" for analyses
   std::filesystem::path path;  // empty for native and handler candidates
   Bytes size;
-  std::string command;  // native
-  std::string handler;  // handler
+  std::string command;  // native; uninstall: the program's Uninstall entry (its registry key)
+  std::string handler;  // handler; uninstall: the program's DisplayName
   std::string reason;
   WallTime found_at;
 };

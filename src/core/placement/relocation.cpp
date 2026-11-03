@@ -358,6 +358,10 @@ Result<Bytes> readable_size(const os::IFileSystem& file_system, const fs::path& 
   return total;
 }
 
+Result<TreeTotals> tree_totals(const os::IFileSystem& file_system, const fs::path& root) {
+  return totals(file_system, root);
+}
+
 Result<void> check_target(const IDriveFacts& drives, const fs::path& target, Bytes needed) {
   Result<std::vector<TargetVolume>> volumes = drives.volumes();
   if (!volumes) {

@@ -182,6 +182,31 @@ void parse_installers(const Json& answer, SpaceReply& reply) {
   }
 }
 
+void parse_owner_decisions(const Json& answer, SpaceReply& reply) {
+  for (const Json& folder : answer.at("cold")) {
+    reply.cold.push_back(
+        ColdFolderRow{.id = folder.at("id").get<std::int64_t>(),
+                      .path = folder.at("path").get<std::string>(),
+                      .bytes = bytes_of(folder, "bytes"),
+                      .target = optional_text(folder, "target").value_or(""),
+                      .reason = folder.at("reason").get<std::string>(),
+                      .protected_by = optional_text(folder, "protected").value_or("")});
+  }
+  for (const Json& program : answer.at("uninstall")) {
+    reply.programs.push_back(ProgramRow{.id = program.at("id").get<std::int64_t>(),
+                                        .program = program.at("program").get<std::string>(),
+                                        .publisher = program.at("publisher").get<std::string>(),
+                                        .version = program.at("version").get<std::string>(),
+                                        .location = program.at("location").get<std::string>(),
+                                        .bytes = bytes_of(program, "bytes"),
+                                        .area = program.at("area").get<std::string>(),
+                                        .reason = program.at("reason").get<std::string>()});
+  }
+  if (const auto notes = answer.find("notes"); notes != answer.end()) {
+    reply.notes = notes->get<std::vector<std::string>>();
+  }
+}
+
 // The member that holds the result of `list`.
 const char* result_member(SpaceList list) {
   switch (list) {
@@ -189,6 +214,8 @@ const char* result_member(SpaceList list) {
       return "groups";
     case SpaceList::used_installers:
       return "used";
+    case SpaceList::owner_decisions:
+      return "cold";
     case SpaceList::top:
     case SpaceList::old_downloads:
       break;
@@ -354,6 +381,10 @@ Result<std::vector<QuarantineRun>> parse_quarantine_list(const Json& reply) {
   });
 }
 
+Json owner_action_params(std::int64_t candidate) {
+  return Json{{"candidate", candidate}};
+}
+
 Json quarantine_restore_params(std::int64_t plan, std::optional<std::int64_t> item) {
   Json params{{"plan", plan}};
   if (item) {
@@ -370,6 +401,8 @@ std::string_view space_method(SpaceList list) {
       return ipc::space_old_downloads_method;
     case SpaceList::duplicates:
       return ipc::space_duplicates_method;
+    case SpaceList::owner_decisions:
+      return ipc::space_owner_decisions_method;
     case SpaceList::used_installers:
       break;
   }
@@ -407,6 +440,9 @@ Result<void> parse_space(const Json& answer, SpaceReply& reply) {
         break;
       case SpaceList::used_installers:
         parse_installers(answer, reply);
+        break;
+      case SpaceList::owner_decisions:
+        parse_owner_decisions(answer, reply);
         break;
     }
   });
@@ -454,7 +490,7 @@ bool undoable(const PlanRow& plan) {
   if (plan.state != "applied" && plan.state != "verified") {
     return false;
   }
-  return plan.kind == "relocate" || plan.kind == "system_setting" ||
+  return plan.kind == "relocate" || plan.kind == "system_setting" || plan.kind == "archive" ||
          (plan.kind == "cleanup" && plan.tier == "ask");
 }
 

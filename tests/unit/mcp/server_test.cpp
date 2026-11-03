@@ -163,12 +163,12 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
     EXPECT_EQ(schema.at("additionalProperties"), false);
     EXPECT_EQ(tool.at("annotations").at("readOnlyHint"), !name.starts_with("propose_")) << name;
   }
-  EXPECT_EQ(names,
-            (std::vector<std::string>{
-                "health_snapshot", "metrics_latest", "metrics_history", "top_processes",
-                "list_volumes", "explain_process", "disk_health", "list_alerts", "freeze_summary",
-                "storage_top", "find_old_downloads", "find_duplicates", "find_used_installers",
-                "list_plans", "get_plan", "propose_cleanup", "propose_optimization"}));
+  EXPECT_EQ(names, (std::vector<std::string>{
+                       "health_snapshot", "metrics_latest", "metrics_history", "top_processes",
+                       "list_volumes", "explain_process", "disk_health", "list_alerts",
+                       "freeze_summary", "storage_top", "find_old_downloads", "find_duplicates",
+                       "find_used_installers", "find_owner_decisions", "list_plans", "get_plan",
+                       "propose_cleanup", "propose_optimization"}));
   // No tool approves, rejects, executes, undoes, restores or deletes anything.
   for (const std::string& name : names) {
     for (const char* verb :
@@ -225,8 +225,9 @@ TEST_F(ServerTest, StorageAndPlanToolsCallTheirMethods) {
   static_cast<void>(text(call_tool("find_used_installers"), false));
   static_cast<void>(text(call_tool("list_plans", {{"state", "awaiting_approval"}}), false));
   static_cast<void>(text(call_tool("get_plan", {{"id", 12}}), false));
+  static_cast<void>(text(call_tool("find_owner_decisions"), false));
 
-  ASSERT_EQ(calls().size(), 7U);
+  ASSERT_EQ(calls().size(), 8U);
   EXPECT_EQ(calls()[0].method, "space.top");
   EXPECT_EQ(calls()[0].params, (Json{{"path", "C"}, {"n", 20}, {"refresh", false}}));
   EXPECT_EQ(calls()[1].params, (Json{{"path", "downloads"}, {"n", 5}, {"refresh", false}}));
@@ -238,6 +239,8 @@ TEST_F(ServerTest, StorageAndPlanToolsCallTheirMethods) {
   EXPECT_EQ(calls()[5].params, (Json{{"state", "awaiting_approval"}}));
   EXPECT_EQ(calls()[6].method, "plans.get");
   EXPECT_EQ(calls()[6].params, (Json{{"id", 12}}));
+  EXPECT_EQ(calls()[7].method, "space.owner_decisions");
+  EXPECT_EQ(calls()[7].params, (Json{{"refresh", false}}));
 }
 
 TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
@@ -375,7 +378,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 17U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 18U);
 }
 
 }  // namespace

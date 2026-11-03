@@ -140,6 +140,11 @@ class RelocateAction final : public Action {
 [[nodiscard]] Result<Bytes> readable_size(const os::IFileSystem& file_system,
                                           const std::filesystem::path& root);
 
+// What the tree below `root` holds: regular files and their logical bytes, reparse points not
+// followed nor counted. Fails when a folder cannot be listed.
+[[nodiscard]] Result<TreeTotals> tree_totals(const os::IFileSystem& file_system,
+                                             const std::filesystem::path& root);
+
 // Why `target` cannot take `needed` bytes, as a refusal; success when its drive is healthy and
 // has room (unsuitable()).
 [[nodiscard]] Result<void> check_target(const IDriveFacts& drives,

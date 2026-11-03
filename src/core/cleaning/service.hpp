@@ -25,6 +25,7 @@
 #include "core/cleaning/tray_tasks.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/status.hpp"
+#include "core/map/attribution.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/clock.hpp"
@@ -36,6 +37,8 @@
 #include "core/placement/relocation.hpp"
 #include "core/safety/deny_list.hpp"
 #include "core/safety/safe_remove.hpp"
+#include "core/scanall/findings.hpp"
+#include "core/scanall/owner_decisions.hpp"
 #include "core/sched/scheduler.hpp"
 #include "core/sched/store_schedule_repository.hpp"
 #include "core/space/downloads.hpp"
@@ -177,6 +180,17 @@ class CleaningService {
   [[nodiscard]] Result<nlohmann::json> analyze_installers(const std::filesystem::path& downloads,
                                                           const std::stop_token& stop);
   [[nodiscard]] Result<nlohmann::json> analyze_duplicates(const std::stop_token& stop);
+  // space.owner_decisions: the cold folders of the owner's profile and the installed programs
+  // in uninstall areas, stored as owner-decision candidates.
+  [[nodiscard]] Result<nlohmann::json> analyze_decisions(const std::stop_token& stop);
+  // The cold folders of `tree` (the owner's profile, `profile`) and the installed programs to
+  // review; what could not be judged goes to `notes`.
+  [[nodiscard]] std::vector<scanall::Finding> cold_folders(const space::ScanResult& tree,
+                                                           const std::filesystem::path& profile,
+                                                           WallTime now,
+                                                           nlohmann::json& notes) const;
+  [[nodiscard]] std::vector<scanall::ProgramFinding> review_programs(
+      nlohmann::json& notes, const std::stop_token& stop) const;
   [[nodiscard]] nlohmann::json request_scan();
   // Queues an early purge of quarantine run `run` for the cleaning worker.
   [[nodiscard]] Result<nlohmann::json> request_purge(PlanId run);
@@ -210,6 +224,7 @@ class CleaningService {
   std::optional<std::string> owner_problem_;
   std::vector<std::string> problems_;
   std::vector<packs::RelocationRecipe> recipes_;  // of registry_
+  std::vector<map::Area> uninstall_areas_;        // of registry_: reclaim kind uninstall
   std::vector<ipc::PackStatus> pack_status_;
   std::vector<PlanId> purges_;  // runs to purge early, oldest request first; the first runs now
   bool scan_requested_ = false;

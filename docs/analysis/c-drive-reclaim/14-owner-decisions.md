@@ -1,7 +1,10 @@
 # 14 Decisions for the owner
 
 These are the choices only the owner can make, with the GiB each frees on C: and the exact
-action. The "MyClean" column says what MyClean runs once approved (plans from
+action. Cold folders of the profile and programs in uninstall areas are also listed in the tray
+(Space > Your decisions) with a one-click action each: "Mover para o HD" archives the folder to
+a healthy HDD (copy, check, remove; undo copies it back), "Desinstalar" opens the program's own
+uninstaller. The "MyClean" column says what MyClean runs once approved (plans from
 `plans.propose_optimization` or the inbox). Otherwise the owner does it in the named tool.
 
 | # | GiB | Decision | Action | MyClean |

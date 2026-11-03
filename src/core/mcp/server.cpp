@@ -206,9 +206,18 @@ const Json& tool_list() {
                        "installed already.") +
                std::string(space_note),
            object_schema({{"refresh", refresh_property()}})),
+      tool("find_owner_decisions",
+           std::string("What only the owner can decide: folders of the owner's profile on an SSD "
+                       "that nothing has changed for six months (at least 1 GiB), with the HDD "
+                       "archive folder they would move to, and installed programs the knowledge "
+                       "packs suggest reviewing for uninstall, with their sizes. Only the owner "
+                       "acts on them, one click each in the MyClean tray; no tool can.") +
+               std::string(space_note),
+           object_schema({{"refresh", refresh_property()}})),
       tool("list_plans",
            "MyClean's plans, newest first: id, title, kind (cleanup, handler, native, relocate, "
-           "system_setting, quarantine_restore, recycle_bin), tier, scope, state, proposer, "
+           "system_setting, quarantine_restore, recycle_bin, archive, uninstall), tier, scope, "
+           "state, proposer, "
            "items, bytes and whether a restart is needed. Plans in 'awaiting_approval' wait for "
            "the owner in the MyClean tray. Reads only.",
            object_schema({{"state",
@@ -392,6 +401,9 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
   }
   if (tool == "find_used_installers") {
     return ServiceCall{.method = ipc::space_used_installers_method, .params = refresh};
+  }
+  if (tool == "find_owner_decisions") {
+    return ServiceCall{.method = ipc::space_owner_decisions_method, .params = refresh};
   }
   if (tool == "list_plans") {
     return ServiceCall{.method = ipc::plans_list_method, .params = arguments};

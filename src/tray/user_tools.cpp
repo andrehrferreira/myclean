@@ -11,18 +11,22 @@
 #include "core/model/result.hpp"
 #include "core/os/clock.hpp"
 #include "core/placement/drives.hpp"
+#include "core/safety/deny_list.hpp"
 #include "core/tray_model/snapshot.hpp"
 #include "core/user_tasks/drive_facts.hpp"
 #include "core/user_tasks/task.hpp"
+#include "platform/clean/win32_probes.hpp"
 #include "platform/cleanup/win32_command_runner.hpp"
 #include "platform/cleanup/win32_handler_host.hpp"
 #include "platform/cleanup/win32_recycle_bin.hpp"
+#include "platform/fs/protected_locations.hpp"
 #include "platform/fs/win32_file_system.hpp"
 #include "platform/proc/nt_process_table.hpp"
 #include "platform/settings/registry.hpp"
 #include "platform/settings/tree_copier.hpp"
 #include "platform/settings/user_settings.hpp"
 #include "tray/poll_thread.hpp"
+#include "tray/uninstall_launcher.hpp"
 
 namespace myclean::tray {
 
@@ -77,6 +81,14 @@ user_tasks::TaskReport run_user_task(const user_tasks::UserTask& task, const std
   if (task.kind == user_tasks::TaskKind::recycle_bin) {
     recycle_bin = std::make_unique<platform::Win32RecycleBin>(recycle_bin_timeout);
   }
+  const platform::Win32Usage usage;
+  std::optional<safety::ProtectedLocations> locations;
+  if (task.kind == user_tasks::TaskKind::archive) {
+    if (Result<safety::ProtectedLocations> found = platform::protected_locations(nullptr); found) {
+      locations = *std::move(found);
+    }
+  }
+  Win32UninstallLauncher launcher;
   const user_tasks::Toolbox tools{.runner = &runner,
                                   .handlers = handlers.get(),
                                   .recycle_bin = recycle_bin.get(),
@@ -88,7 +100,10 @@ user_tasks::TaskReport run_user_task(const user_tasks::UserTask& task, const std
                                                 .file_system = &file_system,
                                                 .drives = &drives,
                                                 .registry = &registry,
-                                                .processes = &processes}};
+                                                .processes = &processes},
+                                  .usage = &usage,
+                                  .locations = locations ? &*locations : nullptr,
+                                  .launcher = &launcher};
   return user_tasks::run(task, tools, stop);
 }
 

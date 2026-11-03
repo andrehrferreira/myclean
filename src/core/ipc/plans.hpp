@@ -19,7 +19,7 @@ namespace myclean::ipc {
 // PlanSummary:
 //   {"id": int, "title": string,
 //    "kind": "cleanup"|"handler"|"native"|"relocate"|"system_setting"|"quarantine_restore"|
-//            "recycle_bin",
+//            "recycle_bin"|"archive"|"uninstall",
 //    "tier": "auto"|"ask"|"report", "scope": "user"|"service",
 //    "state": "proposed"|"auto"|"awaiting_approval"|"approved"|"applying"|"applied"|"verified"|
 //             "rolled_back"|"failed"|"rejected",
@@ -29,7 +29,9 @@ namespace myclean::ipc {
 //   handlers or DISM; native = a package manager's prune command; relocate = a cache or TEMP
 //   moved through its setting; system_setting = hibernation, page file or shadow storage;
 //   quarantine_restore = quarantined items moved back; recycle_bin = the Recycle Bin items the
-//   owner deleted long ago, deleted permanently.
+//   owner deleted long ago, deleted permanently; archive = a cold folder moved to the HDD archive;
+//   uninstall = an installed program's own uninstaller started (the last two: the owner's
+//   one-click decisions, plans.owner_action).
 //   scope: "service" plans run in the service; "user" plans run in the tray with the owner's
 //   token (user_tasks.*).
 //
@@ -38,7 +40,7 @@ namespace myclean::ipc {
 //    "approved": true|false|null (null: not decided yet)}
 //   path is a file system path, or "handler:<name>" / "dism:component-store" /
 //   "relocate:<cache>" / "relocate:<pack>/<case>[:<instance>]" /
-//   "recycle-bin:deleted-<days>-days-ago" for items that are not files.
+//   "recycle-bin:deleted-<days>-days-ago" / "uninstall:<program>" for items that are not files.
 
 // ---- cleaning.* -------------------------------------------------------------------------------
 
@@ -134,11 +136,26 @@ inline constexpr std::string_view plans_propose_optimization_method = "plans.pro
 // {"plan": int, "state": "approved"}
 inline constexpr std::string_view plans_recycle_method = "plans.recycle";
 
+// TRAY ONLY. Parameters: candidate (integer, required): an id of space.owner_decisions. The
+// owner's one click on an owner decision, which is the approval of exactly that plan: an approved
+// user-scope plan, run by the tray with the owner's token (user_tasks.next):
+//   a cold folder   kind "archive": copied to its archive folder "<HDD>\Archive\<letter>\<path>"
+//                   on the healthy HDD with the most room that keeps 10 % free (judged now), the
+//                   copy checked to hold the same files and bytes, then the folder removed
+//                   through SafeRemove; undo copies it back and removes the archive copy;
+//   a program       kind "uninstall": its Uninstall entry's UninstallString started on the
+//                   owner's desktop (the program's own interactive uninstaller); not reversible;
+//                   verified when the entry is gone, else "launched; finish in the uninstaller".
+// {"plan": int, "state": "approved"}. Fails with not_found for an unknown candidate or one gone
+// since the list was made, invalid_argument for a candidate of another list, refused for a
+// system or deny-list place, invalid_state when no healthy HDD has room.
+inline constexpr std::string_view plans_owner_action_method = "plans.owner_action";
+
 // ---- user_tasks.* (the tray runs user-scope plans with the owner's token) ---------------------
 
 // TRAY ONLY. No parameters. The oldest user-scope plan to run now, or null:
 //   {"task": null | {"plan": int, "title": string,
-//    "kind": "native"|"handler"|"relocate"|"cleanup"|"recycle_bin",
+//    "kind": "native"|"handler"|"relocate"|"cleanup"|"recycle_bin"|"archive"|"uninstall",
 //    "operation": "apply"|"undo",
 //    "tier": "auto"|"ask"|"report",
 //    "items": [{"id": int, "path": string, "bytes": int, "approved": bool|null,
@@ -150,7 +167,9 @@ inline constexpr std::string_view plans_recycle_method = "plans.recycle";
 //                                                             (relocate by a recipe)
 //            | {"recycle": true}                              (cleanup: to the Recycle Bin)
 //            | {"deleted_days": int}  (recycle_bin: the items of every fixed volume's bin deleted
-//                                      at least that many days ago, deleted permanently),
+//                                      at least that many days ago, deleted permanently)
+//            | {"source", "target"}                       (archive: the folder, its archive folder)
+//            | {"key", "name"}       (uninstall: the program's Uninstall key and its DisplayName),
 //    "undo": {"not_reversible": string, "items": [{"item", "data"}]} (undo only: as reported)}}
 // An apply task lists the items not rejected; the tray acts on no other. A task handed out is
 // not handed out again for task_claim_minutes unless reported.
@@ -238,6 +257,22 @@ inline constexpr std::string_view space_duplicates_method = "space.duplicates";
 //   {..., "folder": string|null, "used": [{"id", "path", "kind": "msi"|"exe", "size",
 //    "size_on_disk", "installed_as", "product_code"|"publisher"}], "errors": [...]}
 inline constexpr std::string_view space_used_installers_method = "space.used_installers";
+
+// Parameters: refresh (boolean, optional). What only the owner can decide (owner-decisions spec),
+// each with its one-click action (plans.owner_action):
+//   {..., "profile": string|null, "cold": [{"id", "path", "bytes", "target": string|null,
+//    "reason", "protected"?}], "uninstall": [{"id", "program", "publisher", "version",
+//    "location", "bytes", "area", "reason"}], "notes": [string]}
+// cold: folders of the owner's profile on an SSD of at least 1 GiB that nothing has written for
+// six months (scan-all's cold rule), outermost first; "target" is the archive folder they would
+// go to, null when no healthy HDD keeps 10 % free after taking it; "protected" names the
+// deny-list entry that refuses the folder (no action is possible). uninstall: the installed
+// programs (Uninstall entries of HKLM and the owner's HKCU) whose InstallLocation lies in an
+// area the knowledge packs mark for uninstall review, largest first (bytes: EstimatedSize, else
+// the install folder's size on disk), at most max_owner_programs. notes: what could not be
+// judged, and why.
+inline constexpr std::string_view space_owner_decisions_method = "space.owner_decisions";
+inline constexpr std::size_t max_owner_programs = 100;
 
 inline constexpr int space_result_minutes = 60;
 inline constexpr int max_space_top = 100;

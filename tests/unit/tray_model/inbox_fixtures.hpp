@@ -172,6 +172,43 @@ inline InboxJson used_installers_json() {
   return answer;
 }
 
+// space.owner_decisions: a cold folder with its archive folder, one in Documents (protected),
+// one without an HDD with room, and a program in an uninstall area.
+inline InboxJson owner_decisions_json() {
+  InboxJson answer = space_state("ready");
+  answer["profile"] = R"(C:\Users\owner)";
+  answer["cold"] = InboxJson::array(
+      {InboxJson{{"id", 901},
+                 {"path", R"(C:\Users\owner\AppData\Local\OldStudio)"},
+                 {"bytes", 12'000'000'000},
+                 {"target", R"(L:\Archive\C\Users\owner\AppData\Local\OldStudio)"},
+                 {"reason", "nothing inside changed since 2025-07-01; 11.2 GiB on nvme"}},
+       InboxJson{{"id", 902},
+                 {"path", R"(C:\Users\owner\Documents)"},
+                 {"bytes", 3'000'000'000},
+                 {"target", R"(L:\Archive\C\Users\owner\Documents)"},
+                 {"reason", "nothing inside changed since 2025-01-01; 2.8 GiB on nvme"},
+                 {"protected", "user_known_folder"}},
+       InboxJson{{"id", 903},
+                 {"path", R"(C:\Users\owner\Huge)"},
+                 {"bytes", 9'000'000'000'000},
+                 {"target", nullptr},
+                 {"reason",
+                  "nothing inside changed since 2024-01-01; 8.2 TiB on nvme; no healthy "
+                  "HDD keeps 10 % free after taking it"}}});
+  answer["uninstall"] = InboxJson::array(
+      {InboxJson{{"id", 904},
+                 {"program", "AmpliTube 5"},
+                 {"publisher", "IK Multimedia"},
+                 {"version", "5.10"},
+                 {"location", R"(C:\Program Files\IK Multimedia\AmpliTube 5)"},
+                 {"bytes", 6'600'000'000},
+                 {"area", "Audio plug-ins"},
+                 {"reason", "Audio plug-ins: uninstall the ones you no longer use"}}});
+  answer["notes"] = InboxJson::array({"the drive of D:\\ is unknown"});
+  return answer;
+}
+
 // The "task" of a user_tasks.next answer: plan 8 runs `pnpm store prune`.
 inline InboxJson native_task_json() {
   return InboxJson{{"plan", 8},

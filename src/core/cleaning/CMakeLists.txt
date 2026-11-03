@@ -23,6 +23,7 @@ myclean_add_library(cleaning
     myclean::packs
     myclean::placement
     myclean::rules
+    myclean::scanall
     myclean::sched
     myclean::space
     myclean::store
