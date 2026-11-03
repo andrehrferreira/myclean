@@ -108,6 +108,20 @@ TEST_F(GovernorMethods, InvalidValuesAreRefused) {
             Errc::invalid_argument);
 }
 
+TEST_F(GovernorMethods, OrphanDecisionsAreForTheTrayAndNameAProposalOrRule) {
+  const Json forget{{"id", 7}, {"decision", "forget"}};
+  const Result<Json> refused = call(ipc::governor_orphans_method, forget, false);
+  ASSERT_FALSE(refused.has_value());
+  EXPECT_EQ(refused.error().code, Errc::refused);
+  const Result<Json> unknown = call(ipc::governor_orphans_method, forget, true);
+  ASSERT_FALSE(unknown.has_value());
+  EXPECT_EQ(unknown.error().code, Errc::not_found);
+  EXPECT_EQ(
+      call(ipc::governor_orphans_method, Json{{"id", 7}, {"decision", "maybe"}}, true).error().code,
+      Errc::invalid_argument);
+  EXPECT_TRUE(machine().governor().status().at("orphans").at("proposals").empty());
+}
+
 TEST_F(GovernorMethods, PauseReportsWhenItEnds) {
   const Result<Json> paused = call(ipc::governor_pause_method, Json{{"minutes", 30}}, true);
   ASSERT_TRUE(paused.has_value());

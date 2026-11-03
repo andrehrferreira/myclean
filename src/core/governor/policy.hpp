@@ -6,6 +6,7 @@
 #include <string_view>
 #include <vector>
 
+#include "core/governor/orphans.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/rules/data_files.hpp"
@@ -58,6 +59,11 @@
 //
 //   [notifications]
 //   interval_minutes = 5                # at most one owner notification per tree this often
+//
+//   [orphans]                           # orphaned polling loops
+//   enabled         = true
+//   min_trees       = 3                 # 2..1000 live orphaned trees of one pattern to propose it
+//   min_age_minutes = 10                # 1..1440, a younger root is never an orphan loop
 //
 // Exit thresholds must not be stricter than the entry thresholds (a CPU exit above the entry,
 // say), and rearm_percent must be below notification_percent.
@@ -116,6 +122,7 @@ struct GovernorPolicy {
   PressurePolicy pressure;
   LadderPolicy ladder;
   JobPolicy jobs;
+  OrphanPolicy orphans;
 };
 
 // Whether step 5 may kill a suspended tree whose root is of `process_class`.

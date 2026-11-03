@@ -11,6 +11,7 @@
 
 #include "core/governor/commands.hpp"
 #include "core/governor/forest.hpp"
+#include "core/governor/orphans.hpp"
 #include "core/governor/pressure.hpp"
 #include "core/governor/reason.hpp"
 #include "core/governor/recovery.hpp"
@@ -32,6 +33,8 @@
 //   governor_suspend  (pid, creation time, count) of the suspends the governor applied, each
 //                     written before the suspend is applied
 //   governor_allow    the owner's Always-allow images
+//   governor_orphan_rule  the owner's rules for patterns of orphaned polling loops: always end,
+//                     or ignore
 // Every intervention and rollback also goes to action_log as a GovernorStep entry (plan 0).
 // Creation times are stored in nanoseconds since the Unix epoch (keys.hpp), other times in Unix
 // seconds.
@@ -62,6 +65,9 @@ enum class EventKind {
   // Games.
   game_detected,  // fullscreen + GPU made a process a game
   game_mode,      // game mode turned on or off
+  // Orphaned polling loops (the ends themselves are `kill` events with reason orphaned_loop).
+  orphan_loops,  // a pattern proposed to the owner, or its trees ended by an `always` rule
+  orphan_rule,   // the owner stored or forgot a rule for a pattern
 };
 
 [[nodiscard]] std::string_view to_string(EventKind kind);
@@ -119,6 +125,23 @@ struct JobRecord {
 // Adds `image` (a file name; case is ignored) to the owner's allow list.
 [[nodiscard]] Result<void> add_allowed(store::Store& store, std::string_view image, WallTime now);
 [[nodiscard]] Result<std::vector<std::string>> load_allowed(store::Store& store);
+
+// One row of governor_orphan_rule.
+struct OrphanRuleRecord {
+  std::int64_t id = 0;
+  std::string pattern;  // governor::normalize_command_line
+  std::string image;    // the roots' image when it was decided
+  governor::OrphanRule rule = governor::OrphanRule::always;
+  WallTime decided;
+};
+
+// Stores the rule of `pattern`, replacing an earlier one; returns its row id.
+[[nodiscard]] Result<std::int64_t> save_orphan_rule(store::Store& store, std::string_view pattern,
+                                                    std::string_view image,
+                                                    governor::OrphanRule rule, WallTime now);
+[[nodiscard]] Result<void> forget_orphan_rule(store::Store& store, std::int64_t id);
+// Every stored rule, oldest first. A row whose rule no longer parses is skipped.
+[[nodiscard]] Result<std::vector<OrphanRuleRecord>> load_orphan_rules(store::Store& store);
 
 // Writes events (save_event) and keeps the newest in memory for governor.status. A failed write
 // is kept as the latest problem and never stops the governor. Not thread-safe.

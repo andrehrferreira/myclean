@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <optional>
@@ -48,6 +49,25 @@ GovernorEventRow event_row(const Json& event) {
       .reason = event.at("reason").get<std::string>(),
       .actor = event.at("actor").get<std::string>(),
       .detail = event.at("detail").get<std::string>()};
+}
+
+void read_orphans(const Json& orphans, GovernorStatus& status) {
+  for (const Json& proposal : orphans.at("proposals")) {
+    status.orphan_proposals.push_back(
+        OrphanProposalRow{.id = proposal.at("id").get<std::int64_t>(),
+                          .time = seconds_time(proposal.at("time")),
+                          .pattern = proposal.at("pattern").get<std::string>(),
+                          .image = proposal.at("image").get<std::string>(),
+                          .trees = proposal.at("trees").get<std::int64_t>(),
+                          .processes = proposal.at("processes").get<std::int64_t>()});
+  }
+  for (const Json& rule : orphans.at("rules")) {
+    status.orphan_rules.push_back(OrphanRuleRow{.id = rule.at("id").get<std::int64_t>(),
+                                                .pattern = rule.at("pattern").get<std::string>(),
+                                                .image = rule.at("image").get<std::string>(),
+                                                .rule = rule.at("rule").get<std::string>(),
+                                                .time = seconds_time(rule.at("time"))});
+  }
 }
 
 void read_game_mode(const Json& game_mode, GovernorStatus& status) {
@@ -108,6 +128,10 @@ Result<GovernorStatus> parse_governor_status(const Json& reply) {
                                .reason = notification.at("reason").get<std::string>(),
                                .members = notification.at("members").get<std::int64_t>()});
     }
+    // A service from before orphaned-loop detection has no "orphans".
+    if (const auto orphans = reply.find("orphans"); orphans != reply.end()) {
+      read_orphans(*orphans, status);
+    }
     for (const Json& event : reply.at("events")) {
       status.events.push_back(event_row(event));
     }
@@ -127,6 +151,10 @@ Json governor_pause_params(std::chrono::minutes minutes) {
 
 Json governor_game_mode_params(std::string_view value) {
   return Json{{"override", value}};
+}
+
+Json governor_orphans_params(std::int64_t id, std::string_view decision) {
+  return Json{{"id", id}, {"decision", decision}};
 }
 
 Json governor_user_state_params(const UserStateReading& reading) {
@@ -151,8 +179,33 @@ GovernorToast governor_toast(const GovernorNotification& notification) {
                        .severe = severe};
 }
 
+GovernorToast orphan_toast(const OrphanProposalRow& proposal) {
+  constexpr std::size_t shown = 60;
+  std::string pattern = proposal.pattern.substr(0, shown);
+  if (proposal.pattern.size() > shown) {
+    pattern += "...";
+  }
+  return GovernorToast{
+      .title = "End " + std::to_string(proposal.trees) + " loops of " + pattern + "?",
+      .detail = "Orphaned polling loops whose session is gone (" +
+                std::to_string(proposal.processes) +
+                " processes). Click to End now, Always end this pattern or "
+                "Ignore.",
+      .severe = false};
+}
+
 std::vector<GovernorToast> GovernorToasts::take(const GovernorStatus& status) {
   std::vector<GovernorToast> toasts;
+  for (const OrphanProposalRow& proposal : status.orphan_proposals) {
+    const std::pair<WallTime, std::int64_t> order{proposal.time, proposal.id};
+    if (newest_proposal_ && order <= *newest_proposal_) {
+      continue;
+    }
+    newest_proposal_ = order;
+    if (baseline_ && status.mode == "act") {
+      toasts.push_back(orphan_toast(proposal));
+    }
+  }
   for (const GovernorNotification& notification : status.notifications) {
     const std::pair<WallTime, std::int64_t> order{notification.time, notification.id};
     if (newest_ && order <= *newest_) {

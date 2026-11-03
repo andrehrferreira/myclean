@@ -331,6 +331,37 @@ TEST(DashboardUiTest, DrawsTheGovernorInEveryStateAndSendsNothingUnasked) {
   EXPECT_GT(render(model, state), 0);
   EXPECT_TRUE(state.requests.empty());
 
+  tray_model::testing::Json loops = tray_model::testing::governor_status_json();
+  loops["orphans"] = tray_model::testing::Json{
+      {"enabled", true},
+      {"min_trees", 3},
+      {"min_age_minutes", 10},
+      {"proposals", tray_model::testing::Json::array(
+                        {tray_model::testing::Json{{"id", 1},
+                                                   {"time", start},
+                                                   {"pattern", "bash /c/x/watch_channel.sh #"},
+                                                   {"image", "bash.exe"},
+                                                   {"trees", 88},
+                                                   {"processes", 176}}})},
+      {"rules",
+       tray_model::testing::Json::array({tray_model::testing::Json{{"id", 4},
+                                                                   {"pattern", "python collab.py"},
+                                                                   {"image", "python.exe"},
+                                                                   {"rule", "always"},
+                                                                   {"time", start - 60}}})}};
+  for (const char* mode : {"act", "observe"}) {
+    loops["mode"] = mode;
+    tray_model::DashboardModel with_loops;
+    tray_model::PollResult polled;
+    polled.time = from_unix_seconds(start);
+    polled.reachable = true;
+    polled.governor = tray_model::parse_governor_status(loops).value();
+    with_loops.apply(std::move(polled));
+    UiState loop_state{.section = Section::governor};
+    EXPECT_GT(render(with_loops, loop_state), 0);
+    EXPECT_TRUE(loop_state.requests.empty());
+  }
+
   tray_model::testing::Json quiet = tray_model::testing::governor_status_json();
   quiet["mode"] = "observe";
   quiet["paused_until"] = start + 3600;

@@ -162,5 +162,58 @@ TEST(GovernorToastsTest, SeenNotificationsAreNotShownAgainAndARestartedServiceIs
             1U);
 }
 
+// Governor spec, "Orphaned Polling Loops": the proposals and rules of governor.status.
+Json orphans_json(std::int64_t proposal_id, std::int64_t time) {
+  return Json{{"enabled", true},
+              {"min_trees", 3},
+              {"min_age_minutes", 10},
+              {"proposals", Json::array({Json{{"id", proposal_id},
+                                              {"time", time},
+                                              {"pattern", "bash /c/x/watch_channel.sh #"},
+                                              {"image", "bash.exe"},
+                                              {"trees", 88},
+                                              {"processes", 176}}})},
+              {"rules", Json::array({Json{{"id", 4},
+                                          {"pattern", "python collab.py"},
+                                          {"image", "python.exe"},
+                                          {"rule", "always"},
+                                          {"time", 900}}})}};
+}
+
+TEST(GovernorStatusTest, ReadsTheOrphanedLoops) {
+  Json reply = governor_status_json();
+  reply["orphans"] = orphans_json(2, 1000);
+  const Result<GovernorStatus> status = parse_governor_status(reply);
+  ASSERT_TRUE(status.has_value()) << status.error().message;
+  ASSERT_EQ(status->orphan_proposals.size(), 1U);
+  EXPECT_EQ(status->orphan_proposals[0].id, 2);
+  EXPECT_EQ(status->orphan_proposals[0].pattern, "bash /c/x/watch_channel.sh #");
+  EXPECT_EQ(status->orphan_proposals[0].trees, 88);
+  EXPECT_EQ(status->orphan_proposals[0].processes, 176);
+  ASSERT_EQ(status->orphan_rules.size(), 1U);
+  EXPECT_EQ(status->orphan_rules[0].rule, "always");
+  EXPECT_EQ(status->orphan_rules[0].time, from_unix_seconds(900));
+  EXPECT_EQ(governor_orphans_params(2, "end_now"), (Json{{"id", 2}, {"decision", "end_now"}}));
+  EXPECT_TRUE(status_with(Json::array()).orphan_proposals.empty())
+      << "a reply without orphans has none";
+}
+
+TEST(GovernorToastsTest, ANewProposalIsToastedOnceInActModeOnly) {
+  GovernorToasts toasts;
+  const auto status = [](std::int64_t id, std::string_view mode) {
+    Json reply = governor_status_json();
+    reply["mode"] = mode;
+    reply["orphans"] = orphans_json(id, 1000 + id);
+    return parse_governor_status(reply).value();
+  };
+  EXPECT_TRUE(toasts.take(status(1, "act")).empty()) << "baseline";
+  const std::vector<GovernorToast> shown = toasts.take(status(2, "act"));
+  ASSERT_EQ(shown.size(), 1U);
+  EXPECT_EQ(shown[0].title, "End 88 loops of bash /c/x/watch_channel.sh #?");
+  EXPECT_NE(shown[0].detail.find("End now, Always end this pattern or Ignore"), std::string::npos);
+  EXPECT_TRUE(toasts.take(status(2, "act")).empty());
+  EXPECT_TRUE(toasts.take(status(3, "observe")).empty());
+}
+
 }  // namespace
 }  // namespace myclean::tray_model

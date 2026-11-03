@@ -18,6 +18,7 @@
 #include "core/governor/forest.hpp"
 #include "core/governor/game_mode.hpp"
 #include "core/governor/ladder.hpp"
+#include "core/governor/orphans.hpp"
 #include "core/governor/pressure.hpp"
 #include "core/governor/reason.hpp"
 #include "core/ipc/governor.hpp"
@@ -89,6 +90,16 @@ Result<Json> game_mode(Governor& governor, const Json& params) {
   }
   const governor::GameMode mode = governor.set_override(*value);
   return Json{{"active", mode.active}, {"build_cpu_percent", mode.build_cpu_percent}};
+}
+
+Result<Json> orphans(Governor& governor, const Json& params) {
+  const std::optional<governor::OrphanDecision> decision =
+      governor::parse_orphan_decision(params.at("decision").get<std::string>());
+  if (!decision) {
+    return fail(Errc::invalid_argument, "decision must be end_now, always, ignore or forget");
+  }
+  return governor.decide_orphans(params.at("id").get<std::int64_t>(), *decision)
+      .transform([](std::size_t trees) { return Json{{"trees", trees}}; });
 }
 
 Result<Json> user_state(Governor& governor, const Json& params) {
@@ -183,6 +194,14 @@ Result<void> register_methods(ipc::Dispatcher& methods, Governor& governor, stor
             {Param{.name = "state", .type = ParamType::token, .required = true},
              Param{.name = "foreground_pid", .type = ParamType::integer, .required = true}},
             [&governor](const Json& params) { return user_state(governor, params); },
+            ipc::Access::tray);
+      })
+      .and_then([&] {
+        return add(
+            ipc::governor_orphans_method,
+            {Param{.name = "id", .type = ParamType::integer, .required = true},
+             Param{.name = "decision", .type = ParamType::token, .required = true}},
+            [&governor](const Json& params) { return orphans(governor, params); },
             ipc::Access::tray);
       });
 }

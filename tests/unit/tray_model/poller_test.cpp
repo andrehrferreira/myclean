@@ -344,6 +344,21 @@ TEST_F(PollerTest, GovernorStatusEveryPollAndTheOwnersRequestsBeforeIt) {
   EXPECT_EQ(link().calls_of("governor.pause").back().params, (Json{{"minutes", 0}}));
 }
 
+TEST_F(PollerTest, OrphanDecisionsAreSent) {
+  link().on("governor.orphans", [](const Json&) -> Result<Json> { return Json{{"trees", 88}}; });
+  const PollResult ended = poll_at(start, false, {DecideOrphans{.id = 2, .decision = "always"}});
+  EXPECT_EQ(link().calls_of("governor.orphans")[0].params,
+            (Json{{"id", 2}, {"decision", "always"}}));
+  EXPECT_EQ(ended.governor_action, "");
+  link().on("governor.orphans", [](const Json&) -> Result<Json> {
+    return fail(Errc::not_found, "no orphaned-loop rule 9");
+  });
+  const PollResult failed =
+      poll_at(start + 1, false, {DecideOrphans{.id = 9, .decision = "forget"}});
+  ASSERT_TRUE(failed.governor_action.has_value());
+  EXPECT_TRUE((*failed.governor_action).starts_with("Forgetting the rule failed: "));
+}
+
 TEST_F(PollerTest, TheOwnersSessionStateIsSentEveryPollWhenItCanBeRead) {
   std::optional<UserStateReading> reading =
       UserStateReading{.state = "running_d3d_full_screen", .foreground_pid = 900};

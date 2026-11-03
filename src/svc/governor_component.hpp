@@ -47,6 +47,8 @@ struct GovernorSources {
   // The full image path of a running process.
   std::function<std::optional<std::filesystem::path>(std::uint32_t pid, WallTime created)>
       image_path;
+  // The command line of a running process (orphaned polling loops).
+  std::function<std::optional<std::string>(std::uint32_t pid, WallTime created)> command_line;
   // The owner's override packs folder (platform/packs); empty: no owner packs.
   std::function<Result<std::optional<std::filesystem::path>>()> owner_packs;
 };

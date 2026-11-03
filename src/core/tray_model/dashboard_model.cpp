@@ -122,7 +122,9 @@ std::vector<GovernorToast> DashboardModel::take_governor_toasts() {
 }
 
 int DashboardModel::governor_pending() const {
-  return reachable_ && governor_ ? static_cast<int>(governor_->notifications.size()) : 0;
+  return reachable_ && governor_ ? static_cast<int>(governor_->notifications.size() +
+                                                    governor_->orphan_proposals.size())
+                                 : 0;
 }
 
 void DashboardModel::take_alerts(std::vector<AlertRow> alerts) {

@@ -23,7 +23,8 @@ namespace myclean::governing {
 [[nodiscard]] nlohmann::json event_json(const GovernorEvent& event);
 
 // Registers governor.status and governor.events for every client, and governor.choose,
-// governor.pause, governor.game_mode and governor.user_state for the owner's tray only
+// governor.pause, governor.game_mode, governor.user_state and governor.orphans for the owner's
+// tray only
 // (ipc::Access::tray). `governor` and `store` must outlive the dispatcher's use.
 [[nodiscard]] Result<void> register_methods(ipc::Dispatcher& methods, Governor& governor,
                                             store::Store& store);

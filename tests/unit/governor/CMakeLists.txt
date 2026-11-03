@@ -7,6 +7,7 @@ myclean_add_test(governor
     ladder_test.cpp
     ladder_test_support.hpp
     notify_test.cpp
+    orphans_test.cpp
     policy_test.cpp
     pressure_test.cpp
     recovery_test.cpp

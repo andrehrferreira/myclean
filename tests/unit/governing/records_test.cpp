@@ -3,6 +3,7 @@
 #include "core/governing/records.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@
 #include "core/governing/keys.hpp"
 #include "core/governor/commands.hpp"
 #include "core/governor/forest.hpp"
+#include "core/governor/orphans.hpp"
 #include "core/governor/pressure.hpp"
 #include "core/governor/reason.hpp"
 #include "core/governor/recovery.hpp"
@@ -40,7 +42,7 @@ TEST(GovernorRecords, MigrationsAreAdditive) {
 }
 
 TEST(GovernorRecords, EventKindsHaveFixedTexts) {
-  for (std::size_t index = 0; index <= static_cast<std::size_t>(EventKind::game_mode); ++index) {
+  for (std::size_t index = 0; index <= static_cast<std::size_t>(EventKind::orphan_rule); ++index) {
     const auto kind = static_cast<EventKind>(index);
     EXPECT_EQ(parse_event_kind(to_string(kind)), kind);
   }
@@ -137,6 +139,29 @@ TEST(GovernorRecords, JobsAndAllowListPersist) {
   Result<std::vector<std::string>> allowed = load_allowed(machine.store());
   ASSERT_TRUE(allowed.has_value());
   EXPECT_EQ(*allowed, std::vector<std::string>{"bigjob.exe"});
+}
+
+TEST(GovernorRecords, OrphanRulesPersistOnePerPattern) {
+  Machine machine;
+  const Result<std::int64_t> first = save_orphan_rule(
+      machine.store(), "bash watch.sh #", "bash.exe", governor::OrphanRule::ignore, testing::noon);
+  ASSERT_TRUE(first.has_value()) << first.error().message;
+  const Result<std::int64_t> again = save_orphan_rule(
+      machine.store(), "bash watch.sh #", "bash.exe", governor::OrphanRule::always, testing::noon);
+  ASSERT_TRUE(again.has_value());
+  EXPECT_EQ(*again, *first) << "the pattern's rule is replaced, not added";
+  ASSERT_TRUE(save_orphan_rule(machine.store(), "python collab.py", "python.exe",
+                               governor::OrphanRule::ignore, testing::noon));
+  Result<std::vector<OrphanRuleRecord>> rules = load_orphan_rules(machine.store());
+  ASSERT_TRUE(rules.has_value());
+  ASSERT_EQ(rules->size(), 2U);
+  EXPECT_EQ(rules->front().pattern, "bash watch.sh #");
+  EXPECT_EQ(rules->front().rule, governor::OrphanRule::always);
+  EXPECT_EQ(rules->front().decided, testing::noon);
+  ASSERT_TRUE(forget_orphan_rule(machine.store(), *first));
+  rules = load_orphan_rules(machine.store());
+  ASSERT_EQ(rules->size(), 1U);
+  EXPECT_EQ(rules->front().pattern, "python collab.py");
 }
 
 }  // namespace

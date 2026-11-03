@@ -108,7 +108,8 @@ class DashboardModel {
   // The toasts of the governor notifications that arrived since the previous call, oldest first
   // (GovernorToasts decides which).
   [[nodiscard]] std::vector<GovernorToast> take_governor_toasts();
-  // Governor notifications waiting for the owner; 0 while the service is unreachable.
+  // Governor notifications and orphaned-loop proposals waiting for the owner; 0 while the
+  // service is unreachable.
   [[nodiscard]] int governor_pending() const;
 
   // The icon's state; its badge also shows while a plan or a governor notification waits for the

@@ -8,6 +8,7 @@ myclean_add_test(governing
     jobs_test.cpp
     ladder_test.cpp
     methods_test.cpp
+    orphans_test.cpp
     records_test.cpp
     recovery_test.cpp
   DEPENDS

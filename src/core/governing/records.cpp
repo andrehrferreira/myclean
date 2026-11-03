@@ -15,6 +15,7 @@
 #include "core/governing/keys.hpp"
 #include "core/governor/commands.hpp"
 #include "core/governor/forest.hpp"
+#include "core/governor/orphans.hpp"
 #include "core/governor/pressure.hpp"
 #include "core/governor/reason.hpp"
 #include "core/governor/recovery.hpp"
@@ -33,7 +34,7 @@ namespace myclean::governing {
 
 namespace {
 
-constexpr std::array<std::string_view, 16> kind_names = {"apply_step",
+constexpr std::array<std::string_view, 18> kind_names = {"apply_step",
                                                          "roll_back",
                                                          "resume",
                                                          "kill",
@@ -48,7 +49,9 @@ constexpr std::array<std::string_view, 16> kind_names = {"apply_step",
                                                          "commit_failure_exit",
                                                          "untrusted_job",
                                                          "game_detected",
-                                                         "game_mode"};
+                                                         "game_mode",
+                                                         "orphan_loops",
+                                                         "orphan_rule"};
 
 // The action_log event of every governor intervention (docs/architecture.md section 6).
 constexpr std::string_view governor_step_event = "GovernorStep";
@@ -237,6 +240,14 @@ CREATE TABLE governor_suspend(
 CREATE TABLE governor_allow(
   image TEXT NOT NULL PRIMARY KEY COLLATE NOCASE,
   added INTEGER NOT NULL);
+)sql"},
+                     {.version = 2, .name = "governor_orphan_rule", .sql = R"sql(
+CREATE TABLE governor_orphan_rule(
+  id INTEGER PRIMARY KEY,
+  pattern TEXT NOT NULL UNIQUE,
+  image TEXT NOT NULL DEFAULT '',
+  rule TEXT NOT NULL,
+  decided INTEGER NOT NULL);
 )sql"}}};
   return set;
 }
@@ -477,6 +488,86 @@ Result<std::vector<std::string>> load_allowed(store::Store& store) {
     return tl::unexpected(read.error());
   }
   return images;
+}
+
+Result<std::int64_t> save_orphan_rule(store::Store& store, std::string_view pattern,
+                                      std::string_view image, governor::OrphanRule rule,
+                                      WallTime now) {
+  std::int64_t id = 0;
+  Result<void> written = store.write([&](store::Database& db) -> Result<void> {
+    Result<store::Statement> statement = db.prepare(
+        "INSERT INTO governor_orphan_rule(pattern, image, rule, decided) VALUES(?1, ?2, ?3, ?4) "
+        "ON CONFLICT(pattern) DO UPDATE SET image = excluded.image, rule = excluded.rule, "
+        "decided = excluded.decided");
+    if (!statement) {
+      return tl::unexpected(statement.error());
+    }
+    if (Result<void> run = statement->bind(1, pattern)
+                               .bind(2, image)
+                               .bind(3, governor::to_string(rule))
+                               .bind(4, store::to_unix_seconds(now))
+                               .run();
+        !run) {
+      return run;
+    }
+    Result<store::Statement> query =
+        db.prepare("SELECT id FROM governor_orphan_rule WHERE pattern = ?1");
+    if (!query) {
+      return tl::unexpected(query.error());
+    }
+    query->bind(1, pattern);
+    return query->step().and_then([&](bool found) -> Result<void> {
+      if (!found) {
+        return fail(Errc::io_error, "the stored rule was not found again");
+      }
+      id = query->column_int(0);
+      return {};
+    });
+  });
+  if (!written) {
+    return tl::unexpected(written.error());
+  }
+  return id;
+}
+
+Result<void> forget_orphan_rule(store::Store& store, std::int64_t id) {
+  return store.write([&](store::Database& db) -> Result<void> {
+    Result<store::Statement> statement =
+        db.prepare("DELETE FROM governor_orphan_rule WHERE id = ?1");
+    if (!statement) {
+      return tl::unexpected(statement.error());
+    }
+    return statement->bind(1, id).run();
+  });
+}
+
+Result<std::vector<OrphanRuleRecord>> load_orphan_rules(store::Store& store) {
+  std::vector<OrphanRuleRecord> rules;
+  Result<void> read = store.read([&](store::Database& db) -> Result<void> {
+    Result<store::Statement> query = db.prepare(
+        "SELECT id, pattern, image, rule, decided FROM governor_orphan_rule ORDER BY id");
+    if (!query) {
+      return tl::unexpected(query.error());
+    }
+    Result<bool> row = query->step();
+    for (; row && *row; row = query->step()) {
+      const std::optional<governor::OrphanRule> rule =
+          governor::parse_orphan_rule(query->column_text(3));
+      if (!rule) {
+        continue;
+      }
+      rules.push_back(OrphanRuleRecord{.id = query->column_int(0),
+                                       .pattern = query->column_text(1),
+                                       .image = query->column_text(2),
+                                       .rule = *rule,
+                                       .decided = store::from_unix_seconds(query->column_int(4))});
+    }
+    return row.transform([](bool) {});
+  });
+  if (!read) {
+    return tl::unexpected(read.error());
+  }
+  return rules;
 }
 
 void Recorder::record(GovernorEvent event, bool audit) {

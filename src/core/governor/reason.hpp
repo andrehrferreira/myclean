@@ -27,6 +27,8 @@ enum class Reason {
   orphaned_suspend,
   untrusted_job,
   policy,  // a re-adopted job's limits set to the current policy, or lifted
+  // Orphaned polling loops.
+  orphaned_loop,  // a tree of an orphaned polling loop ended, or its pattern decided
 };
 
 [[nodiscard]] std::string_view to_string(Reason reason);

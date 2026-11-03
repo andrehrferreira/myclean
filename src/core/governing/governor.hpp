@@ -29,8 +29,10 @@
 #include "core/governor/game_mode.hpp"
 #include "core/governor/jobs.hpp"
 #include "core/governor/ladder.hpp"
+#include "core/governor/orphans.hpp"
 #include "core/governor/policy.hpp"
 #include "core/governor/pressure.hpp"
+#include "core/model/actor.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/clock.hpp"
@@ -44,6 +46,7 @@
 // The resource governor in the service (governor spec): classifies every starting process and
 // puts build and test trees into their jobs, evaluates pressure once per second from the
 // telemetry pipeline's samples, runs the escalation ladder, detects games and keeps game mode,
+// finds orphaned polling loops and ends those of the patterns the owner allowed,
 // tracks job membership, recovers what a crashed run left and fails open on a clean stop. The
 // decisions are core/governor's; this module applies them (or, in observe mode, only records
 // them) and keeps the records of core/governing/records.hpp.
@@ -81,6 +84,9 @@ struct GovernorSources {
   // The full image path of a running process the governor did not see start.
   std::function<std::optional<std::filesystem::path>(std::uint32_t pid, WallTime created)>
       image_path;
+  // The command line of a running process whose start the governor did not see with one; read
+  // once per process, only for the roots of possible orphaned loops.
+  std::function<std::optional<std::string>(std::uint32_t pid, WallTime created)> command_line;
   // GPU engine counters for the fullscreen signal; opened only while there is a candidate.
   telemetry::IPerfCounters* gpu = nullptr;
 };
@@ -92,6 +98,8 @@ class Governor {
   static constexpr std::chrono::minutes reload_interval{5};
   // A process missing from the process table this long after it was created has exited.
   static constexpr std::chrono::seconds table_grace{10};
+  // How often the process table is searched for orphaned polling loops.
+  static constexpr std::chrono::seconds orphan_interval{10};
 
   // `store` and `clock` must outlive the governor.
   Governor(GovernorSources sources, store::Store& store, const os::IClock& clock);
@@ -125,6 +133,12 @@ class Governor {
   [[nodiscard]] std::optional<WallTime> pause(std::chrono::minutes minutes);
   [[nodiscard]] governor::GameMode set_override(governor::GameModeOverride value);
   void set_user_state(const UserState& state);
+  // The owner's answer to the orphaned-loop proposal `id` (end_now, always, ignore), or forgetting
+  // the stored rule `id` (forget); recorded with actor `owner`. How many trees were ended (in
+  // observe mode: recorded as ended). Fails with not_found for an unknown id, a proposal whose
+  // loops ended or are no longer orphaned included.
+  [[nodiscard]] Result<std::size_t> decide_orphans(std::int64_t id,
+                                                   governor::OrphanDecision decision);
 
   // What is not working, for the component's health.
   [[nodiscard]] std::vector<std::string> problems() const;
@@ -136,11 +150,20 @@ class Governor {
     rules::ProcessClass process_class = rules::ProcessClass::normal;  // classify()
     std::optional<games::GameVerdict> game;                           // from the image alone
     std::optional<governor::ProcessKey> parent;
+    bool command_line_read = false;  // GovernorSources::command_line was asked
   };
   struct Notification {
     std::int64_t id = 0;
     WallTime time;
     governor::Command command;
+  };
+  // "End N loops of <pattern>": a pattern without a rule with at least min_trees live trees.
+  struct OrphanProposal {
+    std::int64_t id = 0;  // kept while the pattern stays proposed
+    WallTime time;        // when it was first proposed
+    std::string pattern;
+    std::string image;
+    std::vector<std::vector<governor::ProcessKey>> trees;  // members, the root first
   };
 
   void reload();
@@ -158,6 +181,20 @@ class Governor {
   void govern(const telemetry::ProcessView& view, const governor::PressureSample& sample);
   void observe_fullscreen();
   void update_game_mode();
+  void scan_orphans(const telemetry::ProcessView& view);
+  [[nodiscard]] std::vector<governor::OrphanProcess> orphan_table(
+      const telemetry::ProcessView& view) const;
+  void read_command_lines(std::vector<governor::OrphanProcess>& table,
+                          const std::vector<std::size_t>& roots);
+  void propose(const governor::OrphanGroup& group,
+               std::vector<std::vector<governor::ProcessKey>> trees,
+               std::vector<OrphanProposal>& proposals);
+  void end_always(const governor::OrphanGroup& group,
+                  const std::vector<std::vector<governor::ProcessKey>>& trees);
+  void end_orphan_tree(const std::vector<governor::ProcessKey>& members, const Actor& actor);
+  [[nodiscard]] Result<void> store_orphan_rule(const OrphanProposal& proposal,
+                                               governor::OrphanRule rule);
+  [[nodiscard]] nlohmann::json orphans_json() const;
   [[nodiscard]] std::size_t apply_class_limits();
   [[nodiscard]] rules::ProcessClass class_of(const governor::ProcessKey& key) const;
   [[nodiscard]] bool allowed(std::string_view image) const;
@@ -198,6 +235,11 @@ class Governor {
   std::optional<WallTime> paused_until_;
   std::deque<Notification> notifications_;
   std::int64_t next_notification_ = 1;
+  std::vector<OrphanRuleRecord> orphan_rules_;
+  std::vector<OrphanProposal> orphan_proposals_;
+  std::int64_t next_orphan_proposal_ = 1;
+  std::optional<MonoTime> orphans_at_;
+  std::set<governor::ProcessKey> orphans_ended_;  // roots ended (or recorded so) and still listed
   std::map<std::string, std::string, std::less<>> problems_;  // by source
   bool started_ = false;
   bool stopped_ = false;

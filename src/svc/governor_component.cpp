@@ -88,6 +88,7 @@ Result<void> GovernorComponent::start(const Context& context) {
             return governor::load_policy(rules::DiskDataFiles{}, data_dir);
           },
       .image_path = sources_.image_path,
+      .command_line = sources_.command_line,
       .gpu = sources_.gpu.get()};
   if (sources_.games) {
     sources.games = [games = sources_.games, owner = context.owner_sid()] { return games(owner); };

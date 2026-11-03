@@ -116,6 +116,12 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The tray reports the owner's notification state and foreground process every second
     (`governor.user_state`), which protects the foreground program and feeds fullscreen
     game detection.
+  - Orphaned polling loops: shell, interpreter and polling-tool trees whose launching
+    session is gone and whose command line repeats (3+ trees, 10+ minutes old) are proposed
+    in the tray as "End N loops of <pattern>" with End now, Always end this pattern and
+    Ignore. Patterns set to always are ended as they appear; every end is recorded
+    (`governor.orphans`, `[orphans]` in `data/governor.toml`, table
+    `governor_orphan_rule`).
 - Spike notes X1–X8 under `docs/spikes/`.
 
 ### Fixed

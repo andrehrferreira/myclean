@@ -100,10 +100,16 @@ struct PauseGovernor {
 struct SetGameMode {
   std::string value;
 };
-using Request =
-    std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange, ScanNow, OpenPlan,
-                 ClosePlan, ApprovePlan, RejectPlan, UndoPlan, RestoreQuarantine, PurgeQuarantine,
-                 LoadSpace, ProposeCleanup, OwnerAction, ChooseForTree, PauseGovernor, SetGameMode>;
+// The owner's answer to an orphaned-loop proposal (end_now, always, ignore), or forgetting a
+// stored rule (forget, `id` the rule's).
+struct DecideOrphans {
+  std::int64_t id = 0;
+  std::string decision;
+};
+using Request = std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange, ScanNow,
+                             OpenPlan, ClosePlan, ApprovePlan, RejectPlan, UndoPlan,
+                             RestoreQuarantine, PurgeQuarantine, LoadSpace, ProposeCleanup,
+                             OwnerAction, ChooseForTree, PauseGovernor, SetGameMode, DecideOrphans>;
 
 // The tray's executor of user-scope plans, as the poller drives it: the poller takes a task
 // (user_tasks.next) only from a reachable service and only while the runner is idle, and

@@ -62,6 +62,25 @@ struct GovernorEventRow {
   std::string detail;
 };
 
+// "End <trees> loops of <pattern>": orphaned polling loops the owner is asked about.
+struct OrphanProposalRow {
+  std::int64_t id = 0;
+  WallTime time;
+  std::string pattern;
+  std::string image;
+  std::int64_t trees = 0;
+  std::int64_t processes = 0;
+};
+
+// The owner's stored decision for a pattern.
+struct OrphanRuleRow {
+  std::int64_t id = 0;
+  std::string pattern;
+  std::string image;
+  std::string rule;  // always, ignore
+  WallTime time;
+};
+
 // governor.status.
 struct GovernorStatus {
   std::string mode;  // observe, act
@@ -75,7 +94,9 @@ struct GovernorStatus {
   std::vector<GovernorGame> games;
   std::vector<GovernorTree> trees;
   std::vector<GovernorNotification> notifications;  // oldest first
-  std::vector<GovernorEventRow> events;             // newest first
+  std::vector<OrphanProposalRow> orphan_proposals;
+  std::vector<OrphanRuleRow> orphan_rules;
+  std::vector<GovernorEventRow> events;  // newest first
 };
 
 [[nodiscard]] Result<GovernorStatus> parse_governor_status(const nlohmann::json& reply);
@@ -86,6 +107,8 @@ struct GovernorStatus {
                                                     std::string_view choice);
 [[nodiscard]] nlohmann::json governor_pause_params(std::chrono::minutes minutes);
 [[nodiscard]] nlohmann::json governor_game_mode_params(std::string_view value);
+// `decision`: end_now, always, ignore (`id` a proposal) or forget (`id` a rule).
+[[nodiscard]] nlohmann::json governor_orphans_params(std::int64_t id, std::string_view decision);
 
 // What the tray reads in the owner's session every second for governor.user_state: the
 // SHQueryUserNotificationState token and the foreground window's process (0: none).
@@ -106,13 +129,16 @@ struct GovernorToast {
 // The text of the toast of `notification`: what the governor did to which program, and where the
 // owner answers.
 [[nodiscard]] GovernorToast governor_toast(const GovernorNotification& notification);
+// The toast of an orphaned-loop proposal: "End 88 loops of <pattern>?".
+[[nodiscard]] GovernorToast orphan_toast(const OrphanProposalRow& proposal);
 
 // Decides which notifications become toasts: each one newer than every notification seen before
 // (by its time, then its id, so a restarted service whose ids start again is still noticed), at
 // most one per tree per `interval` by the notifications' own times; a suspend or kill is always
 // shown, since the tree is stopped until the owner acts. The first status only sets the baseline:
 // notifications pending before the tray started are listed in the dashboard and badge the icon,
-// they are not toasted.
+// they are not toasted. Each orphaned-loop proposal newer than every one seen before is toasted
+// once, in act mode only (in observe mode ending is only recorded, so it waits in the dashboard).
 class GovernorToasts {
  public:
   static constexpr std::chrono::minutes default_interval{5};
@@ -125,6 +151,7 @@ class GovernorToasts {
   std::chrono::minutes interval_;
   bool baseline_ = false;
   std::optional<std::pair<WallTime, std::int64_t>> newest_;
+  std::optional<std::pair<WallTime, std::int64_t>> newest_proposal_;
   // Vectors, so that moving the dashboard model never throws.
   std::vector<std::pair<GovernorProcess, WallTime>> last_by_tree_;
 };

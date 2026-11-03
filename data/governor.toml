@@ -63,3 +63,14 @@ commit_gib = 64
 
 [notifications]
 interval_minutes = 5                 # at most one owner notification per tree this often
+
+# Orphaned polling loops: trees whose root is a shell, interpreter or polling tool (bash, sh,
+# pwsh, cmd, python, node, tail, sleep, timeout, ...) whose launching process is gone. A command
+# line repeated by at least `min_trees` such trees, each at least `min_age_minutes` old, is
+# proposed to the owner in the tray: End now, Always end this pattern, or Ignore. Patterns the
+# owner set to "always" are ended as soon as an orphan of them is old enough (in observe mode
+# only recorded).
+[orphans]
+enabled = true
+min_trees = 3
+min_age_minutes = 10

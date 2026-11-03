@@ -370,6 +370,47 @@ Given the governor was paused for 60 min
 When 60 min have elapsed
 Then the governor resumes pressure evaluation and the ladder
 
+### Requirement: Orphaned Polling Loops
+Every 10 s, from the process table it already has, the governor MUST find orphaned loop trees: a root that is not protected (class `system`, `game` or `allow`, the foreground window's process, or a MyClean process), whose image is a shell, interpreter or polling tool (bash, sh, dash, zsh, fish, ksh, pwsh, powershell, cmd, python in any version, py, node, deno, bun, perl, ruby, php, tail, sleep, timeout, watch, inotifywait, wscript, cscript), that was created at least `[orphans] min_age_minutes` ago (default 10), and whose creator is gone: no live process has its parent PID with a creation time before it (a reused PID is not its parent). A tree is the root and its descendants, without any protected process or what lies below one. The roots' command lines SHALL be normalized into patterns (program file name, lower case, quotes dropped, white space collapsed, numbers and id-like hex runs replaced by `#`); a root whose command line cannot be read SHALL NOT be grouped. A pattern with no owner rule and at least `[orphans] min_trees` live trees (default 3) SHALL be proposed to the owner in the tray as "End N loops of <pattern>" with End now, Always end this pattern and Ignore (`governor.orphans`, tray only), and toasted once in act mode. Always SHALL store the pattern and end its trees; from then on every orphaned tree of that pattern old enough SHALL be ended without asking. Ignore SHALL store the pattern so it is not proposed again; a stored rule SHALL be listed in the tray and can be forgotten. Every end MUST be recorded in `governor_event` as a `kill` with reason `orphaned_loop` and, in act mode, in `action_log`; in observe mode an end SHALL only be recorded, once per tree. Detection is controlled by `[orphans]` in `data/governor.toml` (`enabled`, `min_trees`, `min_age_minutes`).
+
+#### Scenario: Repeated orphaned loops proposed
+Given 3 `bash watch_channel.sh` loops whose launching sessions exited more than 10 min ago
+When the governor scans the process table
+Then the tray shows one proposal "End 3 loops of bash .../watch_channel.sh #"
+And no loop is ended until the owner answers
+
+#### Scenario: Loops of a live session are left alone
+Given 3 `bash` loops whose launching session still runs
+When the governor scans the process table
+Then nothing is proposed or ended
+
+#### Scenario: End now
+Given a proposal for 3 orphaned loop trees in act mode
+When the owner chooses End now
+Then every process of the 3 trees is terminated
+And `governor_event` and `action_log` each have 3 entries with reason `orphaned_loop` and actor `owner`
+
+#### Scenario: Always end this pattern
+Given the owner chose Always end this pattern for `bash watch_channel.sh #`
+When a later `watch_channel.sh` loop is orphaned for 10 min
+Then the governor ends it without asking and records it with actor `governor`
+
+#### Scenario: Ignore
+Given the owner chose Ignore for a pattern
+When its loops are found again, also after a service restart
+Then the pattern is not proposed again until the owner forgets the rule
+
+#### Scenario: Protected processes are never ended
+Given an orphaned loop tree whose child is a MyClean process, and an orphaned loop that owns the foreground window
+When the owner ends the loops of their pattern
+Then the MyClean process keeps running and the foreground process is not part of any proposal
+
+#### Scenario: Observe mode only records
+Given the governor in observe mode and a pattern set to always
+When its orphaned trees are found
+Then no process is terminated
+And each tree is recorded once in `governor_event` with detail `observe`
+
 ### Requirement: Governor Overhead and Effect
 The governor MUST keep the service and tray together within NFR-PERF-1 (< 1 % average CPU, < 150 MB RAM) with no WMI query in its 1 s loop, and under the stress scenario (parallel C++ and Rust builds plus a memory-hog test) MUST keep foreground probe latency below 100 ms with no commit exhaustion.
 

@@ -34,6 +34,7 @@
 #include "platform/disk_health/win32_disk_health.hpp"
 #include "platform/etw/etw_event_source.hpp"
 #include "platform/etw/ip_helper_connections.hpp"
+#include "platform/etw/process_details.hpp"
 #include "platform/fs/win32_file_system.hpp"
 #include "platform/games/win32_games.hpp"
 #include "platform/git/git_cli.hpp"
@@ -232,6 +233,11 @@ std::unique_ptr<svc::GovernorComponent> make_governor(const svc::HostOptions& op
                              Result<std::filesystem::path> path = images->image_path(pid, created);
                              return path ? std::optional(std::move(*path)) : std::nullopt;
                            },
+                           .command_line =
+                               [](std::uint32_t pid, myclean::WallTime created) {
+                                 return platform::etw::command_line_of(
+                                     myclean::events::ProcessKey{.pid = pid, .created = created});
+                               },
                            .owner_packs = owner_packs},
       files, &events.router());
 }

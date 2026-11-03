@@ -103,6 +103,26 @@ TEST(GovernorPolicy, ShippedFileHoldsTheDefaults) {
   EXPECT_EQ(loaded->jobs.game_build_cpu_percent, defaults.jobs.game_build_cpu_percent);
   EXPECT_EQ(loaded->jobs.notification_percent, defaults.jobs.notification_percent);
   EXPECT_EQ(loaded->jobs.rearm_percent, defaults.jobs.rearm_percent);
+  EXPECT_EQ(loaded->orphans.enabled, defaults.orphans.enabled);
+  EXPECT_EQ(loaded->orphans.min_trees, defaults.orphans.min_trees);
+  EXPECT_EQ(loaded->orphans.min_age, defaults.orphans.min_age);
+}
+
+TEST(GovernorPolicy, OrphanedLoops) {
+  const GovernorPolicy defaults;
+  EXPECT_TRUE(defaults.orphans.enabled);
+  EXPECT_EQ(defaults.orphans.min_trees, 3);
+  EXPECT_EQ(defaults.orphans.min_age, minutes{10});
+  const Result<GovernorPolicy> read =
+      parse("[orphans]\nenabled = false\nmin_trees = 5\nmin_age_minutes = 30\n");
+  ASSERT_TRUE(read.has_value()) << read.error().message;
+  EXPECT_FALSE(read->orphans.enabled);
+  EXPECT_EQ(read->orphans.min_trees, 5);
+  EXPECT_EQ(read->orphans.min_age, minutes{30});
+  EXPECT_NE(error_of("[orphans]\nmin_trees = 1\n").find("'orphans.min_trees'"), std::string::npos);
+  EXPECT_NE(error_of("[orphans]\nenabled = 1\n").find("true or false"), std::string::npos);
+  EXPECT_NE(error_of("[orphans]\nmin_age_minutes = 0\n").find("'orphans.min_age_minutes'"),
+            std::string::npos);
 }
 
 TEST(GovernorPolicy, EmptyFileIsTheDefaults) {

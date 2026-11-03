@@ -110,6 +110,17 @@ class Fields {
     return static_cast<int>(value);
   }
 
+  [[nodiscard]] std::optional<bool> boolean(std::string_view key) const {
+    const toml::node* node = table_->get(key);
+    if (node == nullptr) {
+      return std::nullopt;
+    }
+    if (!node->is_boolean()) {
+      fail(key, "must be true or false");
+    }
+    return node->as_boolean()->get();
+  }
+
   [[nodiscard]] std::optional<std::string> text(std::string_view key) const {
     const toml::node* node = table_->get(key);
     if (node == nullptr) {
@@ -305,6 +316,17 @@ void read_jobs(const Fields& root, GovernorPolicy& policy) {
   }
 }
 
+void read_orphans(const Fields& root, OrphanPolicy& policy) {
+  const std::optional<Fields> fields = root.table("orphans");
+  if (!fields) {
+    return;
+  }
+  fields->only({"enabled", "min_trees", "min_age_minutes"});
+  policy.enabled = fields->boolean("enabled").value_or(policy.enabled);
+  policy.min_trees = fields->integer("min_trees", 2, 1000).value_or(policy.min_trees);
+  read_duration(*fields, "min_age_minutes", max_minutes, policy.min_age);
+}
+
 }  // namespace
 
 std::string_view to_string(GovernorMode mode) {
@@ -332,13 +354,15 @@ Result<GovernorPolicy> parse_policy_file(std::string_view text, const std::files
   }
   try {
     const Fields fields(root, name);
-    fields.only({"governor", "pressure", "clear", "ladder", "game_mode", "jobs", "notifications"});
+    fields.only({"governor", "pressure", "clear", "ladder", "game_mode", "jobs", "notifications",
+                 "orphans"});
     GovernorPolicy policy;
     read_mode(fields, policy.mode);
     read_pressure(fields, policy.pressure);
     check_hysteresis(fields, policy.pressure);
     read_ladder(fields, policy.ladder);
     read_jobs(fields, policy);
+    read_orphans(fields, policy.orphans);
     return policy;
   } catch (const SchemaError& error) {
     return fail(Errc::invalid_data, error.what());

@@ -196,6 +196,80 @@ void draw_notifications(const GovernorStatus& status, const std::chrono::time_zo
   ImGui::EndTable();
 }
 
+void draw_proposal(const tray_model::OrphanProposalRow& proposal, bool observe, bool reachable,
+                   UiState& state) {
+  const auto decide = [&](std::string_view decision) {
+    state.requests.emplace_back(
+        tray_model::DecideOrphans{.id = proposal.id, .decision = std::string(decision)});
+  };
+  ImGui::TableNextRow();
+  ImGui::TableNextColumn();
+  wrapped_text(color::text, std::format("End {} loops of {}", proposal.trees, proposal.pattern));
+  muted_text(std::format("{} processes, root image {}", proposal.processes, proposal.image));
+  ImGui::TableNextColumn();
+  ImGui::BeginDisabled(!reachable);
+  ImGui::BeginDisabled(observe);
+  if (ImGui::SmallButton("End now")) {
+    decide("end_now");
+  }
+  ImGui::EndDisabled();
+  ImGui::SameLine();
+  if (ImGui::SmallButton("Always end this pattern")) {
+    decide("always");
+  }
+  ImGui::SameLine();
+  if (ImGui::SmallButton("Ignore")) {
+    decide("ignore");
+  }
+  ImGui::EndDisabled();
+}
+
+void draw_orphans(const GovernorStatus& status, bool reachable, UiState& state) {
+  const bool observe = status.mode == "observe";
+  if (status.orphan_proposals.empty()) {
+    muted_text("No orphaned polling loop repeats.");
+  } else {
+    if (observe) {
+      wrapped_text(color::muted,
+                   "Observe mode: ending is only recorded. A pattern set to always is ended once "
+                   "the governor acts.");
+    }
+    if (ImGui::BeginTable("orphans", 2, table_flags)) {
+      ImGui::TableSetupColumn("Loops", ImGuiTableColumnFlags_WidthStretch, 3.0F);
+      ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch, 2.4F);
+      for (const tray_model::OrphanProposalRow& proposal : status.orphan_proposals) {
+        ImGui::PushID(static_cast<int>(proposal.id));
+        draw_proposal(proposal, observe, reachable, state);
+        ImGui::PopID();
+      }
+      ImGui::EndTable();
+    }
+  }
+  if (status.orphan_rules.empty() || !ImGui::BeginTable("orphan_rules", 3, table_flags)) {
+    return;
+  }
+  ImGui::TableSetupColumn("Your rule", ImGuiTableColumnFlags_WidthStretch, 0.8F);
+  ImGui::TableSetupColumn("Pattern", ImGuiTableColumnFlags_WidthStretch, 3.4F);
+  ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch, 0.6F);
+  ImGui::TableHeadersRow();
+  for (const tray_model::OrphanRuleRow& rule : status.orphan_rules) {
+    ImGui::PushID(static_cast<int>(rule.id));
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    text(rule.rule == "always" ? "always end" : "ignore");
+    ImGui::TableNextColumn();
+    wrapped_text(color::text, rule.pattern);
+    ImGui::TableNextColumn();
+    ImGui::BeginDisabled(!reachable);
+    if (ImGui::SmallButton("Forget")) {
+      state.requests.emplace_back(tray_model::DecideOrphans{.id = rule.id, .decision = "forget"});
+    }
+    ImGui::EndDisabled();
+    ImGui::PopID();
+  }
+  ImGui::EndTable();
+}
+
 void draw_trees(const GovernorStatus& status) {
   if (status.trees.empty()) {
     muted_text("None.");
@@ -267,6 +341,8 @@ void draw_governor(const tray_model::DashboardModel& model, const std::chrono::t
   draw_game_mode(*status, reachable, state);
   ImGui::SeparatorText("Waiting for you");
   draw_notifications(*status, zone, reachable, state);
+  ImGui::SeparatorText("Orphaned polling loops");
+  draw_orphans(*status, reachable, state);
   ImGui::SeparatorText("Trees with a step in effect");
   draw_trees(*status);
   ImGui::SeparatorText("Recent decisions");

@@ -11,8 +11,9 @@ namespace myclean::tray {
 
 // The governor's mode and pressure state, Pause for N minutes (or end the pause), the game-mode
 // override auto / on / off with the detected games, every notification waiting for the owner with
-// Resume, Kill (confirmed), Allow once and Always allow, the trees with a step in effect and the
-// recent decisions.
+// Resume, Kill (confirmed), Allow once and Always allow, the orphaned polling loops ("End N loops
+// of <pattern>" with End now, Always end this pattern and Ignore, and the stored rules with
+// Forget), the trees with a step in effect and the recent decisions.
 void draw_governor(const tray_model::DashboardModel& model, const std::chrono::time_zone& zone,
                    UiState& state);
 

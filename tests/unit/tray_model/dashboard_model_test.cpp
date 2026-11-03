@@ -255,7 +255,25 @@ TEST(DashboardModelTest, GovernorNotificationsBadgeTheIconAndBecomeToasts) {
   ASSERT_TRUE(model.governor().has_value()) << "kept until the next status";
   EXPECT_EQ(model.governor_pending(), 1);
 
-  model.apply(unreachable_at(start + 3));
+  PollResult loops = reachable_at(start + 3);
+  testing::Json reply = testing::governor_status_json();
+  reply["orphans"] =
+      testing::Json{{"enabled", true},
+                    {"min_trees", 3},
+                    {"min_age_minutes", 10},
+                    {"proposals", testing::Json::array({testing::Json{{"id", 1},
+                                                                      {"time", start + 3},
+                                                                      {"pattern", "bash loop.sh"},
+                                                                      {"image", "bash.exe"},
+                                                                      {"trees", 3},
+                                                                      {"processes", 3}}})},
+                    {"rules", testing::Json::array()}};
+  loops.governor = parse_governor_status(reply).value();
+  model.apply(std::move(loops));
+  EXPECT_EQ(model.governor_pending(), 1) << "the proposal waits; the notification left";
+  EXPECT_TRUE(model.tray_status().badge);
+
+  model.apply(unreachable_at(start + 4));
   EXPECT_EQ(model.governor_pending(), 0) << "nothing can be answered while the service is away";
 }
 

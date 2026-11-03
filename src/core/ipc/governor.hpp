@@ -16,9 +16,12 @@
 //    "detail"}
 // "kind" is one of apply_step, roll_back, resume, kill, notify, add_to_allow_list (the ladder's
 // commands and the owner's choices), place_job, job_released, job_adopted, job_limits,
-// notification_limit, job_memory_limit, commit_failure_exit, untrusted_job, game_detected and
-// game_mode. "reason" is a governor::Reason text ("cpu", "commit", "pressure_cleared", "resume",
-// "orphaned_suspend", "untrusted_job", "policy", ...). "actor" is "governor" or "owner". In
+// notification_limit, job_memory_limit, commit_failure_exit, untrusted_job, game_detected,
+// game_mode, orphan_loops (a pattern of orphaned polling loops proposed, or its trees ended by an
+// `always` rule) and orphan_rule (the owner stored or forgot a rule). An orphaned tree that is
+// ended is a "kill" event with reason "orphaned_loop". "reason" is a governor::Reason text ("cpu",
+// "commit", "pressure_cleared", "resume", "orphaned_suspend", "untrusted_job", "policy",
+// "orphaned_loop", ...). "actor" is "governor" or "owner". In
 // observe mode "detail" is "observe": the decision was recorded and nothing was changed.
 namespace myclean::ipc {
 
@@ -39,6 +42,9 @@ namespace myclean::ipc {
 //  "trees": [{"root": process, "image", "class", "step"}],
 //  "notifications": [{"id", "time", "root": process, "image", "class", "step", "reason",
 //                     "members"}],
+//  "orphans": {"enabled": bool, "min_trees": integer, "min_age_minutes": integer,
+//              "proposals": [{"id", "time", "pattern", "image", "trees", "processes"}],
+//              "rules": [{"id", "pattern", "image", "rule": "always"|"ignore", "time"}]},
 //  "events": [event]}
 // "metrics" is null before the first complete sample. "adopted": a job of a previous run,
 // re-opened after a crash; its members are polled (no completion port). "trees" are the trees
@@ -46,8 +52,11 @@ namespace myclean::ipc {
 // limited to one per tree per [notifications] interval_minutes, and always one for a suspend),
 // oldest first, each with an "id" that only grows: the tray shows a toast for each id above the
 // last one it showed. One leaves the list when the owner chose for its tree or the tree's root
-// exited; at most max_notifications are kept. "events" are the newest status_events events,
-// newest first.
+// exited; at most max_notifications are kept. "orphans": the orphaned polling loops (governor
+// spec, "Orphaned Polling Loops"): each proposal is a pattern (the normalized command line of the
+// trees' roots) with no rule and at least min_trees live orphaned trees, "End <trees> loops of
+// <pattern>", with an "id" kept while it stays proposed; "rules" are the owner's stored decisions.
+// "events" are the newest status_events events, newest first.
 inline constexpr std::string_view governor_status_method = "governor.status";
 inline constexpr std::size_t max_notifications = 32;
 inline constexpr std::size_t status_events = 20;
@@ -85,6 +94,15 @@ inline constexpr std::string_view governor_game_mode_method = "governor.game_mod
 // re-reads the owner's launchers and GameConfigStore. A state older than user_state_seconds is
 // ignored. {}.
 inline constexpr std::string_view governor_user_state_method = "governor.user_state";
+
+// TRAY ONLY. Parameters: id (integer, required), decision (token, required: "end_now"|"always"|
+// "ignore"|"forget"). end_now, always and ignore answer the orphaned-loop proposal `id`: end_now
+// ends its trees, always stores the pattern as "always" and ends its trees (later orphans of the
+// pattern are ended as they appear), ignore stores the pattern as "ignore". forget removes the
+// stored rule `id`. Recorded with actor "owner"; in observe mode an end is only recorded.
+// {"trees": integer}: the trees ended. An unknown id fails with not_found, an unknown decision
+// with invalid_argument.
+inline constexpr std::string_view governor_orphans_method = "governor.orphans";
 inline constexpr int user_state_seconds = 5;
 inline constexpr int owner_absent_seconds = 60;
 

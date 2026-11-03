@@ -267,6 +267,9 @@ void Poller::handle_governor(const Request& request, PollResult& result) {
   } else if (const auto* game_mode = std::get_if<SetGameMode>(&request)) {
     send("Setting game mode", ipc::governor_game_mode_method,
          governor_game_mode_params(game_mode->value));
+  } else if (const auto* orphans = std::get_if<DecideOrphans>(&request)) {
+    send(orphans->decision == "forget" ? "Forgetting the rule" : "Answering the loops",
+         ipc::governor_orphans_method, governor_orphans_params(orphans->id, orphans->decision));
   }
 }
 

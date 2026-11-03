@@ -10,6 +10,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -32,11 +33,13 @@
 #include "core/governor/game_mode.hpp"
 #include "core/governor/jobs.hpp"
 #include "core/governor/ladder.hpp"
+#include "core/governor/orphans.hpp"
 #include "core/governor/policy.hpp"
 #include "core/governor/pressure.hpp"
 #include "core/governor/reason.hpp"
 #include "core/governor/recovery.hpp"
 #include "core/ipc/governor.hpp"
+#include "core/model/actor.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/jobs.hpp"
@@ -68,6 +71,31 @@ std::filesystem::path from_utf8(std::string_view text) {
 bool equal_ignoring_case(std::string_view left, std::string_view right) {
   const auto lower = [](char c) { return c >= 'A' && c <= 'Z' ? static_cast<char>(c + 32) : c; };
   return std::ranges::equal(left, right, {}, lower, lower);
+}
+
+bool protected_class(rules::ProcessClass process_class) {
+  return process_class == rules::ProcessClass::system ||
+         process_class == rules::ProcessClass::game || process_class == rules::ProcessClass::allow;
+}
+
+// MyClean's own processes are never ended, whatever their class.
+bool myclean_image(std::string_view image) {
+  return image.size() >= 7 && equal_ignoring_case(image.substr(0, 7), "myclean");
+}
+
+std::vector<std::vector<governor::ProcessKey>> tree_keys(
+    const std::vector<governor::OrphanProcess>& table, const governor::OrphanGroup& group) {
+  std::vector<std::vector<governor::ProcessKey>> trees;
+  trees.reserve(group.trees.size());
+  for (const governor::OrphanTree& tree : group.trees) {
+    std::vector<governor::ProcessKey> members;
+    members.reserve(tree.members.size());
+    for (const std::size_t member : tree.members) {
+      members.push_back(table[member].key);
+    }
+    trees.push_back(std::move(members));
+  }
+  return trees;
 }
 
 bool job_class(rules::ProcessClass process_class) {
@@ -104,6 +132,11 @@ Result<void> Governor::start() {
     return tl::unexpected(allowed.error());
   }
   allowed_ = std::move(*allowed);
+  Result<std::vector<OrphanRuleRecord>> rules = load_orphan_rules(*store_);
+  if (!rules) {
+    return tl::unexpected(rules.error());
+  }
+  orphan_rules_ = std::move(*rules);
   reload();
   game_mode_ = governor::decide_game_mode(override_, false, policy_.jobs);
   scan_games();
@@ -309,6 +342,7 @@ void Governor::fail_open(governor::Reason reason, std::string_view detail) {
   executor_.clear();
   notifications_.clear();
   observed_roots_.clear();
+  orphan_proposals_.clear();
 }
 
 void Governor::run(const governor::Command& command) {
@@ -506,6 +540,9 @@ void Governor::tick() {
   jobs_.poll(live);
   observe_fullscreen();
   update_game_mode();
+  if (view && (!orphans_at_ || clock_->monotonic() - *orphans_at_ >= orphan_interval)) {
+    scan_orphans(*view);
+  }
   if (view && view->time != last_view_) {
     if (const std::optional<governor::PressureSample> sample = read_sample(); sample) {
       last_view_ = view->time;
@@ -688,6 +725,245 @@ std::size_t Governor::apply_class_limits() {
   return changed;
 }
 
+std::vector<governor::OrphanProcess> Governor::orphan_table(
+    const telemetry::ProcessView& view) const {
+  const std::optional<UserState> user = fresh_user_state();
+  std::vector<governor::OrphanProcess> table;
+  table.reserve(view.rows.size());
+  for (const telemetry::ProcessRow& row : view.rows) {
+    const governor::ProcessKey key{.pid = row.info.pid, .created = row.info.created};
+    table.push_back(governor::OrphanProcess{
+        .key = key,
+        .parent_pid = row.info.parent_pid,
+        .parent = row.parent,
+        .image = row.info.image,
+        .protected_process = protected_class(class_of(key)) || myclean_image(row.info.image) ||
+                             (user && user->foreground_pid == key.pid)});
+  }
+  return table;
+}
+
+void Governor::read_command_lines(std::vector<governor::OrphanProcess>& table,
+                                  const std::vector<std::size_t>& roots) {
+  for (const std::size_t root : roots) {
+    governor::OrphanProcess& process = table[root];
+    const auto found = known_.find(process.key);
+    if (found == known_.end()) {
+      continue;
+    }
+    Known& known = found->second;
+    if (known.facts.command_line.empty() && !known.command_line_read && sources_.command_line) {
+      known.command_line_read = true;
+      if (std::optional<std::string> line =
+              sources_.command_line(process.key.pid, process.key.created);
+          line && !line->empty()) {
+        known.facts.command_line = std::move(*line);
+        known.process_class = classifier_.classify(known.facts).process_class;
+        process.protected_process =
+            process.protected_process || protected_class(class_of(process.key));
+      }
+    }
+    if (!known.facts.command_line.empty()) {
+      process.command_line = known.facts.command_line;
+    }
+  }
+}
+
+void Governor::scan_orphans(const telemetry::ProcessView& view) {
+  orphans_at_ = clock_->monotonic();
+  std::vector<governor::OrphanProcess> table = orphan_table(view);
+  const std::vector<std::size_t> roots = governor::orphan_roots(table, view.time, policy_.orphans);
+  read_command_lines(table, roots);
+  std::set<governor::ProcessKey> live;
+  for (const std::size_t root : roots) {
+    live.insert(table[root].key);
+  }
+  std::erase_if(orphans_ended_,
+                [&](const governor::ProcessKey& key) { return !live.contains(key); });
+  std::vector<OrphanProposal> proposals;
+  for (const governor::OrphanGroup& group : governor::group_orphans(table, roots)) {
+    std::vector<std::vector<governor::ProcessKey>> trees = tree_keys(table, group);
+    const auto rule = std::ranges::find(orphan_rules_, group.pattern, &OrphanRuleRecord::pattern);
+    if (rule == orphan_rules_.end()) {
+      if (std::cmp_greater_equal(trees.size(), policy_.orphans.min_trees)) {
+        propose(group, std::move(trees), proposals);
+      }
+    } else if (rule->rule == governor::OrphanRule::always) {
+      end_always(group, trees);
+    }
+  }
+  orphan_proposals_ = std::move(proposals);
+}
+
+void Governor::propose(const governor::OrphanGroup& group,
+                       std::vector<std::vector<governor::ProcessKey>> trees,
+                       std::vector<OrphanProposal>& proposals) {
+  const auto known = std::ranges::find(orphan_proposals_, group.pattern, &OrphanProposal::pattern);
+  if (known != orphan_proposals_.end()) {
+    OrphanProposal kept = *known;
+    kept.trees = std::move(trees);
+    proposals.push_back(std::move(kept));
+    return;
+  }
+  record(EventKind::orphan_loops, std::nullopt, group.image, std::nullopt,
+         governor::Reason::orphaned_loop,
+         std::format("proposed to the owner: end {} orphaned trees of '{}'", trees.size(),
+                     group.pattern),
+         false);
+  proposals.push_back(OrphanProposal{.id = next_orphan_proposal_++,
+                                     .time = clock_->now(),
+                                     .pattern = group.pattern,
+                                     .image = group.image,
+                                     .trees = std::move(trees)});
+}
+
+void Governor::end_always(const governor::OrphanGroup& group,
+                          const std::vector<std::vector<governor::ProcessKey>>& trees) {
+  std::size_t ended = 0;
+  for (const std::vector<governor::ProcessKey>& members : trees) {
+    if (orphans_ended_.insert(members.front()).second) {
+      end_orphan_tree(members, Actor::governor());
+      ++ended;
+    }
+  }
+  if (ended > 0) {
+    const bool act = policy_.mode == governor::GovernorMode::act;
+    record(EventKind::orphan_loops, std::nullopt, group.image, std::nullopt,
+           governor::Reason::orphaned_loop,
+           std::format("{} {} orphaned trees of '{}' (the owner's rule: always)",
+                       act ? "ended" : "observe: would end", ended, group.pattern),
+           act);
+  }
+}
+
+void Governor::end_orphan_tree(const std::vector<governor::ProcessKey>& members,
+                               const Actor& actor) {
+  const governor::ProcessKey& root = members.front();
+  const auto known = known_.find(root);
+  run(governor::Command{
+      .kind = governor::CommandKind::kill,
+      .actor = actor,
+      .root = root,
+      .root_image = known == known_.end() ? std::string() : known->second.facts.image,
+      .process_class = class_of(root),
+      .members = members,
+      .step = governor::Step::kill,
+      .reason = governor::Reason::orphaned_loop,
+      .metrics = sample_.value_or(governor::PressureSample{})});
+}
+
+Result<void> Governor::store_orphan_rule(const OrphanProposal& proposal,
+                                         governor::OrphanRule rule) {
+  Result<std::int64_t> id =
+      save_orphan_rule(*store_, proposal.pattern, proposal.image, rule, clock_->now());
+  if (!id) {
+    return tl::unexpected(id.error());
+  }
+  std::erase_if(orphan_rules_,
+                [&](const OrphanRuleRecord& stored) { return stored.pattern == proposal.pattern; });
+  orphan_rules_.push_back(OrphanRuleRecord{.id = *id,
+                                           .pattern = proposal.pattern,
+                                           .image = proposal.image,
+                                           .rule = rule,
+                                           .decided = clock_->now()});
+  recorder_.record(
+      GovernorEvent{.kind = EventKind::orphan_rule,
+                    .root_image = proposal.image,
+                    .reason = governor::Reason::orphaned_loop,
+                    .actor = Actor::owner(),
+                    .detail = std::format(
+                        "{} '{}'", rule == governor::OrphanRule::always ? "always end" : "ignore",
+                        proposal.pattern)},
+      true);
+  return {};
+}
+
+Result<std::size_t> Governor::decide_orphans(std::int64_t id, governor::OrphanDecision decision) {
+  const std::scoped_lock lock(mutex_);
+  if (stopped_ || !started_) {
+    return fail(Errc::invalid_state, "the governor is not running");
+  }
+  if (decision == governor::OrphanDecision::forget) {
+    const auto rule = std::ranges::find(orphan_rules_, id, &OrphanRuleRecord::id);
+    if (rule == orphan_rules_.end()) {
+      return fail(Errc::not_found, std::format("no orphaned-loop rule {}", id));
+    }
+    if (Result<void> forgotten = forget_orphan_rule(*store_, id); !forgotten) {
+      return tl::unexpected(forgotten.error());
+    }
+    recorder_.record(
+        GovernorEvent{.kind = EventKind::orphan_rule,
+                      .root_image = rule->image,
+                      .reason = governor::Reason::orphaned_loop,
+                      .actor = Actor::owner(),
+                      .detail = std::format("forgot the rule '{}' for '{}'",
+                                            governor::to_string(rule->rule), rule->pattern)},
+        true);
+    orphan_rules_.erase(rule);
+    return std::size_t{0};
+  }
+  // The trees as they are now: one may have exited, or its loop may no longer be orphaned.
+  if (const std::shared_ptr<const telemetry::ProcessView> view =
+          sources_.view ? sources_.view() : nullptr) {
+    update_known(*view);
+    scan_orphans(*view);
+  }
+  const auto found = std::ranges::find(orphan_proposals_, id, &OrphanProposal::id);
+  if (found == orphan_proposals_.end()) {
+    return fail(Errc::not_found,
+                std::format("no orphaned-loop proposal {}: its loops ended or are no longer "
+                            "orphaned",
+                            id));
+  }
+  if (decision != governor::OrphanDecision::end_now) {
+    const governor::OrphanRule rule = decision == governor::OrphanDecision::always
+                                          ? governor::OrphanRule::always
+                                          : governor::OrphanRule::ignore;
+    if (Result<void> stored = store_orphan_rule(*found, rule); !stored) {
+      return tl::unexpected(stored.error());
+    }
+  }
+  std::size_t ended = 0;
+  if (decision != governor::OrphanDecision::ignore) {
+    for (const std::vector<governor::ProcessKey>& members : found->trees) {
+      orphans_ended_.insert(members.front());
+      end_orphan_tree(members, Actor::owner());
+      ++ended;
+    }
+  }
+  orphan_proposals_.erase(found);
+  return ended;
+}
+
+Json Governor::orphans_json() const {
+  Json proposals = Json::array();
+  for (const OrphanProposal& proposal : orphan_proposals_) {
+    std::size_t processes = 0;
+    for (const std::vector<governor::ProcessKey>& members : proposal.trees) {
+      processes += members.size();
+    }
+    proposals.push_back(Json{{"id", proposal.id},
+                             {"time", store::to_unix_seconds(proposal.time)},
+                             {"pattern", proposal.pattern},
+                             {"image", proposal.image},
+                             {"trees", proposal.trees.size()},
+                             {"processes", processes}});
+  }
+  Json rules = Json::array();
+  for (const OrphanRuleRecord& rule : orphan_rules_) {
+    rules.push_back(Json{{"id", rule.id},
+                         {"pattern", rule.pattern},
+                         {"image", rule.image},
+                         {"rule", governor::to_string(rule.rule)},
+                         {"time", store::to_unix_seconds(rule.decided)}});
+  }
+  return Json{{"enabled", policy_.orphans.enabled},
+              {"min_trees", policy_.orphans.min_trees},
+              {"min_age_minutes", policy_.orphans.min_age.count()},
+              {"proposals", std::move(proposals)},
+              {"rules", std::move(rules)}};
+}
+
 rules::ProcessClass Governor::class_of(const governor::ProcessKey& key) const {
   const auto found = known_.find(key);
   if (found == known_.end()) {
@@ -863,6 +1139,7 @@ Json Governor::status() const {
               {"jobs", jobs_json()},
               {"trees", trees_json()},
               {"notifications", std::move(notifications)},
+              {"orphans", orphans_json()},
               {"events", std::move(events)}};
 }
 

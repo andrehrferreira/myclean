@@ -122,6 +122,8 @@ class Machine {
   // True: the policy source fails, as with a malformed governor.toml.
   [[nodiscard]] bool& policy_fails() { return policy_fails_; }
   [[nodiscard]] telemetry::IPerfCounters*& gpu() { return gpu_; }
+  // The command lines the command-line source answers, by PID (unset: none can be read).
+  [[nodiscard]] std::map<std::uint32_t, std::string>& command_lines() { return command_lines_; }
 
   [[nodiscard]] fakes::FakeClock& clock() { return clock_; }
   [[nodiscard]] fakes::FakeJobs& os() { return os_; }
@@ -156,6 +158,10 @@ class Machine {
                 }
               }
               return std::nullopt;
+            },
+            .command_line = [this](std::uint32_t pid, WallTime) -> std::optional<std::string> {
+              const auto found = command_lines_.find(pid);
+              return found == command_lines_.end() ? std::nullopt : std::optional(found->second);
             },
             .gpu = gpu_},
         *store_, clock_);
@@ -289,6 +295,7 @@ class Machine {
   GameScan games_;
   bool policy_fails_ = false;
   telemetry::IPerfCounters* gpu_ = nullptr;
+  std::map<std::uint32_t, std::string> command_lines_;
   fakes::FakeClock clock_{noon};
   fakes::FakeJobs os_{true};
   std::map<std::string, double, std::less<>> metrics_;
