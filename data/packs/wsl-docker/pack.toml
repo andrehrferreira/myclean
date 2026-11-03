@@ -1,5 +1,5 @@
 id          = "wsl-docker"
-version     = "1.6.0"
+version     = "1.7.0"
 title       = "WSL and Docker Desktop"
 description = "The virtual disks of WSL distributions and of Docker Desktop and the file systems of WSL 1 distributions and their /tmp: where they are, and moving a distribution to another drive with WSL's own command; `docker system prune`; emptying old entries of a WSL 1 /tmp from inside Linux; deleting, asking first, a copy of Docker Desktop's data folder that its settings no longer name; what the WSL and Docker processes are."
 sources     = [

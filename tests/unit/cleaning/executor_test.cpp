@@ -12,6 +12,7 @@
 #include <nlohmann/json.hpp>
 
 #include "actions/actions_test_support.hpp"
+#include "cleanup/fakes.hpp"
 #include "core/actions/policy.hpp"
 #include "core/actions/quarantine.hpp"
 #include "core/actions/schema.hpp"
@@ -19,8 +20,11 @@
 #include "core/model/actor.hpp"
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
+#include "core/model/units.hpp"
 #include "core/packs/schema.hpp"
 #include "core/placement/recipe.hpp"
+#include "core/placement/relocation.hpp"
+#include "core/placement/settings.hpp"
 #include "core/store/database.hpp"
 #include "core/store/migrations.hpp"
 #include "core/store/plan_repository.hpp"
@@ -78,10 +82,13 @@ class ExecutorRecipeTest : public ::testing::Test {
                                            .safe_remove = &*safe_remove_,
                                            .clock = &clock_};
     quarantine_ = std::make_unique<actions::Quarantine>(environment, *engine_);
-    executor_ =
-        std::make_unique<Executor>(environment, *engine_, *quarantine_,
-                                   Probes{.system = &system_, .tools = &tools_, .drives = &drives_},
-                                   actions::testing::owner_locations(), ExecutorOptions{});
+    executor_ = std::make_unique<Executor>(environment, *engine_, *quarantine_,
+                                           Probes{.commands = &runner_,
+                                                  .system = &system_,
+                                                  .tools = &tools_,
+                                                  .drives = &drives_,
+                                                  .owner_tools = &owner_tools_},
+                                           actions::testing::owner_locations(), ExecutorOptions{});
   }
 
   Result<Plan> propose(Optimization request) {
@@ -101,6 +108,20 @@ class ExecutorRecipeTest : public ::testing::Test {
   }
 
   placement::testing::FakeDriveFacts& drives() { return drives_; }
+  placement::testing::FakeRegistry& registry() { return registry_; }
+  placement::testing::FakeProcessTable& processes() { return processes_; }
+  placement::testing::FakeSystemSpace& system() { return system_; }
+  Executor& executor() { return *executor_; }
+  PlanState state_of(PlanId id) {
+    std::optional<PlanState> state;
+    EXPECT_TRUE(store_
+                    ->read([&](store::Database& db) -> Result<void> {
+                      state = store::get_plan(db, id).value().state;
+                      return {};
+                    })
+                    .has_value());
+    return state.value_or(PlanState::failed);
+  }
 
  private:
   actions::testing::TempFolder folder_;
@@ -109,6 +130,16 @@ class ExecutorRecipeTest : public ::testing::Test {
   placement::testing::FakeSystemSpace system_;
   placement::testing::FakeProcessRunner tools_;
   placement::testing::FakeDriveFacts drives_;
+  placement::testing::FakeUserEnvironment user_environment_;
+  placement::testing::FakeTextFiles text_files_;
+  placement::testing::FakeRegistry registry_;
+  placement::testing::FakeProcessTable processes_;
+  cleanup::testing::FakeRunner runner_;
+  placement::Tools owner_tools_{.environment = &user_environment_,
+                                .files = &text_files_,
+                                .file_system = &fs_,
+                                .registry = &registry_,
+                                .processes = &processes_};
   std::unique_ptr<store::Store> store_;
   std::unique_ptr<actions::StorePlanSource> plans_;
   std::optional<safety::SafeRemove> safe_remove_;
@@ -160,6 +191,102 @@ TEST_F(ExecutorRecipeTest, RefusesAMissingOrNeedlessInstanceASkippedOneAndAnUnhe
             Errc::refused);
   drives().at(LR"(D:\)").healthy = false;
   EXPECT_EQ(propose({.target = "D", .recipe = models_recipe()}).error().code, Errc::invalid_state);
+}
+
+class ReclaimSystemSpaceTest : public ExecutorRecipeTest {
+ protected:
+  // C: at 5 % free, hibernation full and a system-managed page file on C:.
+  void low_system_volume() {
+    using namespace literals;
+    drives().at(LR"(C:\)").free = 47_GiB;
+    system().hibernation_state = {.mode = placement::HibernationMode::full,
+                                  .file = LR"(C:\hiberfil.sys)",
+                                  .file_size = 51_GiB,
+                                  .memory = 128_GiB};
+    system().page_file_state = {
+        .config = {.automatic = true},
+        .in_use = {placement::PageFileUse{.path = LR"(C:\pagefile.sys)", .allocated = 87_GiB}}};
+  }
+};
+
+TEST_F(ReclaimSystemSpaceTest, LowSystemVolumeGetsAutomaticHibernationAndPageFilePlansOnce) {
+  low_system_volume();
+
+  const Result<std::vector<PlanId>> plans = executor().reclaim_system_space();
+  ASSERT_TRUE(plans.has_value()) << plans.error().message;
+  ASSERT_EQ(plans->size(), 2U);
+  for (const PlanId id : *plans) {
+    EXPECT_EQ(state_of(id), PlanState::approved);
+  }
+  const Result<std::vector<PlanId>> again = executor().reclaim_system_space();
+  ASSERT_TRUE(again.has_value());
+  EXPECT_TRUE(again->empty()) << "their plans are still open";
+
+  // powercfg runs without effect here, so reduced hibernation is still recommended once the
+  // plan has run: it is not tried again within the week.
+  ASSERT_TRUE(executor().execute(plans->front()).has_value());
+  EXPECT_EQ(system().hibernation_state.mode, placement::HibernationMode::full);
+  EXPECT_TRUE(executor().reclaim_system_space().value().empty());
+}
+
+TEST_F(ReclaimSystemSpaceTest, SystemVolumeWithRoomOrSettingsAlreadyReducedGetNothing) {
+  using namespace literals;
+  low_system_volume();
+  drives().at(LR"(C:\)").free = 200_GiB;
+  EXPECT_TRUE(executor().reclaim_system_space().value().empty());
+
+  drives().at(LR"(C:\)").free = 47_GiB;
+  system().hibernation_state.mode = placement::HibernationMode::reduced;
+  system().page_file_state.config = {
+      .automatic = false,
+      .files = {placement::PageFile{
+                    .path = LR"(C:\pagefile.sys)", .initial_mb = 4096, .maximum_mb = 4096},
+                placement::PageFile{.path = LR"(D:\pagefile.sys)"}}};
+  EXPECT_TRUE(executor().reclaim_system_space().value().empty());
+}
+
+// The WSL 2 distribution recipe as wsl-docker ships it: automatic.
+packs::RelocationRecipe automatic_distro_recipe() {
+  return {.id = "wsl-docker/distro",
+          .label = "WSL distribution disk (ext4.vhdx)",
+          .locations = {R"(%LOCALAPPDATA%\wsl\*\ext4.vhdx)"},
+          .current = {.kind = SettingKind::registry,
+                      .text = R"(HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss\*\BasePath)",
+                      .name = "DistributionName",
+                      .where = packs::InstanceFilter{.value = "Flags", .mask = 8, .equals = 8}},
+          .target_kind = SettingKind::command,
+          .command = "wsl --manage {name} --move {target}",
+          .content = packs::ContentMode::move,
+          .needs = {"wsl.exe", "wslhost.exe"},
+          .skip_names = {"docker-desktop"},
+          .undo = packs::UndoKind::command,
+          .automatic = true};
+}
+
+TEST_F(ReclaimSystemSpaceTest, IdleDistributionsOnTheLowSystemVolumeMoveAutomatically) {
+  low_system_volume();
+  const std::string lxss = R"(HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss)";
+  const auto distro = [&](const std::string& guid, const std::string& name,
+                          const std::string& path) {
+    registry().put(lxss + "\\" + guid, "DistributionName", placement::RegistryValue{.text = name});
+    registry().put(lxss + "\\" + guid, "BasePath", placement::RegistryValue{.text = path});
+    registry().put(lxss + "\\" + guid, "Flags",
+                   placement::RegistryValue{.text = "15", .type = placement::RegistryType::dword});
+  };
+  distro("{a}", "Ubuntu", R"(C:\Users\owner\AppData\Local\wsl\{a})");
+  distro("{b}", "Arch", R"(D:\WSL\Arch)");
+  const std::vector<packs::RelocationRecipe> recipes = {automatic_distro_recipe()};
+
+  // While WSL runs, nothing of it moves.
+  processes().images = {"wslhost.exe"};
+  ASSERT_EQ(executor().reclaim_system_space(recipes).value().size(), 2U);  // the two settings
+
+  processes().images = {};
+  const Result<std::vector<PlanId>> moved = executor().reclaim_system_space(recipes);
+  ASSERT_TRUE(moved.has_value()) << moved.error().message;
+  ASSERT_EQ(moved->size(), 1U);  // Ubuntu, on C:; Arch is on D: already
+  EXPECT_EQ(state_of(moved->front()), PlanState::approved);
+  EXPECT_TRUE(executor().reclaim_system_space(recipes).value().empty());
 }
 
 }  // namespace

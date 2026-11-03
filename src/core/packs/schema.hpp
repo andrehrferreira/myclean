@@ -112,6 +112,10 @@ struct Manifest {
 //                                                      # {target} = the previous folder; command
 //                                                      # and wsl-import) or none
 //   note        = "..."                                # optional; required with undo = "none"
+//   automatic   = true                                 # optional (false): moved without approval
+//                                                      # while the system volume has less than
+//                                                      # 10 % free and no image of `needs` runs;
+//                                                      # needs `needs` and an undo
 
 enum class SettingKind { env, config, registry, command, wsl_import };  // wsl_import: target only
 enum class ContentMode { move, regenerate };  // text forms as placement::ContentMode
@@ -153,6 +157,7 @@ struct RelocationRecipe {
   std::vector<std::string> skip_names;
   UndoKind undo = UndoKind::restore;
   std::string note;
+  bool automatic = false;
 };
 
 // ---- compress.toml: compression targets -------------------------------------------------------

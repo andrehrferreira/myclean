@@ -241,7 +241,7 @@ RelocationRecipe parse_recipe(const toml::table& table, const std::string& posit
   recipe.id = Fields(table, position).required_string("id");
   const Fields fields(table, position + " '" + recipe.id + "'");
   fields.only({"id", "label", "locations", "current", "target_kind", "command", "content", "needs",
-               "skip_names", "undo", "note"});
+               "skip_names", "undo", "note", "automatic"});
   recipe.label = fields.required_string("label");
   recipe.locations = fields.required_strings("locations");
   check_locations(fields, "locations", recipe.locations, true);
@@ -285,6 +285,10 @@ RelocationRecipe parse_recipe(const toml::table& table, const std::string& posit
   }
   if (recipe.undo == UndoKind::none && recipe.note.empty()) {
     fields.fail("note", "is required with undo 'none': it says how to go back");
+  }
+  recipe.automatic = fields.boolean("automatic").value_or(false);
+  if (recipe.automatic && (recipe.needs.empty() || recipe.undo == UndoKind::none)) {
+    fields.fail("automatic", "needs `needs` (what must not run) and an undo");
   }
   return recipe;
 }

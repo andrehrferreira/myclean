@@ -33,6 +33,7 @@
 #include "core/packs/loader.hpp"
 #include "core/packs/registry.hpp"
 #include "core/packs/schema.hpp"
+#include "core/placement/relocation.hpp"
 #include "core/safety/deny_list.hpp"
 #include "core/safety/safe_remove.hpp"
 #include "core/sched/scheduler.hpp"
@@ -59,6 +60,9 @@ struct OwnerContext {
   // git as the owner, who owns the repositories (git refuses another user's); null: Probes::git,
   // when this process runs as the owner.
   std::unique_ptr<clean::IGit> git;
+  // The owner's user variables, registry hive and running programs: where automatic relocation
+  // recipes are now (Probes::owner_tools). Null: none is moved automatically.
+  std::shared_ptr<const placement::Tools> tools;
 };
 // Fails while the owner's session is unavailable (not logged on); retried every minute.
 using OwnerSource = std::function<Result<OwnerContext>()>;

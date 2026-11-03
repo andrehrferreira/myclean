@@ -25,12 +25,18 @@
 #include "core/clean/probes.hpp"
 #include "core/cleaning/service.hpp"
 #include "core/model/result.hpp"
+#include "core/placement/relocation.hpp"
+#include "core/placement/settings.hpp"
 #include "core/safety/deny_list.hpp"
 #include "platform/clean/win32_probes.hpp"
 #include "platform/fs/protected_locations.hpp"
+#include "platform/fs/win32_file_system.hpp"
 #include "platform/git/git_cli.hpp"
 #include "platform/ipc/security.hpp"
+#include "platform/proc/nt_process_table.hpp"
 #include "platform/scan/file_content.hpp"
+#include "platform/settings/registry.hpp"
+#include "platform/settings/user_settings.hpp"
 
 namespace myclean::svc {
 
@@ -81,6 +87,91 @@ class BlockEnvironment final : public clean::IEnvironment {
   std::map<std::wstring, std::wstring> values_;  // upper-case names
   std::wstring owner_sid_;
 };
+
+// The owner's user variables as the relocation recipes read them, without changing them: get()
+// from the owner's hive (HKEY_USERS\<sid>\Environment), expand() with the owner's environment
+// block. The service only locates what recipes name; the tray moves it.
+class OwnerUserEnvironment final : public placement::IUserEnvironment {
+ public:
+  OwnerUserEnvironment(std::map<std::wstring, std::wstring> block, std::string owner_sid)
+      : variables_(std::move(block), std::wstring(owner_sid.begin(), owner_sid.end())),
+        registry_(std::move(owner_sid)) {}
+
+  [[nodiscard]] Result<std::optional<placement::EnvValue>> get(
+      std::string_view name) const override {
+    Result<std::optional<placement::RegistryValue>> value =
+        registry_.read("HKCU\\Environment", name);
+    if (!value) {
+      return tl::unexpected(value.error());
+    }
+    const std::optional<placement::RegistryValue>& found = *value;
+    if (!found || found->type == placement::RegistryType::dword) {
+      return std::optional<placement::EnvValue>{};
+    }
+    return std::optional<placement::EnvValue>{placement::EnvValue{
+        .text = found->text, .expandable = found->type == placement::RegistryType::expandable}};
+  }
+  [[nodiscard]] Result<void> set(std::string_view /*name*/,
+                                 const placement::EnvValue& /*value*/) override {
+    return refused();
+  }
+  [[nodiscard]] Result<void> remove(std::string_view /*name*/) override { return refused(); }
+  [[nodiscard]] Result<void> announce() override { return refused(); }
+
+  // %NAME% replaced by the owner's value; an unknown name stays as written.
+  [[nodiscard]] Result<fs::path> expand(std::string_view text) const override {
+    const std::wstring source = fs::path{std::u8string(text.begin(), text.end())}.native();
+    std::wstring expanded;
+    std::size_t at = 0;
+    while (at < source.size()) {
+      const std::size_t open = source.find(L'%', at);
+      const std::size_t close =
+          open == std::wstring::npos ? std::wstring::npos : source.find(L'%', open + 1);
+      if (close == std::wstring::npos) {
+        expanded += source.substr(at);
+        break;
+      }
+      expanded += source.substr(at, open - at);
+      const std::optional<std::wstring> value =
+          variables_.variable(std::wstring_view(source).substr(open + 1, close - open - 1));
+      expanded += value ? *value : source.substr(open, close - open + 1);
+      at = close + 1;
+    }
+    return fs::path{expanded};
+  }
+
+ private:
+  static Result<void> refused() {
+    return fail(Errc::refused, "the service does not change the owner's variables");
+  }
+
+  BlockEnvironment variables_;
+  platform::Win32Registry registry_;
+};
+
+// What the service reads where automatic relocation recipes are now, as the owner sees it.
+struct OwnerTools {
+  OwnerTools(std::map<std::wstring, std::wstring> block, const std::string& owner_sid)
+      : environment(std::move(block), owner_sid), registry(owner_sid) {}
+
+  OwnerUserEnvironment environment;
+  platform::Win32Registry registry;
+  platform::Win32TextFiles files;
+  platform::NtProcessTable processes;
+  platform::Win32FileSystem file_system;
+  placement::Tools tools{.environment = &environment,
+                         .files = &files,
+                         .file_system = &file_system,
+                         .registry = &registry,
+                         .processes = &processes};
+};
+
+// The Tools of a new OwnerTools, keeping it alive.
+std::shared_ptr<const placement::Tools> owner_tools(std::map<std::wstring, std::wstring> block,
+                                                    const std::string& owner_sid) {
+  auto owned = std::make_shared<const OwnerTools>(std::move(block), owner_sid);
+  return {owned, &owned->tools};
+}
 
 Result<wil::unique_handle> session_token(std::string_view owner_sid) {
   PWTS_SESSION_INFOW sessions = nullptr;
@@ -215,13 +306,15 @@ Result<cleaning::OwnerContext> owner_context(std::string_view owner_sid) {
     return tl::unexpected(locations.error());
   }
   const std::optional<fs::path> git = platform::find_git();
+  std::map<std::wstring, std::wstring> variables = variables_of(*environment);
   return cleaning::OwnerContext{
       .environment = std::make_unique<BlockEnvironment>(
-          variables_of(*environment), std::wstring(owner_sid.begin(), owner_sid.end())),
+          variables, std::wstring(owner_sid.begin(), owner_sid.end())),
       .locations = *std::move(locations),
       .downloads = downloads_of(token->get()),
       .git = git ? std::make_unique<platform::GitCli>(*git, owner_identity(std::string(owner_sid)))
-                 : nullptr};
+                 : nullptr,
+      .tools = owner_tools(std::move(variables), std::string(owner_sid))};
 }
 
 bool is_owner_tray(std::uint32_t pid, std::string_view owner_sid, const fs::path& tray_image) {

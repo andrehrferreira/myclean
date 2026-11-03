@@ -40,8 +40,10 @@ myclean_add_library(svc
     myclean::platform_fs
     myclean::platform_git
     myclean::platform_ipc
+    myclean::platform_proc
     myclean::platform_scan
     myclean::platform_service
+    myclean::platform_settings
     myclean::rules
     myclean::store
     myclean::telemetry

@@ -1,5 +1,5 @@
 id          = "rust"
-version     = "1.3.0"
+version     = "1.4.0"
 title       = "Rust (rustup and Cargo)"
 description = "rustup toolchains (compressible, movable with RUSTUP_HOME), Cargo's downloaded crates and git checkouts, which Cargo restores when needed, the target folders of inactive Cargo projects and stale incremental caches of active ones."
 sources     = [

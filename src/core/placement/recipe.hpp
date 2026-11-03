@@ -31,6 +31,22 @@ struct RecipeRelocation {
 [[nodiscard]] nlohmann::json recipe_json(const packs::RelocationRecipe& recipe);
 [[nodiscard]] Result<packs::RelocationRecipe> recipe_from_json(const nlohmann::json& json);
 
+// Where the content of a recipe is now: one instance of it, or the recipe's one place.
+struct RecipeLocation {
+  std::string instance;  // the instance's name as the registry holds it; empty without instances
+  std::filesystem::path path;
+};
+
+// Where the content of `recipe` is now: its one location, or one per instance (every registered
+// instance that current.where keeps and skip_names does not name). A recipe whose location is
+// not set and has no default has none. `tools` needs environment and files, and registry for a
+// registry setting; `runner` runs a command setting.
+[[nodiscard]] Result<std::vector<RecipeLocation>> recipe_locations(
+    const Tools& tools, cleanup::ICommandRunner& runner, const packs::RelocationRecipe& recipe);
+
+// Fails with in_use when an image of recipe.needs runs (tools.processes).
+[[nodiscard]] Result<void> recipe_idle(const Tools& tools, const packs::RelocationRecipe& recipe);
+
 // What apply runs or changes, one line each, for the plan the owner approves.
 [[nodiscard]] std::vector<std::string> recipe_commands(const RecipeRelocation& relocation);
 

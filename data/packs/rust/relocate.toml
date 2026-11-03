@@ -1,6 +1,7 @@
 # RUSTUP_HOME (source: the rustup book, see pack.toml): rustup and its proxies read it on every
 # run, so the toolchains move as a whole and nothing may run from them meanwhile. CARGO_HOME
 # moves with MyClean's built-in "cargo" relocation, which also updates PATH.
+# Automatic (owner, 2026-11-01): while C: has less than 10 % free and none of `needs` runs.
 
 [[relocate]]
 id          = "rustup-home"
@@ -11,3 +12,4 @@ target_kind = "env"
 content     = "move"
 needs       = ["rustup.exe", "cargo.exe", "rustc.exe", "rust-analyzer.exe"]
 undo        = "restore"
+automatic   = true

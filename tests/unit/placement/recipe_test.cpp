@@ -154,6 +154,7 @@ class RecipeTest : public ::testing::Test {
   FakeRegistry& registry() { return registry_; }
   FakeProcessTable& processes() { return processes_; }
   cleanup::testing::FakeRunner& runner() { return runner_; }
+  [[nodiscard]] const Tools& tools() const { return tools_; }
 
  private:
   void simulate(const std::vector<std::string>& call) {
@@ -371,6 +372,36 @@ TEST_F(RecipeTest, OnlyTheInstancesTheRecipeKeepsAndDoesNotSkipAreMoved) {
                                  .target = LR"(D:\Relocated\wsl-docker\distro\Fedora)"});
   EXPECT_EQ(unknown.preview().error().code, Errc::not_found);
   EXPECT_TRUE(runner().calls.empty());
+}
+
+TEST_F(RecipeTest, LocationsAreEveryKeptInstanceOrTheOnePlaceOfARecipe) {
+  add_distro("{a}", "Debian", R"(C:\Users\owner\AppData\Local\Packages\Debian\LocalState)", 7);
+  add_distro("{b}", "docker-desktop", R"(C:\Users\owner\AppData\Local\Docker\wsl\main)", 15);
+  add_distro("{c}", "Ubuntu", R"(C:\Users\owner\AppData\Local\wsl\{c})", 15);
+
+  const Result<std::vector<RecipeLocation>> distros =
+      recipe_locations(tools(), runner(), wsl_recipe(SettingKind::command));
+  ASSERT_TRUE(distros.has_value()) << distros.error().message;
+  ASSERT_EQ(distros->size(), 1U);  // Debian is WSL 1, docker-desktop is skipped
+  EXPECT_EQ(distros->front().instance, "Ubuntu");
+  EXPECT_EQ(distros->front().path,
+            std::filesystem::path(LR"(C:\Users\owner\AppData\Local\wsl\{c})"));
+
+  // Not set: the recipe's default location.
+  const Result<std::vector<RecipeLocation>> models =
+      recipe_locations(tools(), runner(), env_recipe());
+  ASSERT_TRUE(models.has_value()) << models.error().message;
+  ASSERT_EQ(models->size(), 1U);
+  EXPECT_TRUE(models->front().instance.empty());
+  EXPECT_EQ(models->front().path, std::filesystem::path(LR"(C:\Users\owner\.ollama\models)"));
+  EXPECT_TRUE(runner().calls.empty());
+}
+
+TEST_F(RecipeTest, IdleOnlyWhileNoProgramItNeedsRuns) {
+  processes().images = {"explorer.exe"};
+  EXPECT_TRUE(recipe_idle(tools(), env_recipe()).has_value());
+  processes().images = {"explorer.exe", "Ollama.exe"};
+  EXPECT_EQ(recipe_idle(tools(), env_recipe()).error().code, Errc::in_use);
 }
 
 TEST_F(RecipeTest, UndoOfACommandMoveRefusesWhenTheDistributionMovedMeanwhile) {

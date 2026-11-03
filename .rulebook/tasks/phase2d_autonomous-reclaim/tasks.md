@@ -4,8 +4,8 @@
 - [x] 1.3 Cross-volume quarantine of folder items (clean-progress); done in ba1b656
 - [x] 1.4 WSL /tmp prune native tool + pack rule, compression excludes WSL rootfs, auto tiers for caches/handlers/native prunes, new auto cases (c-analysis); done in 888621f
 - [x] 1.5 scan-all takes disk health from the service; archive/relocate targets on healthy HDDs (scanall-health); done in bf535e7
-- [ ] 1.6 Automatic hibernation reduce and page file moved (system-managed) to a healthy NVMe with room, small one kept on C: for dumps, when the system volume is below 10 % free; never shrink below the commit the machine uses (~202 GB on 128 GB RAM)
-- [ ] 1.7 Automatic WSL distro move and RUSTUP_HOME relocation to a healthy drive when not in use
+- [x] 1.6 Automatic hibernation reduce and page file moved (system-managed) to a healthy NVMe with room, small one kept on C: for dumps, when the system volume is below 10 % free; never shrink below the commit the machine uses (~202 GB on 128 GB RAM); done as Executor::reclaim_system_space, run by every scheduled scan before the approved plans (the page file keeps 4096 MB on C: and goes system-managed to the best healthy volume, so its capacity never shrinks; tried at most once a week)
+- [x] 1.7 Automatic WSL distro move and RUSTUP_HOME relocation to a healthy drive when not in use; done as relocate.toml `automatic` (wsl-docker/distro, rust/rustup-home): Executor::reclaim_system_space proposes an automatic tray plan per instance on C: while C: is below 10 % free and no image of `needs` runs; the service reads the owner's hive and variables (OwnerContext::tools)
 - [ ] 1.8 One-click tray actions for owner-decision findings: move to HDD archive, launch uninstaller
 - [x] 1.9 DISM StartComponentCleanup timeout raised (timed out at 30 min under load); done: analyze and cleanup timeouts are 90 min (dism_cleanup.hpp)
 - [ ] 1.10 Deploy and measure C: free space before/after

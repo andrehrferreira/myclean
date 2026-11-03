@@ -68,7 +68,7 @@ Then G: is not offered as a target
 And an approved relocation targeting G: is refused at apply time
 
 ### Requirement: System Space Settings Need Approval Unless the System Volume Is Critical
-The system SHALL show the hibernation type, page-file placement and size, and shadow-storage size with the current value, the space it costs, a recommended value, the exact command it will run (`powercfg /h /type reduced`, WMI `Win32_PageFileSetting`, `vssadmin resize shadowstorage`) and its undo, and MUST change them only after an explicit owner approval, with two exceptions decided by the owner on 2026-11-01: while the system volume has less than 10 % free, the scheduler SHALL itself set full hibernation to reduced, and SHALL move a page file that is system-managed or uncapped on the system volume to a system-managed page file on the best healthy volume with room, keeping a small fixed page file on the system volume; it MUST NOT shrink the total page-file capacity the machine has, and MUST NOT change shadow storage. Each such change is a plan of the scheduler, recorded and undoable like an approved one, and the owner is told when a restart is needed.
+The system SHALL show the hibernation type, page-file placement and size, and shadow-storage size with the current value, the space it costs, a recommended value, the exact command it will run (`powercfg /h /type reduced`, WMI `Win32_PageFileSetting`, `vssadmin resize shadowstorage`) and its undo, and MUST change them only after an explicit owner approval, with two exceptions decided by the owner on 2026-11-01: while the system volume has less than 10 % free, the scheduler SHALL itself set full hibernation to reduced, and SHALL move a page file that is system-managed or uncapped on the system volume to a system-managed page file on the best healthy volume with room, keeping a small fixed page file on the system volume; it MUST NOT shrink the total page-file capacity the machine has, and MUST NOT change shadow storage. Each such change is a plan of the scheduler, recorded and undoable like an approved one, and the owner is told when a restart is needed; a change of either kind is tried at most once in 7 days, so one that did not take effect is not repeated every hour.
 
 #### Scenario: Hibernation entry
 Given `C:\hiberfil.sys` is 50.9 GB with full hibernation
@@ -94,3 +94,16 @@ Given the owner approved moving the page file from C: to D:
 When the owner undoes the action
 Then the page-file settings are restored to their previous values, including system-managed sizing on C:
 And the owner is told a restart is needed for it to take effect
+
+### Requirement: Idle Toolchains and Distributions Leave a Critical System Volume
+While the system volume has less than 10 % free, the scheduler SHALL move, without approval, what a knowledge pack's relocation recipe marked `automatic` names and what lies on the system volume (decided by the owner on 2026-11-01: each WSL 2 distribution disk, `wsl-docker/distro`, and the Rust toolchains, `rust/rustup-home`) to the best healthy volume with room, one plan per instance, run by the tray as the owner. It MUST NOT propose one while an image of the recipe's `needs` runs (the next scan tries again), MUST NOT move an instance the recipe skips, and SHALL try each instance at most once in 7 days. A recipe may be `automatic` only with `needs` and an undo; each move is undoable like an approved one.
+
+#### Scenario: Idle WSL distribution
+Given C: has 5 % free, the WSL 2 distribution Ubuntu is on C: and Arch on D:, and no wsl.exe or wslhost.exe runs
+When the scheduler runs
+Then one automatic plan moves Ubuntu to the best healthy volume and Arch is left where it is
+
+#### Scenario: WSL in use
+Given C: has 5 % free and wslhost.exe runs
+When the scheduler runs
+Then no distribution is proposed for moving

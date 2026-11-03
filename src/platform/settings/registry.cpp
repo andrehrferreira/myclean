@@ -36,9 +36,14 @@ struct Location {
   std::wstring path;
 };
 
-Result<Location> location_of(std::string_view key) {
+// `key`'s root and path; HKCU is HKEY_USERS\<user_sid> when `user_sid` is not empty.
+Result<Location> location_of(std::string_view key, std::string_view user_sid) {
   constexpr std::string_view user = "HKCU\\";
   constexpr std::string_view machine = "HKLM\\";
+  if (key.starts_with(user) && !user_sid.empty()) {
+    return Location{.root = HKEY_USERS,
+                    .path = widen(user_sid) + L"\\" + widen(key.substr(user.size()))};
+  }
   if (key.starts_with(user)) {
     return Location{.root = HKEY_CURRENT_USER, .path = widen(key.substr(user.size()))};
   }
@@ -50,8 +55,8 @@ Result<Location> location_of(std::string_view key) {
 }
 
 // Key `key` opened for `access`; a null handle when it does not exist.
-Result<wil::unique_hkey> open(std::string_view key, REGSAM access) {
-  Result<Location> location = location_of(key);
+Result<wil::unique_hkey> open(std::string_view key, std::string_view user_sid, REGSAM access) {
+  Result<Location> location = location_of(key, user_sid);
   if (!location) {
     return tl::unexpected(location.error());
   }
@@ -72,7 +77,7 @@ std::string describe(std::string_view key, std::string_view name) {
 
 Result<std::optional<RegistryValue>> Win32Registry::read(std::string_view key,
                                                          std::string_view name) const {
-  Result<Location> location = location_of(key);
+  Result<Location> location = location_of(key, user_sid_);
   if (!location) {
     return tl::unexpected(location.error());
   }
@@ -117,7 +122,7 @@ Result<std::optional<RegistryValue>> Win32Registry::read(std::string_view key,
 
 Result<void> Win32Registry::write(std::string_view key, std::string_view name,
                                   const RegistryValue& value) {
-  Result<Location> location = location_of(key);
+  Result<Location> location = location_of(key, user_sid_);
   if (!location) {
     return tl::unexpected(location.error());
   }
@@ -154,7 +159,7 @@ Result<void> Win32Registry::write(std::string_view key, std::string_view name,
 }
 
 Result<void> Win32Registry::remove(std::string_view key, std::string_view name) {
-  Result<wil::unique_hkey> handle = open(key, KEY_SET_VALUE);
+  Result<wil::unique_hkey> handle = open(key, user_sid_, KEY_SET_VALUE);
   if (!handle) {
     return tl::unexpected(handle.error());
   }
@@ -169,7 +174,7 @@ Result<void> Win32Registry::remove(std::string_view key, std::string_view name) 
 }
 
 Result<std::vector<std::string>> Win32Registry::subkeys(std::string_view key) const {
-  Result<wil::unique_hkey> handle = open(key, KEY_ENUMERATE_SUB_KEYS);
+  Result<wil::unique_hkey> handle = open(key, user_sid_, KEY_ENUMERATE_SUB_KEYS);
   if (!handle) {
     return tl::unexpected(handle.error());
   }

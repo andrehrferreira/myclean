@@ -232,6 +232,7 @@ void CleaningService::resolve_owner() {
   if (owner_->git) {
     probes.git = owner_->git.get();
   }
+  probes.owner_tools = owner_->tools.get();
   executor_ = std::make_unique<Executor>(environment, engine_, *quarantine_, probes,
                                          owner_->locations, settings_.executor);
   {
@@ -443,6 +444,17 @@ void CleaningService::run_scan(bool scheduled, const std::stop_token& stop) {
       {
         const std::scoped_lock lock(mutex_);
         progress_ = 0.8;
+      }
+      // A system volume below 10 % free also gets its hibernation and page file reduced, and
+      // the idle content of the automatic recipes moved.
+      std::vector<packs::RelocationRecipe> recipes;
+      {
+        const std::scoped_lock lock(mutex_);
+        recipes = recipes_;
+      }
+      if (const Result<std::vector<PlanId>> reclaimed = executor()->reclaim_system_space(recipes);
+          !reclaimed) {
+        note("system space: " + reclaimed.error().message);
       }
       run_approved();
     }

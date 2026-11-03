@@ -694,7 +694,91 @@ Result<void> move_to_target(const Run& run, const Located& located, Record& reco
   return {};
 }
 
+// The names of the instances of `recipe` (current.registry below a '*' key, named by
+// current.name): those current.where keeps and skip_names does not name.
+Result<std::vector<std::string>> instance_names(const IRegistry& registry,
+                                                const RelocationRecipe& recipe) {
+  const packs::Setting& current = recipe.current;
+  const std::size_t star = current.text.find(instance_wildcard);
+  if (star == std::string::npos) {
+    return fail(Errc::invalid_argument, "the setting " + current.text + " names no instances");
+  }
+  const std::string parent = current.text.substr(0, star);
+  const std::string rest = current.text.substr(star + instance_wildcard.size());
+  Result<std::vector<std::string>> subkeys = registry.subkeys(parent);
+  if (!subkeys) {
+    return tl::unexpected(subkeys.error());
+  }
+  std::vector<std::string> names;
+  for (const std::string& subkey : *subkeys) {
+    std::string value_path = parent;
+    value_path.append("\\").append(subkey).append("\\").append(rest);
+    const Place place = registry_place(value_path);
+    Result<std::optional<RegistryValue>> read = registry.read(place.key, current.name);
+    if (!read) {
+      return tl::unexpected(read.error());
+    }
+    const std::optional<RegistryValue>& found = *read;
+    if (!found) {
+      continue;
+    }
+    const std::string name = found->text;
+    if (std::ranges::any_of(recipe.skip_names,
+                            [&](const std::string& skipped) { return same_name(skipped, name); })) {
+      continue;
+    }
+    if (current.where) {
+      Result<std::optional<RegistryValue>> value = registry.read(place.key, current.where->value);
+      if (!value) {
+        return tl::unexpected(value.error());
+      }
+      if (!kept(*value, *current.where)) {
+        continue;
+      }
+    }
+    names.push_back(name);
+  }
+  return names;
+}
+
 }  // namespace
+
+Result<std::vector<RecipeLocation>> recipe_locations(const Tools& tools,
+                                                     cleanup::ICommandRunner& runner,
+                                                     const RelocationRecipe& recipe) {
+  const std::stop_token stop;
+  const Run run{.tools = &tools, .runner = &runner, .stop = &stop, .recipe = &recipe};
+  std::vector<std::string> names = {std::string{}};
+  if (!recipe.current.name.empty()) {
+    if (tools.registry == nullptr) {
+      return fail(Errc::invalid_state, "the registry cannot be read here");
+    }
+    Result<std::vector<std::string>> found = instance_names(*tools.registry, recipe);
+    if (!found) {
+      return tl::unexpected(found.error());
+    }
+    names = *std::move(found);
+  }
+  std::vector<RecipeLocation> locations;
+  for (const std::string& name : names) {
+    Result<Located> located = locate(run, name);
+    if (!located) {
+      if (located.error().code == Errc::not_found) {
+        continue;  // not set and without a default location
+      }
+      return tl::unexpected(located.error());
+    }
+    locations.push_back(
+        RecipeLocation{.instance = located->place.instance, .path = std::move(located->path)});
+  }
+  return locations;
+}
+
+Result<void> recipe_idle(const Tools& tools, const RelocationRecipe& recipe) {
+  const std::stop_token stop;
+  const Run run{.tools = &tools, .runner = nullptr, .stop = &stop, .recipe = &recipe};
+  return check_needs(run);
+}
 
 Json recipe_json(const RelocationRecipe& recipe) {
   const packs::Setting& current = recipe.current;

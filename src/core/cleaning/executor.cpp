@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -66,6 +67,9 @@ bool low_on_space(const placement::TargetVolume* volume) {
 }
 
 constexpr std::string_view scan_source = "scan";
+// The groups of reclaim_system_space's automatic plans.
+constexpr std::string_view hibernation_group = "auto:hibernation";
+constexpr std::string_view page_file_group = "auto:page-file";
 
 std::string utf8(const fs::path& path) {
   const std::u8string text = path.u8string();
@@ -343,15 +347,18 @@ Executor::Executor(const actions::Environment& environment, actions::PolicyEngin
       locations_(std::move(locations)),
       options_(std::move(options)) {}
 
-Result<std::set<std::string>> Executor::open_groups() const {
+Result<std::set<std::string>> Executor::open_groups(std::optional<WallTime> since) const {
   std::set<std::string> groups;
   const Result<void> read = environment_.store->read([&](store::Database& db) -> Result<void> {
     Result<store::Statement> query = db.prepare(
         "SELECT pp.params FROM plan p JOIN plan_params pp ON pp.plan_id = p.id "
-        "WHERE p.state IN ('proposed', 'auto', 'awaiting_approval', 'approved', 'applying')");
+        "WHERE p.state IN ('proposed', 'auto', 'awaiting_approval', 'approved', 'applying') "
+        "OR p.created_at >= ?1");
     if (!query) {
       return tl::unexpected(query.error());
     }
+    query->bind(1,
+                since ? store::to_unix_seconds(*since) : std::numeric_limits<std::int64_t>::max());
     Result<bool> row = query->step();
     for (; row && *row; row = query->step()) {
       if (Result<PlanSpec> spec = parse_spec(query->column_text(0)); spec && !spec->group.empty()) {
@@ -932,6 +939,145 @@ Result<Plan> Executor::propose_page_file(const Optimization& request,
       setting_spec(*summary, "Page file", Json{{"config", page_file_json(*config)}}), proposer);
 }
 
+Result<Plan> Executor::submit_automatic(Action& action, const std::string& name, PlanSpec spec,
+                                        const std::string& group) {
+  Result<Plan> plan =
+      placement::plan_of(action, name, Actor::scheduler(), environment_.clock->now());
+  if (!plan) {
+    return plan;
+  }
+  spec.tier = Tier::automatic;
+  spec.group = group;
+  return submit(*engine_, *environment_.store, *std::move(plan), spec, {},
+                actions::AutomationLevel::automatic);
+}
+
+Result<std::optional<PlanId>> Executor::automatic_hibernation() {
+  Result<placement::HibernationState> state = probes_.system->hibernation();
+  if (!state) {
+    return tl::unexpected(state.error());
+  }
+  const std::optional<placement::HibernationMode> mode = placement::recommended_hibernation(*state);
+  if (!mode) {
+    return std::nullopt;
+  }
+  placement::HibernationAction action(*probes_.system, *probes_.tools, *mode);
+  Result<placement::SettingSummary> summary = action.summary();
+  if (!summary) {
+    return tl::unexpected(summary.error());
+  }
+  Result<Plan> stored = submit_automatic(
+      action, "SetHibernation",
+      setting_spec(*summary, "Hibernation", Json{{"mode", placement::to_string(*mode)}}),
+      std::string(hibernation_group));
+  if (!stored) {
+    return tl::unexpected(stored.error());
+  }
+  return stored->id;
+}
+
+Result<std::optional<PlanId>> Executor::automatic_page_file(
+    std::span<const placement::TargetVolume> volumes) {
+  Result<placement::PageFileState> state = probes_.system->page_files();
+  if (!state) {
+    return tl::unexpected(state.error());
+  }
+  const std::optional<placement::PageFileConfig> config =
+      placement::recommended_page_files(*state, volumes, options_.system_root);
+  if (!config) {
+    return std::nullopt;
+  }
+  placement::PageFileAction action(*probes_.system, *probes_.drives, *config);
+  Result<placement::SettingSummary> summary = action.summary();
+  if (!summary) {
+    return tl::unexpected(summary.error());
+  }
+  Result<Plan> stored = submit_automatic(
+      action, "SetPageFile",
+      setting_spec(*summary, "Page file", Json{{"config", page_file_json(*config)}}),
+      std::string(page_file_group));
+  if (!stored) {
+    return tl::unexpected(stored.error());
+  }
+  return stored->id;
+}
+
+Result<void> Executor::automatic_relocations(std::span<const packs::RelocationRecipe> recipes,
+                                             std::span<const placement::TargetVolume> volumes,
+                                             const std::set<std::string>& open,
+                                             std::vector<PlanId>& plans) {
+  if (probes_.owner_tools == nullptr || probes_.commands == nullptr) {
+    return {};
+  }
+  for (const packs::RelocationRecipe& recipe : recipes) {
+    // A needed program that runs keeps the recipe for the next scan.
+    if (!recipe.automatic || !placement::recipe_idle(*probes_.owner_tools, recipe)) {
+      continue;
+    }
+    Result<std::vector<placement::RecipeLocation>> locations =
+        placement::recipe_locations(*probes_.owner_tools, *probes_.commands, recipe);
+    if (!locations) {
+      return tl::unexpected(locations.error());
+    }
+    for (const placement::RecipeLocation& location : *locations) {
+      const placement::TargetVolume* volume = placement::volume_of(volumes, location.path);
+      const std::string group =
+          "auto:relocate:" + recipe.id + (location.instance.empty() ? "" : ":" + location.instance);
+      if (volume == nullptr || !placement::same_path(volume->root, options_.system_root) ||
+          open.contains(group)) {
+        continue;
+      }
+      Result<Plan> stored = propose_recipe(
+          Optimization{.kind = "relocate", .recipe = recipe, .instance = location.instance},
+          {volumes.begin(), volumes.end()}, Actor::scheduler(), group);
+      if (!stored) {
+        return tl::unexpected(stored.error());
+      }
+      plans.push_back(stored->id);
+    }
+  }
+  return {};
+}
+
+Result<std::vector<PlanId>> Executor::reclaim_system_space(
+    std::span<const packs::RelocationRecipe> recipes) {
+  std::vector<PlanId> plans;
+  if (!options_.system_changes || probes_.system == nullptr || probes_.tools == nullptr ||
+      probes_.drives == nullptr) {
+    return plans;
+  }
+  Result<std::vector<placement::TargetVolume>> volumes = probes_.drives->volumes();
+  if (!volumes) {
+    return tl::unexpected(volumes.error());
+  }
+  if (!low_on_space(placement::volume_of(*volumes, options_.system_root))) {
+    return plans;
+  }
+  // A change that failed or was undone is not tried again for a week.
+  const Result<std::set<std::string>> open =
+      open_groups(environment_.clock->now() - std::chrono::days{7});
+  if (!open) {
+    return tl::unexpected(open.error());
+  }
+  for (const std::string_view group : {hibernation_group, page_file_group}) {
+    if (open->contains(std::string(group))) {
+      continue;
+    }
+    const Result<std::optional<PlanId>> plan =
+        group == hibernation_group ? automatic_hibernation() : automatic_page_file(*volumes);
+    if (!plan) {
+      return tl::unexpected(plan.error());
+    }
+    if (*plan) {
+      plans.push_back(**plan);
+    }
+  }
+  if (Result<void> moved = automatic_relocations(recipes, *volumes, *open, plans); !moved) {
+    return tl::unexpected(moved.error());
+  }
+  return plans;
+}
+
 Result<Plan> Executor::propose_shadow_storage(const Optimization& request,
                                               std::vector<placement::TargetVolume> volumes,
                                               const Actor& proposer) {
@@ -1027,7 +1173,7 @@ Result<placement::TargetVolume> Executor::relocation_volume(
 
 Result<Plan> Executor::propose_recipe(const Optimization& request,
                                       std::vector<placement::TargetVolume> volumes,
-                                      const Actor& proposer) {
+                                      const Actor& proposer, const std::string& group) {
   const packs::RelocationRecipe& recipe = *request.recipe;
   const bool instances = !recipe.current.name.empty();
   if (instances == request.instance.empty()) {
@@ -1082,10 +1228,12 @@ Result<Plan> Executor::propose_recipe(const Optimization& request,
   } else if (!recipe.note.empty()) {
     warnings.push_back(recipe.note);
   }
+  const bool automatic = !group.empty();
   const PlanSpec spec{.kind = PlanKind::relocate,
-                      .tier = Tier::ask,
+                      .tier = automatic ? Tier::automatic : Tier::ask,
                       .scope = ExecutionContext::user,
                       .title = "Relocate " + what + " to " + utf8(relocation.target),
+                      .group = group,
                       .commands = placement::recipe_commands(relocation),
                       .undo = std::move(undo),
                       .warnings = std::move(warnings),
@@ -1093,12 +1241,14 @@ Result<Plan> Executor::propose_recipe(const Optimization& request,
                                      {"instance", request.instance},
                                      {"target", utf8(relocation.target)},
                                      {"content", placement::to_string(*content)}}};
-  return submit(*engine_, *environment_.store,
-                Plan{.action = "RelocateRecipe",
-                     .proposer = proposer,
-                     .created_at = environment_.clock->now(),
-                     .items = {PlanItem{.path = from_utf8(item)}}},
-                spec, {}, actions::AutomationLevel::suggest);
+  return submit(
+      *engine_, *environment_.store,
+      Plan{.action = "RelocateRecipe",
+           .proposer = proposer,
+           .created_at = environment_.clock->now(),
+           .items = {PlanItem{.path = from_utf8(item)}}},
+      spec, {},
+      automatic ? actions::AutomationLevel::automatic : actions::AutomationLevel::suggest);
 }
 
 Result<std::size_t> Executor::restore(PlanId run, std::optional<PlanItemId> item) {

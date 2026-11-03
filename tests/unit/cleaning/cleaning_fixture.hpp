@@ -185,6 +185,8 @@ class CleaningFixture : public ::testing::Test {
       fs_.add_directory(volume.root / "data");
     }
     handlers_.sizes["Update Cleanup"] = Bytes{7ULL << 30U};
+    // Already as small as automatic reclaiming makes them, although C: is low on space.
+    system_.hibernation_state.mode = placement::HibernationMode::reduced;
     open_store();
   }
 

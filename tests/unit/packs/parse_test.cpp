@@ -187,6 +187,18 @@ TEST(Relocate, RejectsInconsistentRecipes) {
   expect_error(parse_relocate_file("", file), "field 'relocate' must be a non-empty array");
 }
 
+TEST(Relocate, AnAutomaticRecipeNamesWhatMustNotRunAndHasAnUndo) {
+  const Result<std::vector<RelocationRecipe>> automatic = parse_relocate_file(
+      wsl_with(R"(undo        = "command")", "undo        = \"command\"\nautomatic   = true"),
+      file);
+  ASSERT_TRUE(automatic.has_value()) << automatic.error().message;
+  EXPECT_TRUE(automatic->front().automatic);
+  EXPECT_FALSE(parse_relocate_file(std::string(wsl_recipe), file).value().front().automatic);
+  expect_error(
+      parse_relocate_file(wsl_with(R"(needs       = ["wslhost.exe"])", "automatic = true"), file),
+      "field 'automatic' needs `needs` (what must not run) and an undo");
+}
+
 // `wsl_recipe` as the WSL 1 recipe: target_kind wsl-import, and `where` as its instance filter.
 std::string wsl1_with(std::string_view where) {
   std::string text =

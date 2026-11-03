@@ -140,7 +140,10 @@ inside one argument), or `wsl-import` (instances required), which moves a WSL 1 
 --version 1`, a check (its Lxss key has BasePath = the target and `wsl -d <temporary> -e true`
 succeeds), only then `wsl --unregister <name>`, after which the copy gets the original
 DistributionName and DefaultUid. A failed import or check removes the copy and leaves the original
-registered; the archive stays as a backup. `skip_names` lists instances that are never offered.
+registered; the archive stays as a backup. `skip_names` lists instances that are never offered. `automatic = true` lets the scheduler move what the recipe names without approval while the
+system volume has less than 10 % free and no image of `needs` runs (one plan per instance on the
+system volume, each tried at most once in 7 days); it requires `needs` and an undo. The shipped
+automatic recipes are `wsl-docker/distro` and `rust/rustup-home`.
 The instance name given to a command is the one read from the registry, never the approved
 text.
 

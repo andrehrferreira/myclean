@@ -28,6 +28,7 @@
 #include "core/model/units.hpp"
 #include "core/packs/schema.hpp"
 #include "core/placement/drives.hpp"
+#include "core/placement/relocation.hpp"
 #include "core/placement/settings.hpp"
 #include "core/rules/schema.hpp"
 #include "core/safety/deny_list.hpp"
@@ -52,6 +53,8 @@ struct Probes {
   placement::ISystemSpace* system = nullptr;
   placement::IProcessRunner* tools = nullptr;
   const placement::IDriveFacts* drives = nullptr;
+  // The owner's environment, registry and running programs: where automatic recipes are now.
+  const placement::Tools* owner_tools = nullptr;
 };
 
 struct ExecutorOptions {
@@ -131,6 +134,16 @@ class Executor {
   // {"recipe": placement::recipe_json(), "instance", "target", "content"}).
   [[nodiscard]] Result<Plan> propose_optimization(const Optimization& request,
                                                   const Actor& proposer);
+  // When the system volume has less than low_space_ratio free: automatic plans (approved at once,
+  // run by the service, undoable) that reduce full hibernation and that keep a 4096 MB page file
+  // on the system volume for crash dumps while a system-managed one goes to the best healthy
+  // volume, so the page file never shrinks below the commit in use; and for every automatic
+  // recipe of `recipes` whose content is on the system volume and none of whose `needs` runs, an
+  // automatic relocation to the best healthy volume, run by the tray (one per instance). Each only
+  // when it is recommended and no plan of its own is open or was made in the last 7 days;
+  // nothing when system settings are not applied here (console runs). The plans created.
+  [[nodiscard]] Result<std::vector<PlanId>> reclaim_system_space(
+      std::span<const packs::RelocationRecipe> recipes = {});
 
   // Moves held items of run `run` back (every held item when `item` is nullopt); how many.
   [[nodiscard]] Result<std::size_t> restore(PlanId run, std::optional<PlanItemId> item);
@@ -155,6 +168,14 @@ class Executor {
   [[nodiscard]] Result<void> record(std::vector<Candidate>& found, WallTime now) const;
   [[nodiscard]] Result<Plan> submit_setting(Action& action, const std::string& name,
                                             const PlanSpec& spec, const Actor& proposer);
+  // `spec` as an automatic plan of group `group` from the scheduler, approved at once.
+  [[nodiscard]] Result<Plan> submit_automatic(Action& action, const std::string& name,
+                                              PlanSpec spec, const std::string& group);
+  // reclaim_system_space's plan for hibernation, and for the page file over `volumes`; nullopt
+  // when nothing is recommended.
+  [[nodiscard]] Result<std::optional<PlanId>> automatic_hibernation();
+  [[nodiscard]] Result<std::optional<PlanId>> automatic_page_file(
+      std::span<const placement::TargetVolume> volumes);
   [[nodiscard]] Result<Plan> propose_hibernation(const Optimization& request,
                                                  const Actor& proposer);
   [[nodiscard]] Result<Plan> propose_page_file(const Optimization& request,
@@ -166,17 +187,25 @@ class Executor {
   [[nodiscard]] Result<Plan> propose_relocation(const Optimization& request,
                                                 std::vector<placement::TargetVolume> volumes,
                                                 const Actor& proposer);
+  // An approval-only plan, or with `group` an automatic plan of that group from the scheduler.
   [[nodiscard]] Result<Plan> propose_recipe(const Optimization& request,
                                             std::vector<placement::TargetVolume> volumes,
-                                            const Actor& proposer);
+                                            const Actor& proposer, const std::string& group = {});
+  // reclaim_system_space's relocations of the automatic `recipes` on the system volume.
+  [[nodiscard]] Result<void> automatic_relocations(std::span<const packs::RelocationRecipe> recipes,
+                                                   std::span<const placement::TargetVolume> volumes,
+                                                   const std::set<std::string>& open,
+                                                   std::vector<PlanId>& plans);
   // The volume a relocation goes to: request.target, or the best healthy one with room.
   [[nodiscard]] Result<placement::TargetVolume> relocation_volume(
       const Optimization& request, std::span<const placement::TargetVolume> volumes) const;
   // The plan items of path candidates `ids` (identity read now), with their notes.
   [[nodiscard]] Result<std::vector<PlanItem>> items_of(std::span<const std::int64_t> ids,
                                                        std::vector<ItemNote>& notes) const;
-  // The groups of the plans not finished yet (proposed .. applying).
-  [[nodiscard]] Result<std::set<std::string>> open_groups() const;
+  // The groups of the plans not finished yet (proposed .. applying), and with `since` of every
+  // plan created since then.
+  [[nodiscard]] Result<std::set<std::string>> open_groups(
+      std::optional<WallTime> since = std::nullopt) const;
   [[nodiscard]] Result<std::unique_ptr<Action>> action_for(const Plan& plan, const PlanSpec& spec,
                                                            const Actor& actor) const;
   // Where QuarantineItems keeps each item, judged from the volumes as they are now.

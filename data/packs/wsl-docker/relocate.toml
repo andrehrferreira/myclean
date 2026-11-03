@@ -7,7 +7,8 @@
 # distributions move in Docker Desktop's settings, never with this.
 
 # WSL 2: `wsl --manage <name> --move <folder>` moves the disk and updates BasePath; moving it
-# back the same way undoes it.
+# back the same way undoes it. Automatic (owner, 2026-11-01): while C: has less than 10 % free
+# and no wsl.exe or wslhost.exe runs.
 [[relocate]]
 id          = "distro"
 label       = "WSL distribution disk (ext4.vhdx)"
@@ -19,6 +20,7 @@ content     = "move"
 needs       = ["wsl.exe", "wslhost.exe"]
 skip_names  = ["docker-desktop", "docker-desktop-data"]
 undo        = "command"
+automatic   = true
 note        = "Stop the distribution first: wsl --terminate <name>. The disk never shrinks by itself; `wsl --manage <name> --set-sparse true` lets it give freed space back."
 
 # WSL 1: --manage --move does not move a rootfs folder. The distribution is exported to
