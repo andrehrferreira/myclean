@@ -1,7 +1,7 @@
 id          = "process-classes"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "Process classes"
-description = "The resource governor's process classes: Windows and MyClean processes it never touches (system), test runners (test) and compilers, linkers and build drivers (build), plus what MyClean's own processes are."
+description = "The resource governor's process classes: Windows, MyClean, antivirus, WSL, database and remote access processes it never touches (system), test runners (test) and compilers, linkers and build drivers (build), plus what MyClean's own processes are."
 sources     = [
   "https://learn.microsoft.com/cpp/build/reference/c-cpp-building-reference (cl, link, lib, rc, mt, cvtres, mspdbsrv)",
   "https://learn.microsoft.com/visualstudio/msbuild/msbuild-command-line-reference",
@@ -18,5 +18,11 @@ sources     = [
   "https://learn.microsoft.com/defender-endpoint/microsoft-defender-antivirus-windows (MsMpEng.exe, NisSrv.exe)",
   "observed on reference machine: the process table's pseudo-processes (System Idle Process, System, Secure System, Registry, Memory Compression) and the Windows processes listed in the windows pack's kb.json",
   "MyClean's own executables: myclean-svc.exe (src/svc), myclean-tray.exe (src/tray), myclean.exe (src/cli)",
+  "https://support.kaspersky.com/common/windows (avp.exe, avpui.exe)",
+  "https://learn.microsoft.com/windows/wsl/about (wslservice.exe, vmmem, the WSL 2 utility VM)",
+  "https://learn.microsoft.com/windows/win32/wmisdk/provider-hosting-and-security (WmiPrvSE.exe)",
+  "https://www.postgresql.org/docs/current/app-pg-ctl.html",
+  "https://www.mongodb.com/docs/manual/reference/program/mongod/",
+  "observed on reference machine: avp.exe, wslservice.exe, WmiPrvSE.exe, pg_ctl.exe and AnyDesk.exe in the default class, where the ladder could suspend them",
 ]
 min_myclean = "0.1.0"

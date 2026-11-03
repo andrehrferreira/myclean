@@ -88,6 +88,15 @@ TEST_F(ShippedClasses, SystemProcessesAreSystem) {
   }
 }
 
+// Observed in the default class on the reference machine, where the ladder could suspend them:
+// an antivirus, the WSL VM, WMI, database servers and a remote access tool.
+TEST_F(ShippedClasses, ProcessesASuspendWouldBreakAreSystem) {
+  for (const char* image : {"avp.exe", "wslservice.exe", "vmmemWSL", "vmwp.exe", "WmiPrvSE.exe",
+                            "postgres.exe", "pg_ctl.exe", "mongod.exe", "AnyDesk.exe"}) {
+    EXPECT_EQ(classify(image).process_class, ProcessClass::system) << image;
+  }
+}
+
 TEST_F(ShippedClasses, OrdinaryProgramsAreDefault) {
   for (const char* image : {"notepad.exe", "chrome.exe", "Code.exe", "pwsh.exe"}) {
     EXPECT_EQ(classify(image).process_class, ProcessClass::normal) << image;

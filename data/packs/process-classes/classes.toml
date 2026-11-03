@@ -40,6 +40,47 @@ id = "windows-security"
 class = "system"
 image = ["MsMpEng.exe", "NisSrv.exe", "SecurityHealthService.exe", "MpDefenderCoreService.exe"]
 
+# Source: https://support.kaspersky.com/common/windows (avp.exe is the protection service, avpui.exe
+# its interface); observed on reference machine: avp.exe in the default class, where the ladder
+# could suspend it. A suspended antivirus stops protecting and blocks the file operations it
+# intercepts.
+[[match]]
+id = "third-party-security"
+class = "system"
+image = ["avp.exe", "avpui.exe"]
+
+# Source: https://learn.microsoft.com/windows/wsl/about (WSL 2 runs in a utility VM: wslservice.exe
+# manages it, vmmem/vmmemWSL is the VM's memory, vmcompute.exe and vmwp.exe the Hyper-V host
+# services). Suspending one freezes every Linux distribution and Docker with it.
+[[match]]
+id = "wsl-and-hyper-v"
+class = "system"
+image = ["wslservice.exe", "wslhost.exe", "vmcompute.exe", "vmwp.exe", "vmmem", "vmmemWSL"]
+
+# Source: https://learn.microsoft.com/windows/win32/wmisdk/provider-hosting-and-security
+# (WmiPrvSE.exe hosts the WMI providers every management tool, MyClean's telemetry included,
+# queries through).
+[[match]]
+id = "windows-management"
+class = "system"
+image = ["WmiPrvSE.exe"]
+
+# Source: https://www.postgresql.org/docs/current/app-pg-ctl.html,
+# https://www.mongodb.com/docs/manual/reference/program/mongod/; observed on reference machine:
+# PostgreSQL 18 and MongoDB 8.0 servers. A suspended database server stalls every client and
+# their transactions until it resumes.
+[[match]]
+id = "database-servers"
+class = "system"
+image = ["postgres.exe", "pg_ctl.exe", "mongod.exe", "mysqld.exe", "sqlservr.exe"]
+
+# Source: observed on reference machine: AnyDesk.exe in the default class. Suspending a remote
+# access tool drops the session the owner may be using to reach this PC.
+[[match]]
+id = "remote-access"
+class = "system"
+image = ["AnyDesk.exe"]
+
 # ---- test: test runners and test binaries ----------------------------------------------------
 
 # Source: https://jestjs.io/docs/cli, https://vitest.dev/guide/cli, https://mochajs.org/#command-line-usage,
