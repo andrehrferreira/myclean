@@ -148,13 +148,21 @@ tray_model::DashboardModel full_model() {
   }
   open.range = std::move(hour);
   open.cleanup = cleanup_poll();
+  open.governor = tray_model::parse_governor_status(
+                      tray_model::testing::governor_status_json(tray_model::testing::Json::array(
+                          {tray_model::testing::governor_notification_json(1, start - 30, 300,
+                                                                           "bigjob.exe", "suspend"),
+                           tray_model::testing::governor_notification_json(
+                               2, start - 10, 400, "other.exe", "ecoqos")})))
+                      .value();
+  open.governor_action = "The choice failed: the tree is gone";
   model.apply(std::move(open));
   return model;
 }
 
-constexpr std::array<Section, 8> all_sections = {
-    Section::cpu_memory, Section::disks,   Section::volumes, Section::processes,
-    Section::alerts,     Section::freezes, Section::cleanup, Section::space};
+constexpr std::array<Section, 9> all_sections = {
+    Section::cpu_memory, Section::disks,   Section::volumes, Section::processes, Section::alerts,
+    Section::freezes,    Section::cleanup, Section::space,   Section::governor};
 
 TEST(DashboardUiTest, DrawsEverySectionWithLiveData) {
   const HeadlessUi ui;
@@ -306,6 +314,39 @@ TEST(DashboardUiTest, DrawsTheInboxAndSpaceWhileTheServiceIsDownWithoutAskingFor
     EXPECT_GT(render(model, state), 0);
     EXPECT_TRUE(state.requests.empty());
   }
+}
+
+// Governor spec: the pending notifications with their four choices, a Kill waiting for its
+// confirmation, a pause, observe mode and an empty status; nothing is sent unasked.
+TEST(DashboardUiTest, DrawsTheGovernorInEveryStateAndSendsNothingUnasked) {
+  const HeadlessUi ui;
+  apply_style(1.0F);
+  const tray_model::DashboardModel model = full_model();
+  UiState state{.section = Section::governor};
+  state.pause_minutes = 0;
+  EXPECT_GT(render(model, state), 0);
+  EXPECT_TRUE(state.requests.empty());
+  EXPECT_EQ(state.pause_minutes, 1) << "a pause lasts at least a minute";
+  state.confirm_kill = tray_model::GovernorProcess{.pid = 300, .created = 300000};
+  EXPECT_GT(render(model, state), 0);
+  EXPECT_TRUE(state.requests.empty());
+
+  tray_model::testing::Json quiet = tray_model::testing::governor_status_json();
+  quiet["mode"] = "observe";
+  quiet["paused_until"] = start + 3600;
+  quiet["pressure"]["state"] = "normal";
+  quiet["game_mode"]["games"] = tray_model::testing::Json::array();
+  quiet["trees"] = tray_model::testing::Json::array();
+  quiet["events"] = tray_model::testing::Json::array();
+  tray_model::DashboardModel observing;
+  tray_model::PollResult result;
+  result.time = from_unix_seconds(start);
+  result.reachable = true;
+  result.governor = tray_model::parse_governor_status(quiet).value();
+  observing.apply(std::move(result));
+  UiState quiet_state{.section = Section::governor};
+  EXPECT_GT(render(observing, quiet_state), 0);
+  EXPECT_TRUE(quiet_state.requests.empty());
 }
 
 TEST(DashboardUiTest, StyleScalesWithTheMonitorDpi) {

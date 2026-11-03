@@ -26,6 +26,7 @@
 #include "core/tray_model/replies.hpp"
 #include "core/tray_model/snapshot.hpp"
 #include "core/tray_model/tray_state.hpp"
+#include "tray/governor_ui.hpp"
 #include "tray/inbox_ui.hpp"
 #include "tray/ui_text.hpp"
 
@@ -1092,7 +1093,7 @@ void draw_dashboard(const DashboardModel& model, const std::chrono::time_zone& z
   draw_header(model, zone);
 
   // A navigation column on the left, the chosen section on the right.
-  static constexpr std::array<std::pair<Section, const char*>, 8> sections = {{
+  static constexpr std::array<std::pair<Section, const char*>, 9> sections = {{
       {Section::cpu_memory, "CPU and memory"},
       {Section::disks, "Disks"},
       {Section::volumes, "Volumes"},
@@ -1101,15 +1102,23 @@ void draw_dashboard(const DashboardModel& model, const std::chrono::time_zone& z
       {Section::freezes, "Freezes"},
       {Section::cleanup, "Cleanup"},
       {Section::space, "Space"},
+      {Section::governor, "Governor"},
   }};
   ImGui::BeginChild("navigation", ImVec2(ImGui::GetFontSize() * 10.0F, 0.0F),
                     ImGuiChildFlags_Borders);
   const int pending = model.service_reachable() ? model.cleanup().pending() : 0;
+  const int governor_pending = model.governor_pending();
   for (const auto& [section, label] : sections) {
-    // The inbox shows how many plans wait for the owner; "###" keeps its id stable.
-    const std::string shown = section == Section::cleanup && pending > 0
-                                  ? std::format("{} ({})###{}", label, pending, label)
-                                  : std::string(label);
+    // The inbox and the governor show how many decisions wait for the owner; "###" keeps the id
+    // stable.
+    int waiting = 0;
+    if (section == Section::cleanup) {
+      waiting = pending;
+    } else if (section == Section::governor) {
+      waiting = governor_pending;
+    }
+    const std::string shown =
+        waiting > 0 ? std::format("{} ({})###{}", label, waiting, label) : std::string(label);
     if (ImGui::Selectable(shown.c_str(), state.section == section)) {
       state.section = section;
     }
@@ -1143,6 +1152,9 @@ void draw_dashboard(const DashboardModel& model, const std::chrono::time_zone& z
       break;
     case Section::space:
       draw_space(model, zone, state);
+      break;
+    case Section::governor:
+      draw_governor(model, zone, state);
       break;
   }
   ImGui::EndChild();

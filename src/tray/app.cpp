@@ -1,8 +1,10 @@
 #include "tray/app.hpp"
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -15,14 +17,18 @@
 #include <windows.h>
 #include <windowsx.h>
 
+#include "core/games/fullscreen.hpp"
 #include "core/model/result.hpp"
 #include "core/os/clock.hpp"
+#include "core/tray_model/governor.hpp"
 #include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/snapshot.hpp"
 #include "core/tray_model/tray_state.hpp"
 #include "core/user_tasks/task.hpp"
+#include "platform/games/win32_games.hpp"
 #include "platform/input/input_watchdog.hpp"
+#include "tray/dashboard_ui.hpp"
 #include "tray/dashboard_window.hpp"
 #include "tray/icon.hpp"
 #include "tray/instance.hpp"
@@ -43,6 +49,21 @@ constexpr UINT command_open = 1;
 constexpr UINT command_quit = 2;
 // Each pipe call; also bounds how long quitting waits for the poll thread.
 constexpr std::chrono::milliseconds call_timeout{2000};
+
+// The owner's session as governor.user_state takes it: SHQueryUserNotificationState and the
+// process of the foreground window. Read on the poll thread; neither call shows anything.
+std::optional<tray_model::UserStateReading> read_user_state() {
+  const Result<games::NotificationState> state = platform::query_user_notification_state();
+  if (!state) {
+    return std::nullopt;
+  }
+  DWORD pid = 0;
+  if (HWND foreground = ::GetForegroundWindow(); foreground != nullptr) {
+    ::GetWindowThreadProcessId(foreground, &pid);
+  }
+  return tray_model::UserStateReading{.state = std::string(games::to_string(*state)),
+                                      .foreground_pid = static_cast<std::uint32_t>(pid)};
+}
 
 class App {
  public:
@@ -69,6 +90,7 @@ class App {
   void show_toasts();
   void open_dashboard();
   void show_menu(POINT anchor);
+  void show_governor_toasts();
 
   HINSTANCE module_;
   os::SystemClock clock_;
@@ -84,6 +106,8 @@ class App {
   UINT taskbar_created_ = 0;
   std::unique_ptr<DashboardWindow> dashboard_;
   bool quit_ = false;
+  // The section a click on the latest toast opens: the governor's after a governor toast.
+  std::optional<Section> toast_section_;
   // Filled by the watchdog, emptied by the poll thread: declared before both, so it goes last.
   tray_model::IncidentQueue incidents_;
   std::unique_ptr<platform::InputWatchdog> watchdog_;
@@ -119,7 +143,7 @@ Result<void> App::start() {
       [this] { poll_->wake(); });
   poll_ = std::make_unique<PollThread>(
       link_, clock_, shared_, [window] { ::PostMessageW(window, update_message, 0, 0); },
-      &incidents_, tasks_.get());
+      &incidents_, tasks_.get(), &read_user_state);
   // The freeze watchdog: raw input and a clipboard listener on a message-only window, no hook.
   // Without it the tray still runs; the Freezes view says why it is missing.
   Result<std::unique_ptr<platform::InputWatchdog>> watchdog =
@@ -182,6 +206,7 @@ LRESULT App::handle(UINT message, WPARAM wparam, LPARAM lparam) {
   if (message == update_message) {
     refresh_icon(false);
     show_toasts();
+    show_governor_toasts();
     if (dashboard_) {
       dashboard_->request_frames();
     }
@@ -191,8 +216,13 @@ LRESULT App::handle(UINT message, WPARAM wparam, LPARAM lparam) {
     switch (LOWORD(lparam)) {
       case NIN_SELECT:
       case NIN_KEYSELECT:
+        open_dashboard();
+        break;
       case NIN_BALLOONUSERCLICK:
         open_dashboard();
+        if (dashboard_ && toast_section_) {
+          dashboard_->show(*toast_section_);
+        }
         break;
       case WM_CONTEXTMENU:
         show_menu(POINT{GET_X_LPARAM(wparam), GET_Y_LPARAM(wparam)});
@@ -272,6 +302,27 @@ void App::show_toasts() {
     }
     if (Result<void> shown = icon_->notify(alert.title, alert.detail, level); !shown) {
       spdlog::warn("toast: {}", shown.error().message);
+    } else {
+      toast_section_.reset();
+    }
+  }
+}
+
+void App::show_governor_toasts() {
+  std::vector<tray_model::GovernorToast> toasts;
+  {
+    const std::scoped_lock lock(shared_.mutex);
+    toasts = shared_.model.take_governor_toasts();
+  }
+  if (!icon_shown_) {
+    return;  // they stay in the badge and the Governor section
+  }
+  for (const tray_model::GovernorToast& toast : toasts) {
+    const TrayIcon::Level level = toast.severe ? TrayIcon::Level::warning : TrayIcon::Level::info;
+    if (Result<void> shown = icon_->notify(toast.title, toast.detail, level); !shown) {
+      spdlog::warn("governor toast: {}", shown.error().message);
+    } else {
+      toast_section_ = Section::governor;
     }
   }
 }

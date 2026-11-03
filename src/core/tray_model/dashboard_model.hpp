@@ -11,6 +11,7 @@
 #include "core/model/units.hpp"
 #include "core/tray_model/chart.hpp"
 #include "core/tray_model/cleaning.hpp"
+#include "core/tray_model/governor.hpp"
 #include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/snapshot.hpp"
@@ -99,7 +100,19 @@ class DashboardModel {
   // The approval inbox, the Space view and the user-task runner.
   [[nodiscard]] const CleanupView& cleanup() const { return cleanup_; }
 
-  // The icon's state; its badge also shows while a plan waits for the owner's approval.
+  // The governor's newest status; nullopt before the first (or while the service does not offer
+  // the governor).
+  [[nodiscard]] const std::optional<GovernorStatus>& governor() const { return governor_; }
+  // Why the owner's last governor request failed; empty when it worked or none was made.
+  [[nodiscard]] const std::string& governor_action_error() const { return governor_action_error_; }
+  // The toasts of the governor notifications that arrived since the previous call, oldest first
+  // (GovernorToasts decides which).
+  [[nodiscard]] std::vector<GovernorToast> take_governor_toasts();
+  // Governor notifications waiting for the owner; 0 while the service is unreachable.
+  [[nodiscard]] int governor_pending() const;
+
+  // The icon's state; its badge also shows while a plan or a governor notification waits for the
+  // owner.
   [[nodiscard]] TrayStatus tray_status() const;
   [[nodiscard]] std::string tooltip() const;
   // The features the dashboard cannot show live while the service is unreachable; empty while
@@ -146,6 +159,10 @@ class DashboardModel {
   std::optional<IncidentQueue::Counts> incident_counts_;
   std::string watchdog_error_;
   CleanupView cleanup_;
+  std::optional<GovernorStatus> governor_;
+  std::string governor_action_error_;
+  GovernorToasts governor_toasts_;
+  std::vector<GovernorToast> governor_toast_queue_;
 };
 
 }  // namespace myclean::tray_model

@@ -289,6 +289,55 @@ When the owner chooses Always allow
 Then `bigjob.exe` is added to the `allow` class and T's applied steps are rolled back
 And future `bigjob.exe` processes receive no governor action
 
+#### Scenario: Suspend toast never held back
+Given the tray showed a toast for tree T 1 min ago, when the governor lowered T's priority
+When the governor suspends T
+Then the tray shows a toast for T's suspend
+
+#### Scenario: Notifications pending before the tray started
+Given a notification for tree T is pending when the tray starts
+When the tray reads the governor's status for the first time
+Then no toast is shown for T
+And T is listed in the tray's Governor section and the tray icon shows its badge
+
+### Requirement: Tray Governor Controls
+The tray MUST read `governor.status` at every poll and show, in a Governor section of its dashboard, the governor's mode and pressure state, every pending notification with Resume (enabled for a suspended tree), Kill (after a confirmation), Allow once and Always allow, a control to pause the governor for N minutes (1 to 1440) or end a pause, and the game-mode override `auto` / `on` / `off`, each sent with the tray-only method of `core/ipc/governor.hpp`. Each new notification SHALL become a toast from the tray icon that respects the owner's quiet hours (`NIIF_RESPECT_QUIET_TIME`), and clicking the toast SHALL open the Governor section, since a notification-area toast cannot carry buttons. Every second it runs, the tray SHALL send `governor.user_state` with `SHQueryUserNotificationState` of the owner's session and the process of the foreground window.
+
+#### Scenario: Owner answers from the tray
+Given a toast for suspended tree T
+When the owner clicks it and chooses Resume in the Governor section
+Then the tray sends `governor.choose` with T's root PID, creation time and `resume`
+And T is resumed and the choice is recorded with actor `owner`
+
+#### Scenario: Kill asks first
+Given a pending notification for tree T
+When the owner clicks Kill
+Then nothing is sent until the owner confirms
+And confirming sends `governor.choose` with `kill`
+
+#### Scenario: Pause from the tray
+Given the governor is not paused
+When the owner enters 30 minutes and chooses Pause governor
+Then the tray sends `governor.pause` with 30
+And the Governor section shows the time the pause ends with a control to end it now
+
+#### Scenario: Game-mode override from the tray
+Given the override is `auto` and no game is running
+When the owner chooses Always on
+Then the tray sends `governor.game_mode` with `on`
+And the Governor section shows game mode on with the build cap at 40 %
+
+#### Scenario: Quiet hours
+Given the owner's quiet hours or Focus are on
+When a new notification arrives
+Then its toast is shown with `NIIF_RESPECT_QUIET_TIME`, so Windows holds it back
+And the notification still waits in the Governor section
+
+#### Scenario: Session state every second
+Given the tray runs in the owner's session
+When a poll reaches the service
+Then the tray sends `governor.user_state` with the notification state and the foreground window's process
+
 ### Requirement: Owner Exemptions Survive Continued Pressure
 When the owner chooses Allow once for a tree, the governor MUST roll back that tree's applied steps and SHALL NOT apply any ladder step to it again until its root process exits, even while pressure continues. When the owner chooses Resume on a suspended tree, the governor MUST resume it and SHALL NOT suspend it again for 10 min; lower ladder steps may still apply.
 

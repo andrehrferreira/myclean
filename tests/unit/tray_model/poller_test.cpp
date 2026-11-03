@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@
 #include "core/input/incident.hpp"
 #include "core/model/result.hpp"
 #include "core/model/series.hpp"
+#include "core/tray_model/governor.hpp"
 #include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/replies.hpp"
 #include "tray_model_test_support.hpp"
@@ -96,9 +98,10 @@ TEST_F(PollerTest, ClosedDashboardAsksForMetricsAndBadgeAndFirstForHealthAlertsA
   EXPECT_FALSE(first.top_by_cpu);
   EXPECT_FALSE(first.freezes);
   EXPECT_TRUE(first.history.empty());
-  EXPECT_EQ(methods(link().calls()),
-            (std::vector<std::string>{"metrics.latest", "alerts.badge", "disks.health",
-                                      "alerts.list", "cleaning.status", "plans.list"}));
+  EXPECT_EQ(
+      methods(link().calls()),
+      (std::vector<std::string>{"metrics.latest", "alerts.badge", "disks.health", "alerts.list",
+                                "governor.status", "cleaning.status", "plans.list"}));
   EXPECT_EQ(link().calls()[0].params, Json::object());
   EXPECT_EQ(link().calls()[3].params, (Json{{"since", start - (std::int64_t{30} * 86'400)}}));
   ASSERT_TRUE(first.drives.has_value());
@@ -109,7 +112,8 @@ TEST_F(PollerTest, ClosedDashboardAsksForMetricsAndBadgeAndFirstForHealthAlertsA
 
   link().clear_calls();
   const PollResult second = poll_at(start + 1, false);
-  EXPECT_EQ(methods(link().calls()), (std::vector<std::string>{"metrics.latest", "alerts.badge"}));
+  EXPECT_EQ(methods(link().calls()),
+            (std::vector<std::string>{"metrics.latest", "alerts.badge", "governor.status"}));
   EXPECT_FALSE(second.drives);
   EXPECT_FALSE(second.alerts);
   EXPECT_TRUE(second.badge);
@@ -303,6 +307,64 @@ TEST_F(PollerTest, IncidentsAreForwardedAndRefreshTheFreezes) {
   EXPECT_EQ((*result.incidents).queued, 0U);
 }
 
+// Governor spec, "Rate-Limited Owner Notifications", "Pause Governor", "Game Mode": the status at
+// every poll, after the owner's requests.
+TEST_F(PollerTest, GovernorStatusEveryPollAndTheOwnersRequestsBeforeIt) {
+  link().on("governor.status", [](const Json&) -> Result<Json> {
+    return testing::governor_status_json(
+        Json::array({testing::governor_notification_json(1, start, 300, "bigjob.exe", "suspend")}));
+  });
+  link().on("governor.choose", [](const Json&) -> Result<Json> { return Json{{"commands", 2}}; });
+  link().on("governor.pause",
+            [](const Json&) -> Result<Json> { return Json{{"paused_until", start + 3600}}; });
+  const PollResult first = poll_at(start, false);
+  ASSERT_TRUE(first.governor.has_value());
+  EXPECT_EQ((*first.governor).notifications.size(), 1U);
+  EXPECT_FALSE(first.governor_action);
+
+  link().clear_calls();
+  const PollResult chosen = poll_at(
+      start + 1, false,
+      {ChooseForTree{.root = GovernorProcess{.pid = 300, .created = 300000}, .choice = "resume"},
+       PauseGovernor{.minutes = std::chrono::minutes{60}}, SetGameMode{.value = "off"}});
+  EXPECT_EQ(methods(link().calls()),
+            (std::vector<std::string>{"metrics.latest", "governor.choose", "governor.pause",
+                                      "governor.game_mode", "alerts.badge", "governor.status"}));
+  EXPECT_EQ(link().calls_of("governor.choose")[0].params,
+            (Json{{"pid", 300}, {"created", 300000}, {"choice", "resume"}}));
+  EXPECT_EQ(link().calls_of("governor.pause")[0].params, (Json{{"minutes", 60}}));
+  EXPECT_EQ(link().calls_of("governor.game_mode")[0].params, (Json{{"override", "off"}}));
+  ASSERT_TRUE(chosen.governor_action.has_value());
+  EXPECT_TRUE((*chosen.governor_action).starts_with("Setting game mode failed: "))
+      << "the last request's outcome; governor.game_mode is not offered by this fake";
+
+  const PollResult ended =
+      poll_at(start + 2, false, {PauseGovernor{.minutes = std::chrono::minutes{0}}});
+  EXPECT_EQ(ended.governor_action, "");
+  EXPECT_EQ(link().calls_of("governor.pause").back().params, (Json{{"minutes", 0}}));
+}
+
+TEST_F(PollerTest, TheOwnersSessionStateIsSentEveryPollWhenItCanBeRead) {
+  std::optional<UserStateReading> reading =
+      UserStateReading{.state = "running_d3d_full_screen", .foreground_pid = 900};
+  Poller poller(link(), 600s, nullptr, nullptr,
+                [&reading]() -> std::optional<UserStateReading> { return reading; });
+  (void)poller.poll(from_unix_seconds(start), false);
+  (void)poller.poll(from_unix_seconds(start + 1), false);
+  const std::vector<FakeLink::Call> sent = link().calls_of("governor.user_state");
+  ASSERT_EQ(sent.size(), 2U);
+  EXPECT_EQ(sent[0].params, (Json{{"state", "running_d3d_full_screen"}, {"foreground_pid", 900}}));
+
+  reading.reset();
+  (void)poller.poll(from_unix_seconds(start + 2), false);
+  EXPECT_EQ(link().calls_of("governor.user_state").size(), 2U) << "nothing read, nothing sent";
+  link().set_online(false);
+  reading = UserStateReading{.state = "busy", .foreground_pid = 1};
+  link().clear_calls();
+  (void)poller.poll(from_unix_seconds(start + 3), false);
+  EXPECT_TRUE(link().calls_of("governor.user_state").empty()) << "not while unreachable";
+}
+
 TEST_F(PollerTest, AMissingMethodLeavesItsPartUnavailable) {
   FakeLink bare;
   bare.on("metrics.latest",
@@ -317,6 +379,7 @@ TEST_F(PollerTest, AMissingMethodLeavesItsPartUnavailable) {
   EXPECT_FALSE(result.alerts);
   EXPECT_FALSE(result.drives);
   EXPECT_FALSE(result.freezes);
+  EXPECT_FALSE(result.governor);
   EXPECT_TRUE(result.history.empty());
 }
 

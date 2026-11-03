@@ -47,6 +47,11 @@ class DashboardWindow {
   void render();
   // Brings the window to the front (the owner asked for it again).
   void activate() const;
+  // Shows `section` (the owner clicked a toast about it).
+  void show(Section section) {
+    ui_.section = section;
+    request_frames();
+  }
 
  private:
   static constexpr int settle_frames = 3;

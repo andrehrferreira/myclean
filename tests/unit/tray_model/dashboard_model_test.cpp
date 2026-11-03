@@ -12,6 +12,7 @@
 #include "core/model/result.hpp"
 #include "core/model/series.hpp"
 #include "core/tray_model/chart.hpp"
+#include "core/tray_model/governor.hpp"
 #include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/replies.hpp"
@@ -107,7 +108,7 @@ TEST(DashboardModelTest, ServiceStopKeepsTheLastValuesAndStopsTheCharts) {
   EXPECT_EQ(model.tray_status().state, TrayState::service_down);
   EXPECT_EQ(model.unavailable_features(),
             (std::vector<std::string>{"live telemetry", "history", "disk health", "alerts",
-                                      "freezes", "cleanup", "space"}));
+                                      "freezes", "cleanup", "space", "governor"}));
   model.apply(reachable_at(start + 6));
   EXPECT_TRUE(model.service_reachable());
   EXPECT_TRUE(model.service_error().empty());
@@ -221,6 +222,41 @@ TEST(DashboardModelTest, ToastsOnlyForToastsDecidedAfterTheTrayConnected) {
   EXPECT_EQ(toasts[1].entity, "disk3");
   EXPECT_EQ(toasts[1].severity, AlertSeverity::critical);
   EXPECT_TRUE(model.take_toasts().empty()) << "each toast is taken once";
+}
+
+// Governor spec, "Rate-Limited Owner Notifications": a notification badges the icon while it
+// waits, new ones become toasts, and a failed request is shown until the next answer.
+TEST(DashboardModelTest, GovernorNotificationsBadgeTheIconAndBecomeToasts) {
+  DashboardModel model;
+  const auto with = [](std::int64_t second, testing::Json notifications) {
+    PollResult result = reachable_at(second);
+    result.governor =
+        parse_governor_status(testing::governor_status_json(std::move(notifications))).value();
+    return result;
+  };
+  model.apply(with(start, testing::Json::array()));
+  EXPECT_EQ(model.governor_pending(), 0);
+  EXPECT_FALSE(model.tray_status().badge);
+  EXPECT_TRUE(model.take_governor_toasts().empty());
+
+  model.apply(with(start + 1, testing::Json::array({testing::governor_notification_json(
+                                  1, start + 1, 300, "bigjob.exe", "suspend")})));
+  EXPECT_EQ(model.governor_pending(), 1);
+  EXPECT_TRUE(model.tray_status().badge);
+  const std::vector<GovernorToast> toasts = model.take_governor_toasts();
+  ASSERT_EQ(toasts.size(), 1U);
+  EXPECT_EQ(toasts[0].title, "MyClean suspended bigjob.exe");
+  EXPECT_TRUE(model.take_governor_toasts().empty());
+
+  PollResult failed = reachable_at(start + 2);
+  failed.governor_action = "The choice failed: the pipe broke";
+  model.apply(std::move(failed));
+  EXPECT_EQ(model.governor_action_error(), "The choice failed: the pipe broke");
+  ASSERT_TRUE(model.governor().has_value()) << "kept until the next status";
+  EXPECT_EQ(model.governor_pending(), 1);
+
+  model.apply(unreachable_at(start + 3));
+  EXPECT_EQ(model.governor_pending(), 0) << "nothing can be answered while the service is away";
 }
 
 TEST(DashboardModelTest, TheWorstDriveIsInTheTooltip) {

@@ -10,12 +10,23 @@
 
 #include "core/tray_model/cleaning.hpp"
 #include "core/tray_model/dashboard_model.hpp"
+#include "core/tray_model/governor.hpp"
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/replies.hpp"
 
 namespace myclean::tray {
 
-enum class Section { cpu_memory, disks, volumes, processes, alerts, freezes, cleanup, space };
+enum class Section {
+  cpu_memory,
+  disks,
+  volumes,
+  processes,
+  alerts,
+  freezes,
+  cleanup,
+  space,
+  governor
+};
 
 // What the owner chose in the dashboard; kept between frames.
 struct UiState {
@@ -37,6 +48,10 @@ struct UiState {
   // The owner-decision candidates the owner clicked: their row says the plan started instead of
   // offering the button again.
   std::set<std::int64_t> acted;
+  // The governor: the minutes a pause lasts, and the tree whose Kill waits for the owner's
+  // confirmation.
+  int pause_minutes = 60;
+  std::optional<tray_model::GovernorProcess> confirm_kill;
   // What the owner asked of the service during the frame; the window sends and clears them.
   std::vector<tray_model::Request> requests;
 };

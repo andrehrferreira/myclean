@@ -16,6 +16,7 @@
 
 #include "core/ipc/alerts.hpp"
 #include "core/ipc/disk_health.hpp"
+#include "core/ipc/governor.hpp"
 #include "core/ipc/input.hpp"
 #include "core/ipc/plans.hpp"
 #include "core/ipc/telemetry.hpp"
@@ -23,6 +24,7 @@
 #include "core/model/series.hpp"
 #include "core/telemetry/metrics.hpp"
 #include "core/tray_model/cleaning.hpp"
+#include "core/tray_model/governor.hpp"
 #include "core/tray_model/replies.hpp"
 #include "core/tray_model/snapshot.hpp"
 
@@ -107,8 +109,10 @@ PollResult Poller::poll(WallTime now, bool dashboard_open, const std::vector<Req
   for (const Request& request : requests) {
     handle(request, result);
     refresh_plans = handle_cleanup(request, result) || refresh_plans;
+    handle_governor(request, result);
   }
   fetch_rest(now, dashboard_open, result);
+  fetch_governor(result);
   fetch_cleanup(now, dashboard_open, refresh_plans, result);
   run_tasks(result);
   // The service may have gone away after the first call.
@@ -246,6 +250,35 @@ bool Poller::handle_cleanup(const Request& request, PollResult& result) {
     load_space(*load, result);
   }
   return false;
+}
+
+void Poller::handle_governor(const Request& request, PollResult& result) {
+  const auto send = [&](std::string_view what, std::string_view method, const Json& params) {
+    const Result<Json> reply = link_->call(method, params);
+    result.governor_action =
+        reply ? std::string() : std::string(what) + " failed: " + reply.error().message;
+  };
+  if (const auto* choice = std::get_if<ChooseForTree>(&request)) {
+    send("The choice", ipc::governor_choose_method,
+         governor_choose_params(choice->root, choice->choice));
+  } else if (const auto* pause = std::get_if<PauseGovernor>(&request)) {
+    send(pause->minutes.count() > 0 ? "Pausing the governor" : "Ending the pause",
+         ipc::governor_pause_method, governor_pause_params(pause->minutes));
+  } else if (const auto* game_mode = std::get_if<SetGameMode>(&request)) {
+    send("Setting game mode", ipc::governor_game_mode_method,
+         governor_game_mode_params(game_mode->value));
+  }
+}
+
+void Poller::fetch_governor(PollResult& result) {
+  if (user_state_) {
+    if (const std::optional<UserStateReading> reading = user_state_()) {
+      static_cast<void>(
+          link_->call(ipc::governor_user_state_method, governor_user_state_params(*reading)));
+    }
+  }
+  result.governor =
+      fetch(*link_, ipc::governor_status_method, Json::object(), &parse_governor_status);
 }
 
 void Poller::ask_again(bool dashboard_open, const std::vector<Request>& requests,

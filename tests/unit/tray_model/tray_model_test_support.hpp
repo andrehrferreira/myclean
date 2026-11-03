@@ -325,6 +325,76 @@ inline Json summary_json() {
                  {"incidents", Json::array({incident(3, 300, nullptr)})}}})}};
 }
 
+// One pending governor notification for the tree rooted at `pid` (created at `pid` * 1000 ns), at
+// Unix second `time`.
+inline Json governor_notification_json(std::int64_t id, std::int64_t time, std::uint32_t pid,
+                                       std::string_view image, std::string_view step) {
+  return Json{{"id", id},
+              {"time", time},
+              {"root", {{"pid", pid}, {"created", std::int64_t{pid} * 1000}}},
+              {"image", image},
+              {"class", "default"},
+              {"step", step},
+              {"reason", "cpu"},
+              {"members", 3}};
+}
+
+// A governor.status reply in the service's shape (core/ipc/governor.hpp): act mode under CPU
+// pressure, game mode on for one game, one tree at the EcoQoS step, `notifications` and two
+// events.
+inline Json governor_status_json(Json notifications = Json::array()) {
+  return Json{{"mode", "act"},
+              {"paused_until", nullptr},
+              {"pressure",
+               {{"state", "pressure"},
+                {"clearing", false},
+                {"reasons", {"cpu"}},
+                {"metrics",
+                 {{"cpu_percent", 97.0},
+                  {"available", 20 * gib},
+                  {"commit", 40 * gib},
+                  {"commit_limit", 150 * gib},
+                  {"hard_faults_per_second", 3.0}}}}},
+              {"game_mode",
+               {{"active", true},
+                {"override", "auto"},
+                {"build_cpu_percent", 40},
+                {"games", Json::array({Json{{"pid", 900},
+                                            {"created", 900000},
+                                            {"image", "title.exe"},
+                                            {"reason", "library_root"}}})}}},
+              {"jobs", Json::array()},
+              {"trees", Json::array({Json{{"root", {{"pid", 300}, {"created", 300000}}},
+                                          {"image", "bigjob.exe"},
+                                          {"class", "default"},
+                                          {"step", "ecoqos"}}})},
+              {"notifications", std::move(notifications)},
+              {"events", Json::array({Json{{"id", 2},
+                                           {"time", 1000},
+                                           {"kind", "apply_step"},
+                                           {"root", {{"pid", 300}, {"created", 300000}}},
+                                           {"image", "bigjob.exe"},
+                                           {"class", "default"},
+                                           {"step", "ecoqos"},
+                                           {"reason", "cpu"},
+                                           {"actor", "governor"},
+                                           {"members", 3},
+                                           {"metrics", nullptr},
+                                           {"detail", "3 of 3 processes"}},
+                                      Json{{"id", 1},
+                                           {"time", 990},
+                                           {"kind", "game_mode"},
+                                           {"root", nullptr},
+                                           {"image", ""},
+                                           {"class", nullptr},
+                                           {"step", nullptr},
+                                           {"reason", "policy"},
+                                           {"actor", "governor"},
+                                           {"members", 0},
+                                           {"metrics", nullptr},
+                                           {"detail", "game mode on (override auto)"}}})}};
+}
+
 // A scripted service: each method answers through its handler; methods without one answer
 // "method not found". Records every call. While offline every call fails as if the pipe were
 // gone.

@@ -17,8 +17,8 @@ namespace myclean::tray {
 
 PollThread::PollThread(tray_model::IServiceLink& link, const os::IClock& clock, SharedModel& shared,
                        std::function<void()> on_update, tray_model::IncidentQueue* incidents,
-                       tray_model::ITaskRunner* tasks)
-    : poller_(link, tray_model::live_window, incidents, tasks),
+                       tray_model::ITaskRunner* tasks, tray_model::UserStateSource user_state)
+    : poller_(link, tray_model::live_window, incidents, tasks, std::move(user_state)),
       clock_(&clock),
       shared_(&shared),
       on_update_(std::move(on_update)),

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <functional>
+#include <iterator>
 #include <optional>
 #include <ranges>
 #include <string>
@@ -12,6 +13,7 @@
 #include "core/model/series.hpp"
 #include "core/telemetry/metrics.hpp"
 #include "core/tray_model/chart.hpp"
+#include "core/tray_model/governor.hpp"
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/snapshot.hpp"
 #include "core/tray_model/tray_state.hpp"
@@ -103,6 +105,24 @@ void DashboardModel::apply(PollResult result) {
   if (result.freezes) {
     freezes_ = std::move(result.freezes);
   }
+  if (result.governor_action) {
+    governor_action_error_ = std::move(*result.governor_action);
+  }
+  if (result.governor) {
+    std::vector<GovernorToast> toasts = governor_toasts_.take(*result.governor);
+    governor_toast_queue_.insert(governor_toast_queue_.end(),
+                                 std::make_move_iterator(toasts.begin()),
+                                 std::make_move_iterator(toasts.end()));
+    governor_ = std::move(result.governor);
+  }
+}
+
+std::vector<GovernorToast> DashboardModel::take_governor_toasts() {
+  return std::exchange(governor_toast_queue_, {});
+}
+
+int DashboardModel::governor_pending() const {
+  return reachable_ && governor_ ? static_cast<int>(governor_->notifications.size()) : 0;
 }
 
 void DashboardModel::take_alerts(std::vector<AlertRow> alerts) {
@@ -176,7 +196,7 @@ const DriveHealthRow* DashboardModel::drive(const std::string& disk) const {
 
 TrayStatus DashboardModel::tray_status() const {
   TrayStatus status = tray_model::tray_status(reachable_, metrics_, badge_);
-  status.badge = status.badge || (reachable_ && cleanup_.pending() > 0);
+  status.badge = status.badge || (reachable_ && cleanup_.pending() > 0) || governor_pending() > 0;
   return status;
 }
 
@@ -193,7 +213,8 @@ std::vector<std::string> DashboardModel::unavailable_features() const {
   if (reachable_) {
     return {};
   }
-  return {"live telemetry", "history", "disk health", "alerts", "freezes", "cleanup", "space"};
+  return {"live telemetry", "history", "disk health", "alerts",
+          "freezes",        "cleanup", "space",       "governor"};
 }
 
 }  // namespace myclean::tray_model

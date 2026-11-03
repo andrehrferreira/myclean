@@ -107,6 +107,15 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   SafeRemove (refused while a program uses it; undo copies it back); "Desinstalar" starts
   the program's own uninstaller and reports "launched; finish in the uninstaller" until its
   Uninstall entry is gone. MCP tool `find_owner_decisions` lists them; no tool acts on them.
+- **Resource governor (M3):**
+  - The tray's Governor section: the governor's mode and pressure, every notification
+    waiting for the owner with Resume, Kill (confirmed), Allow once and Always allow, Pause
+    governor for N minutes (or end the pause) and the game-mode override auto / on / off.
+    New notifications become toasts, at most one per tree per 5 minutes (a suspend or kill
+    always), quiet during the owner's quiet hours; clicking one opens the section.
+  - The tray reports the owner's notification state and foreground process every second
+    (`governor.user_state`), which protects the foreground program and feeds fullscreen
+    game detection.
 - Spike notes X1–X8 under `docs/spikes/`.
 
 ### Fixed

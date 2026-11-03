@@ -2,11 +2,13 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -16,6 +18,7 @@
 #include "core/model/series.hpp"
 #include "core/model/units.hpp"
 #include "core/tray_model/cleaning.hpp"
+#include "core/tray_model/governor.hpp"
 #include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/replies.hpp"
 #include "core/tray_model/service_link.hpp"
@@ -85,10 +88,22 @@ struct ProposeCleanup {
 struct OwnerAction {
   std::int64_t candidate = 0;  // an owner-decision candidate id
 };
+// The governor: the owner's answer to the notification of a tree (resume, kill, allow_once,
+// always_allow), a pause (0 minutes ends one) and the game-mode override (auto, on, off).
+struct ChooseForTree {
+  GovernorProcess root;
+  std::string choice;
+};
+struct PauseGovernor {
+  std::chrono::minutes minutes{};
+};
+struct SetGameMode {
+  std::string value;
+};
 using Request =
     std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange, ScanNow, OpenPlan,
                  ClosePlan, ApprovePlan, RejectPlan, UndoPlan, RestoreQuarantine, PurgeQuarantine,
-                 LoadSpace, ProposeCleanup, OwnerAction>;
+                 LoadSpace, ProposeCleanup, OwnerAction, ChooseForTree, PauseGovernor, SetGameMode>;
 
 // The tray's executor of user-scope plans, as the poller drives it: the poller takes a task
 // (user_tasks.next) only from a reachable service and only while the runner is idle, and
@@ -149,7 +164,14 @@ struct PollResult {
   std::optional<std::string> alert_action;
   std::optional<IncidentQueue::Counts> incidents;
   CleanupPoll cleanup;
+  std::optional<GovernorStatus> governor;
+  // Why the owner's last governor request failed; empty when it worked.
+  std::optional<std::string> governor_action;
 };
+
+// What the tray reads of the owner's session for governor.user_state; nullopt when it cannot be
+// read this second.
+using UserStateSource = std::function<std::optional<UserStateReading>()>;
 
 // Polls the service, once per second, for what the tray shows.
 //
@@ -168,7 +190,10 @@ struct PollResult {
 // cleaning.status at every poll while the dashboard is open or a scan runs, else with the plans.
 // Space lists when the owner asks, and again at every poll while their analysis runs. User tasks:
 // every poll, when a task runner is set, the finished task's report is delivered and, while the
-// runner is idle, the next task is taken. Not thread-safe: one poll thread owns it.
+// runner is idle, the next task is taken. The governor: every poll, governor.user_state with the
+// owner's session state when a source is set, then governor.status (its notifications become
+// toasts); the owner's choices, pause and game-mode override are sent before it. Not thread-safe:
+// one poll thread owns it.
 class Poller {
  public:
   static constexpr int top_trees = 25;
@@ -181,10 +206,14 @@ class Poller {
 
   // `window` is how far back the live charts reach: nothing older is fetched. `incidents`, when
   // set, is forwarded at every poll; `tasks`, when set, runs the user tasks. Both must outlive
-  // the poller.
+  // the poller. `user_state`, when set, is read and sent at every poll.
   Poller(IServiceLink& link, std::chrono::seconds window, IncidentQueue* incidents = nullptr,
-         ITaskRunner* tasks = nullptr)
-      : link_(&link), window_(window), incidents_(incidents), tasks_(tasks) {}
+         ITaskRunner* tasks = nullptr, UserStateSource user_state = {})
+      : link_(&link),
+        window_(window),
+        incidents_(incidents),
+        tasks_(tasks),
+        user_state_(std::move(user_state)) {}
 
   [[nodiscard]] PollResult poll(WallTime now, bool dashboard_open,
                                 const std::vector<Request>& requests = {});
@@ -206,12 +235,16 @@ class Poller {
   bool handle_cleanup(const Request& request, PollResult& result);
   void fetch_cleanup(WallTime now, bool dashboard_open, bool refresh, PollResult& result);
   void run_tasks(PollResult& result);
+  // Sends the governor's requests; other requests are left alone.
+  void handle_governor(const Request& request, PollResult& result);
+  void fetch_governor(PollResult& result);
   [[nodiscard]] RangeHistory fetch_range(WallTime now);
 
   IServiceLink* link_;
   std::chrono::seconds window_;
   IncidentQueue* incidents_;
   ITaskRunner* tasks_;
+  UserStateSource user_state_;
   bool connected_ = false;  // the previous poll reached the service
   bool dashboard_open_ = false;
   std::optional<WallTime> next_slow_;
