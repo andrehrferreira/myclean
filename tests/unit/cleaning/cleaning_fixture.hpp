@@ -1,7 +1,9 @@
 #pragma once
 
 #include <chrono>
+#include <cstring>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -24,6 +26,7 @@
 #include "core/ipc/json_rpc.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/space/duplicates.hpp"
 #include "core/store/database.hpp"
 #include "core/store/migrations.hpp"
 #include "core/store/store.hpp"
@@ -174,6 +177,25 @@ inline void put_test_pack(packs::testing::FakePackFiles& files) {
   files.put(data_dir / "packs" / "test" / "clean.toml", std::string(test_rules));
 }
 
+// Hashes a file by the digits of its name: "a17.bin" and "b17.bin" have the same content.
+class NameDigitHasher final : public space::IContentHasher {
+ public:
+  [[nodiscard]] Result<space::Digest> hash(const std::filesystem::path& file,
+                                           std::optional<Bytes> /*limit*/) const override {
+    std::string digits;
+    const std::wstring name = file.filename().native();
+    for (const wchar_t character : name) {
+      if (character >= L'0' && character <= L'9') {
+        digits += static_cast<char>(character);
+      }
+    }
+    space::Digest digest{};
+    const std::size_t value = std::hash<std::string>{}(digits);
+    std::memcpy(digest.data(), &value, sizeof(value));
+    return digest;
+  }
+};
+
 // A CleaningService over fakes, with its methods on a dispatcher. Volumes as on the owner's
 // machine: C: has 8 % free (its quarantine overflows to L:), F: 13 %.
 class CleaningFixture : public ::testing::Test {
@@ -215,7 +237,7 @@ class CleaningFixture : public ::testing::Test {
         },
         .files = &files_,
         .data_dir = data_dir,
-        .space = {.reader = &reader_},
+        .space = {.reader = &reader_, .hasher = &hasher_},
         .busy = [this] { return busy_; }};
     service_ = std::make_unique<CleaningService>(std::move(sources), std::move(settings));
     ASSERT_TRUE(service_->start(*methods_).has_value());
@@ -324,6 +346,7 @@ class CleaningFixture : public ::testing::Test {
   placement::testing::FakeProcessRunner tools_;
   placement::testing::FakeDriveFacts drives_;
   space::testing::FakeDirectoryReader reader_;
+  NameDigitHasher hasher_;
   packs::testing::FakePackFiles files_;
   std::unique_ptr<store::Store> store_;
   std::unique_ptr<ipc::Dispatcher> methods_;

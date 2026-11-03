@@ -72,7 +72,8 @@ struct InstallerReport {
 };
 
 // True when the version info of an .exe names `program`: the significant words of the product
-// name appear in order in the display name (or the other way round), and the company and the
+// name appear in order in the display name (or the other way round) and make up at least half
+// of it, and the company and the
 // publisher name the same vendor. Case, punctuation, version numbers, architecture tags and
 // legal suffixes (Inc., Ltd., Corporation, ...) are ignored.
 [[nodiscard]] bool matches_program(const VersionInfo& version, const InstalledProgram& program);

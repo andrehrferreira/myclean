@@ -227,7 +227,10 @@ inline constexpr std::string_view space_old_downloads_method = "space.old_downlo
 // Parameters: refresh (boolean, optional). Exact duplicates in the owner's Desktop, Documents,
 // Downloads, Pictures, Videos and Music:
 //   {..., "roots": [string], "groups": [{"size", "hash", "reclaimable", "files": [{"id",
-//    "path", "size_on_disk", "modified"}]}], "reclaimable": int, "errors": [{"path", "error"}]}
+//    "path", "size_on_disk", "modified"}]}], "reclaimable": int, "errors": [{"path", "error"}],
+//    "groups_total": int, "truncated": bool}
+// groups: the most reclaimable first, as many as fit 3/4 of one pipe message (truncated: some
+// were left out; every file of every group is still a candidate).
 inline constexpr std::string_view space_duplicates_method = "space.duplicates";
 
 // Parameters: refresh (boolean, optional). Installers in the owner's Downloads that are

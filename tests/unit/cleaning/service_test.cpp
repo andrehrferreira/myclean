@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -17,6 +18,7 @@
 
 #include "cleaning_fixture.hpp"
 #include "core/actions/audit_log.hpp"
+#include "core/ipc/frame.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/model/units.hpp"
 #include "core/placement/settings.hpp"
@@ -468,6 +470,36 @@ TEST_F(CleaningServiceTest, TheQuarantineIsPurgedSevenDaysLater) {
   work();
   EXPECT_FALSE(fs().exists(run));
   EXPECT_EQ(call("quarantine.list").at("runs"), Json::array());
+}
+
+TEST_F(CleaningServiceTest, ManyDuplicatesStillFitOnePipeMessage) {
+  start();
+  work();  // the owner's folders are known once the owner's session is
+  // 4000 pairs of equal files with long names: every group cannot be answered at once.
+  std::vector<space::ListedEntry> entries;
+  for (int group = 0; group < 4000; ++group) {
+    for (const char side : {'a', 'b'}) {
+      space::ListedEntry entry =
+          space::testing::file(std::string(1, side) + "-a-rather-long-photo-name-from-the-camera-" +
+                                   std::to_string(group) + ".jpg",
+                               2ULL << 20U);
+      entry.identity.file_id[0] = static_cast<std::uint8_t>(group & 0xFF);
+      entry.identity.file_id[1] = static_cast<std::uint8_t>(group >> 8);
+      entry.identity.file_id[2] = static_cast<std::uint8_t>(side);
+      entries.push_back(std::move(entry));
+    }
+  }
+  reader().listings[path(L"C:\\Users\\owner\\Pictures")] = std::move(entries);
+  EXPECT_EQ(call("space.duplicates", Json{{"refresh", true}}).at("state"), "scanning");
+  work_space();
+
+  const Json answer = call("space.duplicates");
+  ASSERT_EQ(answer.at("state"), "ready") << answer.dump();
+  EXPECT_EQ(answer.at("groups_total"), 4000);
+  EXPECT_TRUE(answer.at("truncated").get<bool>());
+  EXPECT_GT(answer.at("groups").size(), 100U);
+  EXPECT_LT(answer.at("groups").size(), 4000U);
+  EXPECT_LT(answer.dump().size(), ipc::max_payload_size);
 }
 
 TEST_F(CleaningServiceTest, TheHourlyPurgeDeletesAQuarantineOnAVolumeShortOfSpaceAtOnce) {

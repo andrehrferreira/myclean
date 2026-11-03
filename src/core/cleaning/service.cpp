@@ -25,6 +25,7 @@
 #include "core/cleaning/executor.hpp"
 #include "core/cleaning/records.hpp"
 #include "core/cleaning/views.hpp"
+#include "core/ipc/frame.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/plans.hpp"
 #include "core/model/actor.hpp"
@@ -846,6 +847,20 @@ Result<Json> CleaningService::analyze_duplicates(const std::stop_token& stop) {
     }
   }
   json["roots"] = std::move(roots_json);
+  // The answer must fit one pipe message: the most reclaimable groups, up to 3/4 of it. Every
+  // file stays a candidate, so a proposal can name any of them.
+  Json& groups = json["groups"];
+  const std::size_t total = groups.size();
+  std::size_t kept = 0;
+  for (std::size_t bytes = 0; kept < total; ++kept) {
+    bytes += groups[kept].dump().size() + 1;
+    if (bytes > ipc::max_payload_size / 4 * 3) {
+      break;
+    }
+  }
+  groups.erase(groups.begin() + static_cast<std::ptrdiff_t>(kept), groups.end());
+  json["groups_total"] = total;
+  json["truncated"] = kept < total;
   return json;
 }
 

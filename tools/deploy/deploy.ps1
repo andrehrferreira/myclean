@@ -486,9 +486,14 @@ function Invoke-DeployOnce {
         } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $StageDir 'manifest.json') -Encoding utf8
 
         Stop-Tray
-        $activation = Invoke-Privileged 'activate' $StageDir
+        try {
+            $activation = Invoke-Privileged 'activate' $StageDir
+        } catch {
+            $null = Start-Tray   # elevation refused: nothing changed, the installed tray comes back
+            throw
+        }
         if (-not $activation.ok) {
-            if ($activation.rolledBack) { $null = Start-Tray }   # bring the previous tray back
+            $null = Start-Tray   # the previous tray after a rollback, else whatever is installed
             $note = if ($activation.rolledBack) { " (rolled back to $(Split-Path $activation.previous -Leaf))" } else { '' }
             throw "Deploy of $version failed: $($activation.error)$note"
         }
@@ -588,9 +593,12 @@ function Invoke-Rollback {
              Sort-Object Name -Descending | Select-Object -First 1
     if (-not $older) { throw 'There is no older version to roll back to.' }
     Stop-Tray
-    $result = Invoke-Privileged 'activate' $older.FullName
-    Set-TrayAutostart
-    $null = Start-Tray
+    try {
+        $result = Invoke-Privileged 'activate' $older.FullName
+    } finally {
+        Set-TrayAutostart
+        $null = Start-Tray   # also when elevation was refused
+    }
     if (-not $result.ok) { throw "Rollback failed: $($result.error)" }
     Write-Ok "Rolled back from $currentName to $($older.Name)"
 }

@@ -90,6 +90,11 @@ TEST(MatchesProgram, RejectsAnotherVendorOrProductOrMissingNames) {
                                InstalledProgram{.display_name = "App", .publisher = ""}));
   EXPECT_FALSE(matches_program(VersionInfo{.product_name = "Setup", .company_name = "Vendor"},
                                InstalledProgram{.display_name = "App", .publisher = "Vendor"}));
+  // One word of a long name is another product (observed: ChatGPT's Store installer).
+  EXPECT_FALSE(matches_program(
+      VersionInfo{.product_name = "Store Installer", .company_name = "Microsoft Corporation"},
+      InstalledProgram{.display_name = "Windows SDK for Windows Store Apps Metadata",
+                       .publisher = "Microsoft Corporation"}));
 }
 
 TEST(UsedInstallers, ListsInstalledPackagesAndMatchedExecutables) {

@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -77,7 +78,11 @@ bool matches_program(const VersionInfo& version, const InstalledProgram& program
   if (product.empty() || display.empty() || company.empty() || publisher.empty()) {
     return false;
   }
-  const bool same_product = contains_run(display, product) || contains_run(product, display);
+  // The shorter name is a run of the longer one and at least half of it: "Store Installer" is
+  // not the "Windows SDK for Windows Store Apps Metadata".
+  const auto& [shorter, longer] =
+      product.size() <= display.size() ? std::tie(product, display) : std::tie(display, product);
+  const bool same_product = contains_run(longer, shorter) && shorter.size() * 2 >= longer.size();
   const bool same_vendor = starts_with(publisher, company) || starts_with(company, publisher);
   return same_product && same_vendor;
 }
