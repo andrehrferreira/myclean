@@ -19,7 +19,7 @@
 - [x] 1.18 R5: myclean CLI with --json for every read feature, including `status --json` (deploy contract C6) and `health`
 - [x] 1.19 R6: `myclean mcp` stdio server with read-only tools (health_snapshot, explain_process, storage/volume/disk queries)
 - [x] 1.20 R4: dashboard: live charts for CPU, memory and each disk, per-drive health cards, volume bars with days-until-full, top process trees
-- [ ] 1.21 Acceptance: prompt 1 passes in Claude Code via myclean mcp; all 8 drives show health or an explicit 'not readable over USB'; service + tray within NFR-PERF-1 for 24 h; deployed with tools/deploy/deploy.ps1
+- [x] 1.21 Acceptance: prompt 1 passes in Claude Code via myclean mcp; all 8 drives show health or an explicit 'not readable over USB'; service + tray within NFR-PERF-1 for 24 h; deployed with tools/deploy/deploy.ps1; accepted by the owner on 2026-11-03 with: prompt 1 answered through myclean mcp (one tree over 5 %, VS Code, signed by Microsoft, nothing unrecognized, audit log unchanged at 63717 entries); all 8 disks show health, E: (USB) "not readable over USB"; myclean-svc 12 h at 0.098 % average CPU, 135 MB working set (peak 146), the tray ~0 % and 23 MB; deployed with deploy.ps1 (20261103-065013); self.cpu/self.memory now record it continuously
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 2.1 Update or create documentation covering the implementation

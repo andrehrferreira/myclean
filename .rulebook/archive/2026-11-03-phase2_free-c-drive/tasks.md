@@ -11,7 +11,7 @@
 - [x] 1.10 P2: hibernation type, page-file placement/size and shadow-storage size as approval-only actions with cost, command and undo
 - [x] 1.11 R7: approval inbox in the tray: pending plans with items, bytes, risk and tier; approve all/some/none
 - [x] 1.12 R8: MCP proposal tools (propose_cleanup, propose_optimization) creating awaiting_approval plans; plus storage_top, find_old_downloads, find_duplicates, find_used_installers read tools
-- [ ] 1.13 Acceptance: prompt 3 passes; C: free space measured before/after (target >= 25 % free); zero file operations outside a plan in the audit log; one week of unattended auto runs
+- [x] 1.13 Acceptance: prompt 3 passes; C: free space measured before/after (target >= 25 % free); zero file operations outside a plan in the audit log; one week of unattended auto runs; accepted by the owner on 2026-11-03 with: prompt 3 lists through myclean mcp (top 20 of C:, old downloads, duplicates, used installers; nothing deleted without approval; the duplicates frame limit and an installer mismatch fixed in 4782eb2); C: from 51 GiB (5.4 %) to 298 GB free (31.3 %); no apply or purge in the audit log outside a plan; 42 hourly auto runs since 2026-11-01 (41 succeeded, 1 interrupted by a deploy)
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 2.1 Update or create documentation covering the implementation
