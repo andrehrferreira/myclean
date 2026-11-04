@@ -21,6 +21,12 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 
 function Initialize-DevShell {
+    # MSVC writes its /showIncludes notes in the console's output code page, and ninja records a
+    # header dependency only when the note starts with the prefix CMake detected in the OEM code
+    # page ("Observação: incluindo arquivo:" on a Portuguese MSVC). Under a UTF-8 console every object
+    # was left with no dependencies, so header changes did not rebuild it.
+    [Console]::OutputEncoding = [Text.Encoding]::GetEncoding(
+        [Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage)
     if (Get-Command cl.exe -ErrorAction SilentlyContinue) { return }
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) {

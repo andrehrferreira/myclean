@@ -6,12 +6,14 @@
 # What the governor does with its decisions.
 #   observe  every decision (ladder steps, rollbacks, proactive build/test jobs, owner choices) is
 #            recorded in governor_event with detail "observe"; no process, priority or job object
-#            is changed and no job is created. The pilot's default: watch what it would do first.
-#   act      every decision is applied, and each change also goes to action_log.
+#            is changed and no job is created.
+#   act      every decision is applied, and each change also goes to action_log. The owner chose
+#            act on 2026-11-04, once antivirus, WSL, WMI, database servers and remote access were
+#            classed system (never throttled, suspended or killed).
 # Crash recovery and the clean stop lift MyClean's own caps and resume its own suspends in
 # either mode.
 [governor]
-mode = "observe"
+mode = "act"
 
 # Entering the pressure state: any one signal is enough.
 [pressure]
