@@ -208,6 +208,15 @@ class Machine {
     return process;
   }
 
+  // From now on the process table reports `process` in session `session` (0: a service).
+  void set_session(const governor::ProcessKey& process, std::uint32_t session) {
+    for (Running& running : running_) {
+      if (running.key == process) {
+        running.session = session;
+      }
+    }
+  }
+
   // The process exits: FakeJobs posts its exit, the process table drops it, ETW reports it.
   void exit(const governor::ProcessKey& process, std::uint32_t exit_code = 0) {
     os_.exit_process(os::ProcessKey{.pid = process.pid, .created = process.created}, exit_code);
@@ -267,7 +276,8 @@ class Machine {
                                          .parent_pid = process.parent ? process.parent->pid : 4,
                                          .created = process.key.created,
                                          .image = file_name(process.path),
-                                         .private_bytes = process.private_bytes},
+                                         .private_bytes = process.private_bytes,
+                                         .session = process.session},
                                 .cpu_percent = process.cpu_percent};
       if (process.parent) {
         for (std::size_t index = 0; index < running_.size(); ++index) {
@@ -288,6 +298,7 @@ class Machine {
     std::string path;
     double cpu_percent = 0.0;
     Bytes private_bytes;
+    std::optional<std::uint32_t> session;  // as the process table reports it
   };
 
   governor::GovernorPolicy policy_ = act_policy();

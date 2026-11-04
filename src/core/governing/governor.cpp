@@ -409,15 +409,12 @@ void Governor::on_start(const events::ProcessStart& start) {
   if (start.parent) {
     parent = to_governor(*start.parent);
   }
-  const Known& known =
-      known_
-          .insert_or_assign(
-              key, learn(governor::ProcessFacts{.image = utf8(path.filename()),
-                                                .image_path = start.image,
-                                                .command_line = start.command_line.value_or(""),
-                                                .signer = start.signer},
-                         parent))
-          .first->second;
+  Known learned = learn(governor::ProcessFacts{.image = utf8(path.filename()),
+                                               .image_path = start.image,
+                                               .command_line = start.command_line.value_or(""),
+                                               .signer = start.signer},
+                        parent);
+  const Known& known = known_.insert_or_assign(key, std::move(learned)).first->second;
   const rules::ProcessClass process_class = class_of(key);
   if (!job_class(process_class)) {
     return;
@@ -560,7 +557,8 @@ void Governor::update_known(const telemetry::ProcessView& view) {
   for (const telemetry::ProcessRow& row : view.rows) {
     const governor::ProcessKey key{.pid = row.info.pid, .created = row.info.created};
     present.insert(key);
-    if (known_.contains(key)) {
+    if (const auto found = known_.find(key); found != known_.end()) {
+      found->second.session = row.info.session;
       continue;
     }
     std::optional<governor::ProcessKey> parent;
@@ -572,9 +570,11 @@ void Governor::update_known(const telemetry::ProcessView& view) {
     if (sources_.image_path) {
       path = sources_.image_path(key.pid, key.created);
     }
-    known_.emplace(key, learn(governor::ProcessFacts{.image = row.info.image,
-                                                     .image_path = path ? utf8(*path) : ""},
-                              parent));
+    known_
+        .emplace(key, learn(governor::ProcessFacts{.image = row.info.image,
+                                                   .image_path = path ? utf8(*path) : ""},
+                            parent))
+        .first->second.session = row.info.session;
   }
   for (auto entry = known_.begin(); entry != known_.end();) {
     if (!present.contains(entry->first) && entry->first.created + table_grace < view.time) {
@@ -970,6 +970,11 @@ rules::ProcessClass Governor::class_of(const governor::ProcessKey& key) const {
     return rules::ProcessClass::normal;
   }
   const Known& known = found->second;
+  // A service (session 0) is the system's: drivers' helpers, Hyper-V, vendor services. The
+  // governor acts on the owner's session only.
+  if (known.session == 0U) {
+    return rules::ProcessClass::system;
+  }
   rules::ProcessClass process_class = known.process_class;
   if (process_class != rules::ProcessClass::system && allowed(known.facts.image)) {
     process_class = rules::ProcessClass::allow;

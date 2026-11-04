@@ -63,14 +63,15 @@ class GovernorComponentTest : public ::testing::Test {
   [[nodiscard]] fakes::FakeJobs& jobs() { return *jobs_; }
   [[nodiscard]] const packs::DiskPackFiles& files() const { return files_; }
 
-  // A data folder with governor.toml in act mode and the shipped process-classes pack.
-  [[nodiscard]] std::filesystem::path act_data() const {
+  // A data folder with governor.toml in `mode` and the shipped process-classes pack.
+  [[nodiscard]] std::filesystem::path data_in(std::string_view mode) const {
     const std::filesystem::path data = harness_.data_dir();
     copy_shipped(std::filesystem::path("packs") / "process-classes" / "pack.toml", data);
     copy_shipped(std::filesystem::path("packs") / "process-classes" / "classes.toml", data);
-    std::ofstream(data / "governor.toml") << "[governor]\nmode = \"act\"\n";
+    std::ofstream(data / "governor.toml") << "[governor]\nmode = \"" << mode << "\"\n";
     return data;
   }
+  [[nodiscard]] std::filesystem::path act_data() const { return data_in("act"); }
 
   // Delivers the ETW start of cargo.exe, a process the job FakeJobs knows.
   void start_cargo() {
@@ -92,8 +93,8 @@ class GovernorComponentTest : public ::testing::Test {
   std::unique_ptr<GovernorComponent> component_;
 };
 
-TEST_F(GovernorComponentTest, ShippedPolicyObservesStartsFromTheEventRouter) {
-  ASSERT_TRUE(harness().start(component()));
+TEST_F(GovernorComponentTest, AnObservingPolicyRecordsStartsFromTheEventRouter) {
+  ASSERT_TRUE(harness().start(component(), data_in("observe")));
   EXPECT_EQ(status().at("mode"), "observe");
   start_cargo();
   ASSERT_TRUE(eventually([&] {

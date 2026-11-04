@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,8 @@ struct ProcessInfo {
   std::uint32_t handles = 0;
   std::uint32_t threads = 0;
   std::uint32_t ready_threads = 0;  // threads ready to run, waiting for a processor
+  // The Terminal Services session; 0 is the services' session. nullopt: not reported.
+  std::optional<std::uint32_t> session;
 };
 
 // The process table. Implemented by src/platform/proc.

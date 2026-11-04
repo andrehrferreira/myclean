@@ -150,7 +150,8 @@ class Governor {
     rules::ProcessClass process_class = rules::ProcessClass::normal;  // classify()
     std::optional<games::GameVerdict> game;                           // from the image alone
     std::optional<governor::ProcessKey> parent;
-    bool command_line_read = false;  // GovernorSources::command_line was asked
+    bool command_line_read = false;        // GovernorSources::command_line was asked
+    std::optional<std::uint32_t> session;  // from the process table; 0: a service
   };
   struct Notification {
     std::int64_t id = 0;

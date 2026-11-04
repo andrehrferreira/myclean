@@ -135,6 +135,7 @@ telemetry::ProcessInfo info_of(const ProcessRecord& record) {
                   unsigned_of(record.other_transfer_count),
       .handles = record.handle_count,
       .threads = record.number_of_threads,
+      .session = record.session_id,
   };
 }
 

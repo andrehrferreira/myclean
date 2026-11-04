@@ -197,6 +197,25 @@ TEST(GovernorLadder, ProtectedProcessesNeverReceiveAStep) {
             0);
 }
 
+// Observed on the reference machine: in the default class the ladder chose vmms.exe,
+// NVDisplay.Container.exe and vendor services. A service (session 0) is never the governor's.
+TEST(GovernorLadder, ServicesNeverReceiveAStep) {
+  Machine machine;
+  machine.start();
+  const ProcessKey service =
+      machine.spawn(700, R"(C:\Windows\System32\vmms.exe)", std::nullopt, true, 90.0, 2_GiB);
+  machine.set_session(service, 0);
+  const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 20.0, 1_GiB);
+  machine.set_session(bigjob, 1);
+  cpu_pressure(machine);
+  machine.seconds(60);
+  EXPECT_EQ(machine.process(service).priority, os::PriorityClass::normal);
+  EXPECT_EQ(machine.process(service).suspend_count, 0U);
+  EXPECT_TRUE(machine.process(service).jobs.empty());
+  EXPECT_EQ(machine.process(bigjob).priority, os::PriorityClass::below_normal);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_event WHERE root_pid = 700"), 0);
+}
+
 // Scenario "Stop releases everything".
 TEST(GovernorLadder, StopLiftsEveryCapAndResumesEverySuspend) {
   Machine machine;
