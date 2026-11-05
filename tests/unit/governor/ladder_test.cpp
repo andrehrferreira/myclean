@@ -32,11 +32,22 @@ using std::chrono::minutes;
 using std::chrono::seconds;
 using testing::ForestBuilder;
 
+// The default policy with every step open to the default class too: most tests below drive a
+// `default` tree up the whole ladder to exercise the mechanism.
+LadderPolicy full_ladder() {
+  LadderPolicy policy;
+  policy.cap = {ProcessClass::build, ProcessClass::test, ProcessClass::normal};
+  policy.suspend = policy.cap;
+  return policy;
+}
+
 PressureStatus under(Reason reason) {
   return {.state = PressureState::pressure, .reasons = {reason}, .clearing = false};
 }
 
 const PressureStatus cpu_pressure = under(Reason::cpu);
+// Suspend and kill need a memory signal among the reasons.
+const PressureStatus memory_pressure = under(Reason::commit);
 const PressureStatus calm{};
 
 std::vector<Command> of_kind(const std::vector<Command>& commands, CommandKind kind) {
@@ -102,10 +113,10 @@ class LadderTest : public ::testing::Test {
         .add(pid + 1, pid, "worker.exe", process_class, cpu / 2, Bytes{commit.count() / 2});
   }
 
-  // Brings the tree of `root` to `step` under CPU pressure, one step per cooldown.
+  // Brings the tree of `root` to `step` under memory pressure, one step per cooldown.
   void escalate_to(std::uint32_t root, Step step) {
     for (int guard = 0; guard < 1000 && engine().step_of(builder().key_of(root)) != step; ++guard) {
-      static_cast<void>(second(cpu_pressure));
+      static_cast<void>(second(memory_pressure));
     }
     ASSERT_EQ(engine().step_of(builder().key_of(root)), step);
   }
@@ -119,7 +130,7 @@ class LadderTest : public ::testing::Test {
 
  private:
   fakes::FakeClock clock_{WallTime{}};
-  LadderEngine engine_{LadderPolicy{}};
+  LadderEngine engine_{full_ladder()};
   ForestBuilder builder_;
   std::optional<std::uint32_t> foreground_;
   bool game_mode_ = false;
@@ -194,7 +205,7 @@ TEST_F(LadderTest, LadderEscalatesWithCooldown) {
 TEST_F(LadderTest, SuspendNotifiesTheOwner) {
   add_tree(600, "app.exe", 60.0, 2_GiB);
   escalate_to(600, Step::cap_job);
-  const std::vector<Command> commands = seconds_of(10, cpu_pressure);
+  const std::vector<Command> commands = seconds_of(10, memory_pressure);
   ASSERT_EQ(commands.size(), 3U);
   EXPECT_EQ(commands[0].kind, CommandKind::persist_suspend);
   EXPECT_EQ(pids(commands[0].members), (std::vector<std::uint32_t>{600, 601}));
@@ -216,7 +227,7 @@ TEST_F(LadderTest, KillOffByDefault) {
 }
 
 TEST_F(LadderTest, KillWhenOptedIn) {
-  LadderPolicy policy;
+  LadderPolicy policy = full_ladder();
   policy.kill = {ProcessClass::normal};
   engine().set_policy(policy);
   add_tree(600, "app.exe", 60.0, 2_GiB);
@@ -235,12 +246,73 @@ TEST_F(LadderTest, KillWhenOptedIn) {
 }
 
 TEST_F(LadderTest, KillIsPerClass) {
-  LadderPolicy policy;
+  LadderPolicy policy = full_ladder();
   policy.kill = {ProcessClass::build};
   engine().set_policy(policy);
   add_tree(600, "app.exe", 60.0, 2_GiB);
   escalate_to(600, Step::suspend);
   EXPECT_TRUE(of_kind(seconds_of(30, under(Reason::commit)), CommandKind::kill).empty());
+}
+
+// Observed on the reference machine: under the default policy the ladder suspended VS Code,
+// Chrome and Substance Painter. A program the owner works in stops at EcoQoS: no cap job (its
+// commit cap could make allocations fail) and no suspend.
+TEST_F(LadderTest, ByDefaultOnlyBuildAndTestTreesAreCappedOrSuspended) {
+  engine().set_policy(LadderPolicy{});
+  add_tree(600, "app.exe", 60.0, 2_GiB);
+  escalate_to(600, Step::ecoqos);
+  const std::vector<Command> later = seconds_of(120, memory_pressure);
+  EXPECT_TRUE(applied(later).empty());
+  EXPECT_TRUE(of_kind(later, CommandKind::persist_suspend).empty());
+  EXPECT_EQ(engine().step_of(builder().key_of(600)), Step::ecoqos);
+
+  add_tree(700, "cargo.exe", 90.0, 4_GiB, ProcessClass::build);
+  escalate_to(700, Step::suspend);
+}
+
+TEST_F(LadderTest, CapWithoutSuspendStopsAtTheCap) {
+  LadderPolicy policy;
+  policy.cap = {ProcessClass::normal};
+  policy.suspend = {};
+  engine().set_policy(policy);
+  add_tree(600, "app.exe", 60.0, 2_GiB);
+  escalate_to(600, Step::cap_job);
+  EXPECT_TRUE(of_kind(seconds_of(120, memory_pressure), CommandKind::persist_suspend).empty());
+  EXPECT_EQ(engine().step_of(builder().key_of(600)), Step::cap_job);
+}
+
+// Priority, EcoQoS and the cap settle a CPU shortage: CPU pressure alone never suspends.
+TEST_F(LadderTest, CpuPressureStopsAtTheCap) {
+  add_tree(700, "cargo.exe", 90.0, 4_GiB, ProcessClass::build);
+  for (int second = 0; second < 30; ++second) {
+    static_cast<void>(this->second(cpu_pressure));
+  }
+  EXPECT_EQ(engine().step_of(builder().key_of(700)), Step::cap_job);
+  EXPECT_TRUE(of_kind(seconds_of(300, cpu_pressure), CommandKind::persist_suspend).empty());
+  EXPECT_EQ(engine().step_of(builder().key_of(700)), Step::cap_job);
+  EXPECT_EQ(of_kind(seconds_of(10, memory_pressure), CommandKind::persist_suspend).size(), 1U);
+}
+
+// Observed on the reference machine: while a build ran, the ladder capped Discord, Teams and
+// ChatGPT, each heavier than any one compiler. A build or test tree takes the ladder first.
+TEST_F(LadderTest, BuildAndTestTreesComeFirst) {
+  engine().set_policy(LadderPolicy{});
+  add_tree(600, "Discord.exe", 60.0, 2_GiB);
+  add_tree(700, "cl.exe", 20.0, 1_GiB, ProcessClass::build);
+  add_tree(800, "ctest.exe", 10.0, 1_GiB, ProcessClass::test);
+  for (int second = 0; second < 25; ++second) {
+    for (const Command& step : applied(this->second(cpu_pressure))) {
+      EXPECT_NE(step.root.pid, 600U) << second;
+    }
+  }
+  EXPECT_EQ(engine().step_of(builder().key_of(700)), Step::cap_job);
+  EXPECT_FALSE(engine().step_of(builder().key_of(600)).has_value());
+  for (int second = 0; second < 60; ++second) {
+    static_cast<void>(this->second(cpu_pressure));
+  }
+  EXPECT_EQ(engine().step_of(builder().key_of(800)), Step::cap_job);
+  // Neither can take another step under CPU pressure: only then Discord gets steps, up to EcoQoS.
+  EXPECT_EQ(engine().step_of(builder().key_of(600)), Step::ecoqos);
 }
 
 TEST_F(LadderTest, LadderActsOnTheHeaviestTreeOneStepAtATime) {
@@ -425,7 +497,7 @@ TEST_F(LadderTest, AlwaysAllow) {
   allowed() = {"bigjob.exe"};
   builder().remove(601).remove(600);
   builder().add(900, std::nullopt, "bigjob.exe", ProcessClass::normal, 90.0, 4_GiB);
-  EXPECT_TRUE(seconds_of(60, cpu_pressure).empty());
+  EXPECT_TRUE(seconds_of(60, memory_pressure).empty());
 }
 
 // ---- Owner Exemptions Survive Continued Pressure --------------------------------------------
@@ -440,7 +512,7 @@ TEST_F(LadderTest, AllowOnceHoldsUnderPressure) {
   EXPECT_EQ(released[0].kind, CommandKind::roll_back);
   EXPECT_EQ(released[1].kind, CommandKind::resume);
   EXPECT_EQ(released[1].reason, Reason::allow_once);
-  const std::vector<Command> later = seconds_of(120, cpu_pressure);
+  const std::vector<Command> later = seconds_of(120, memory_pressure);
   ASSERT_FALSE(applied(later).empty());
   for (const Command& command : later) {
     EXPECT_EQ(command.root.pid, 700U);
@@ -473,13 +545,13 @@ TEST_F(LadderTest, ResumeBlocksResuspensionFor10Minutes) {
   EXPECT_EQ(engine().step_of(builder().key_of(600)), Step::cap_job);  // lower steps stay
 
   // Until 12:10 the heaviest tree is never suspended; the ladder works on the next tree.
-  const std::vector<Command> until_ten = seconds_of(599, cpu_pressure);
+  const std::vector<Command> until_ten = seconds_of(599, memory_pressure);
   for (const Command& command : until_ten) {
     EXPECT_FALSE(command.root.pid == 600U && command.step == Step::suspend);
   }
   EXPECT_FALSE(applied(until_ten).empty());
   EXPECT_EQ(engine().step_of(builder().key_of(700)), Step::suspend);
-  const std::vector<Command> at_ten = applied(second(cpu_pressure));
+  const std::vector<Command> at_ten = applied(second(memory_pressure));
   ASSERT_EQ(at_ten.size(), 1U);
   EXPECT_EQ(at_ten[0].root.pid, 600U);
   EXPECT_EQ(at_ten[0].step, Step::suspend);
@@ -523,7 +595,7 @@ TEST_F(LadderTest, PauseFor60Minutes) {
     EXPECT_EQ(command.actor, Actor::owner());
   }
   EXPECT_TRUE(engine().paused(clock().monotonic()));
-  EXPECT_TRUE(seconds_of(3599, cpu_pressure).empty());
+  EXPECT_TRUE(seconds_of(3599, memory_pressure).empty());
 }
 
 TEST_F(LadderTest, PauseExpires) {

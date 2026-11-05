@@ -55,7 +55,9 @@ const PressureStatus& PressureDetector::update(const PressureSample& sample, boo
   const double commit = commit_percent(sample);
 
   track(cpu_since_, sample.cpu_percent > policy_.cpu_enter_percent, covered_from);
-  track(faults_since_, sample.hard_faults_per_second > policy_.hard_faults_enter, covered_from);
+  const bool memory_short = sample.available < policy_.hard_faults_below_available;
+  track(faults_since_, memory_short && sample.hard_faults_per_second > policy_.hard_faults_enter,
+        covered_from);
   const std::chrono::seconds cpu_dwell = game_mode ? policy_.game_dwell : policy_.cpu_dwell;
   const std::chrono::seconds faults_dwell =
       game_mode ? policy_.game_dwell : policy_.hard_faults_dwell;
@@ -89,7 +91,7 @@ const PressureStatus& PressureDetector::update(const PressureSample& sample, boo
   const bool calm = sample.cpu_percent <= policy_.cpu_exit_percent &&
                     sample.available >= policy_.available_exit &&
                     commit <= policy_.commit_exit_percent &&
-                    sample.hard_faults_per_second <= policy_.hard_faults_exit;
+                    (!memory_short || sample.hard_faults_per_second <= policy_.hard_faults_exit);
   track(calm_since_, calm, covered_from);
   if (held(calm_since_, sample.time, policy_.clear_after)) {
     status_ = {};

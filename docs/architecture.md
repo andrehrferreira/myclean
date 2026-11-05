@@ -180,8 +180,9 @@ Specification: `.rulebook/tasks/phase3_resource-governor/specs/governor/spec.md`
 pure functions in `core/governor` (snapshot in, commands out); `core/governing` applies them in
 the service (`svc::GovernorComponent`), over the `core/os` job and process interfaces.
 
-- **Mode:** `[governor] mode` in `data/governor.toml` (shipped as `act` since the owner's choice
-  of 2026-11-04). `observe` records every decision in `governor_event` with detail `observe`
+- **Mode:** `[governor] mode` in `data/governor.toml` (shipped as `observe`: act was tried on
+  2026-11-04 and froze the owner's programs; it returns once the fixed ladder's recorded
+  decisions are approved). `observe` records every decision in `governor_event` with detail `observe`
   and changes nothing: no priority, EcoQoS, suspend or kill, and no proactive job is created.
   `act` applies every decision and also writes each change to `action_log`. Crash recovery and the clean stop lift MyClean's own
   caps and resume its own suspends in either mode; a reload that switches from `act` to
@@ -210,12 +211,18 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   before anything is assigned to it.
 - **Pressure loop (1 s):** the telemetry pipeline's own samples (CPU, available memory, commit,
   hard faults/s and the process table; no WMI, no query of its own) feed the pressure detector:
-  a threshold held for its dwell enters pressure, 60 s at every exit threshold clears it.
+  a threshold held for its dwell enters pressure, 60 s at every exit threshold clears it. Hard
+  faults count only while available memory is below `hard_faults_below_available_gib` (16): with
+  memory to spare they are file reads and page-ins after a shortage.
 - **Ladder:** on the heaviest unprotected tree, one step at a time with a 10 s cooldown:
   priority + memory priority, EcoQoS, cap (a cap job at 50 % CPU and commit + 25 %; a tree in
   its MyClean tree job has that job tightened instead), suspend (persisted in
   `governor_suspend` before it is applied, with an owner notification), kill (opt-in per
-  class). Steps 1-3 roll back when pressure clears; a suspend waits for the owner (Resume,
+  class). Build and test trees take the ladder first; another tree gets a step only when none
+  of them can. Cap and suspend apply only to the classes in `[ladder] cap` and `suspend` (build
+  and test): any other tree stops at EcoQoS, so a program the owner works in is never frozen.
+  Suspend and kill need a memory signal: CPU pressure alone stops at the cap.
+  Steps 1-3 roll back when pressure clears; a suspend waits for the owner (Resume,
   Kill, Allow once, Always allow, through the tray), a pause or the stop. Every step and
   rollback is a `governor_event` row and a `GovernorStep` entry in `action_log`.
 - **Game mode:** a game is on the owner's list, under a launcher library root, path-matched in

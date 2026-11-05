@@ -104,6 +104,7 @@ TEST_F(PressureTest, CommitAtNinetyPercentIsNotAbove) {
 
 TEST_F(PressureTest, SustainedHardFaultsEnterPressure) {
   PressureSample sample = calm();
+  sample.available = 12_GiB;  // below hard_faults_below_available, above the memory exit
   sample.hard_faults_per_second = 1500.0;
   for (int second = 0; second < 14; ++second) {
     EXPECT_EQ(next(sample).state, PressureState::normal);
@@ -175,8 +176,38 @@ TEST_F(PressureTest, MemoryMustRecoverToItsExitThreshold) {
   EXPECT_EQ(status().state, PressureState::pressure);
 }
 
+// Observed on the reference machine: after a memory hog exited, 76 GiB were available while
+// programs paged their memory back in at 13 000 hard faults/s; the governor stayed in pressure
+// and kept stepping. With memory to spare, hard faults are no shortage.
+TEST_F(PressureTest, HardFaultsWithMemoryToSpareAreNoPressure) {
+  PressureSample sample = calm();
+  sample.available = 16_GiB;
+  sample.hard_faults_per_second = 13000.0;
+  for (int second = 0; second < 120; ++second) {
+    EXPECT_EQ(next(sample).state, PressureState::normal);
+  }
+}
+
+TEST_F(PressureTest, HardFaultPressureClearsOnceMemoryIsFreeAgain) {
+  PressureSample faults = calm();
+  faults.available = 12_GiB;
+  faults.hard_faults_per_second = 1500.0;
+  for (int second = 0; second < 15; ++second) {
+    next(faults);
+  }
+  ASSERT_EQ(status().state, PressureState::pressure);
+  faults.available = 70_GiB;
+  faults.hard_faults_per_second = 13000.0;  // pages coming back in
+  EXPECT_TRUE(next(faults).clearing);
+  for (int second = 0; second < 60; ++second) {
+    next(faults);
+  }
+  EXPECT_EQ(status().state, PressureState::normal);
+}
+
 TEST_F(PressureTest, HardFaultExitIsHalfTheEntry) {
   PressureSample faults = calm();
+  faults.available = 12_GiB;
   faults.hard_faults_per_second = 1500.0;
   for (int second = 0; second < 15; ++second) {
     next(faults);

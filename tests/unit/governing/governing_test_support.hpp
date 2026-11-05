@@ -72,10 +72,14 @@ image = ["pytest.exe"]
   return parsed.value_or(rules::ClassSet{});
 }
 
-// The default policy in act mode.
+// The default policy in act mode, with every ladder step open to the default class too: the
+// tests drive a `default` tree (bigjob.exe) up the whole ladder.
 inline governor::GovernorPolicy act_policy() {
   governor::GovernorPolicy policy;
   policy.mode = governor::GovernorMode::act;
+  policy.ladder.cap = {rules::ProcessClass::build, rules::ProcessClass::test,
+                       rules::ProcessClass::normal};
+  policy.ladder.suspend = policy.ladder.cap;
   return policy;
 }
 

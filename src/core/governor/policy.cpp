@@ -202,7 +202,8 @@ void read_mode(const Fields& root, GovernorMode& mode) {
 void read_pressure(const Fields& root, PressurePolicy& policy) {
   if (const std::optional<Fields> fields = root.table("pressure")) {
     fields->only({"cpu_percent", "cpu_seconds", "available_gib", "commit_percent",
-                  "hard_faults_per_second", "hard_faults_seconds"});
+                  "hard_faults_per_second", "hard_faults_seconds",
+                  "hard_faults_below_available_gib"});
     read_percent(*fields, "cpu_percent", policy.cpu_enter_percent);
     read_duration(*fields, "cpu_seconds", max_seconds, policy.cpu_dwell);
     read_gib(*fields, "available_gib", policy.available_enter);
@@ -210,6 +211,7 @@ void read_pressure(const Fields& root, PressurePolicy& policy) {
     policy.hard_faults_enter =
         fields->number("hard_faults_per_second", 1.0, 1e9).value_or(policy.hard_faults_enter);
     read_duration(*fields, "hard_faults_seconds", max_seconds, policy.hard_faults_dwell);
+    read_gib(*fields, "hard_faults_below_available_gib", policy.hard_faults_below_available);
   }
   policy.hard_faults_exit = policy.hard_faults_enter / 2.0;
   const std::optional<Fields> fields = root.table("clear");
@@ -238,8 +240,31 @@ void check_hysteresis(const Fields& root, const PressurePolicy& policy) {
   if (policy.commit_exit_percent > policy.commit_enter_percent) {
     root.fail("clear.commit_percent", "must not be above pressure.commit_percent");
   }
+  if (policy.hard_faults_below_available < policy.available_exit) {
+    root.fail("pressure.hard_faults_below_available_gib", "must not be below clear.available_gib");
+  }
   if (policy.hard_faults_exit > policy.hard_faults_enter) {
     root.fail("clear.hard_faults_per_second", "must not be above pressure.hard_faults_per_second");
+  }
+}
+
+// A list of ladder classes: build, test or default, each once.
+void read_classes(const Fields& fields, std::string_view key,
+                  std::vector<rules::ProcessClass>& classes) {
+  const std::optional<std::vector<std::string>> names = fields.strings(key);
+  if (!names) {
+    return;
+  }
+  classes.clear();
+  for (const std::string& name : *names) {
+    const std::optional<rules::ProcessClass> parsed = rules::parse_process_class(name);
+    if (!parsed || (*parsed != rules::ProcessClass::build && *parsed != rules::ProcessClass::test &&
+                    *parsed != rules::ProcessClass::normal)) {
+      fields.fail(key, "must list only build, test or default, not '" + name + "'");
+    }
+    if (std::ranges::find(classes, *parsed) == classes.end()) {
+      classes.push_back(*parsed);
+    }
   }
 }
 
@@ -249,7 +274,8 @@ void read_ladder(const Fields& root, LadderPolicy& policy) {
     return;
   }
   fields->only({"cooldown_seconds", "cap_cpu_percent", "cap_commit_headroom_percent",
-                "cap_commit_min_headroom_mib", "resume_blocks_suspend_minutes", "kill"});
+                "cap_commit_min_headroom_mib", "resume_blocks_suspend_minutes", "cap", "suspend",
+                "kill"});
   read_duration(*fields, "cooldown_seconds", max_seconds, policy.cooldown);
   policy.cap_cpu_percent =
       fields->integer("cap_cpu_percent", 1, 100).value_or(policy.cap_cpu_percent);
@@ -261,20 +287,9 @@ void read_ladder(const Fields& root, LadderPolicy& policy) {
   }
   read_duration(*fields, "resume_blocks_suspend_minutes", max_minutes,
                 policy.resume_blocks_suspend);
-  if (const std::optional<std::vector<std::string>> kill = fields->strings("kill")) {
-    policy.kill.clear();
-    for (const std::string& name : *kill) {
-      const std::optional<rules::ProcessClass> parsed = rules::parse_process_class(name);
-      if (!parsed ||
-          (*parsed != rules::ProcessClass::build && *parsed != rules::ProcessClass::test &&
-           *parsed != rules::ProcessClass::normal)) {
-        fields->fail("kill", "must list only build, test or default, not '" + name + "'");
-      }
-      if (std::ranges::find(policy.kill, *parsed) == policy.kill.end()) {
-        policy.kill.push_back(*parsed);
-      }
-    }
-  }
+  read_classes(*fields, "cap", policy.cap);
+  read_classes(*fields, "suspend", policy.suspend);
+  read_classes(*fields, "kill", policy.kill);
 }
 
 void read_caps(const Fields& jobs, std::string_view name, rules::JobCaps& caps) {
@@ -335,6 +350,14 @@ std::string_view to_string(GovernorMode mode) {
 
 std::optional<GovernorMode> parse_governor_mode(std::string_view text) {
   return detail::enum_from_name<GovernorMode>(mode_names, text);
+}
+
+bool cap_enabled(const LadderPolicy& policy, rules::ProcessClass process_class) {
+  return std::ranges::find(policy.cap, process_class) != policy.cap.end();
+}
+
+bool suspend_enabled(const LadderPolicy& policy, rules::ProcessClass process_class) {
+  return std::ranges::find(policy.suspend, process_class) != policy.suspend.end();
 }
 
 bool kill_enabled(const LadderPolicy& policy, rules::ProcessClass process_class) {

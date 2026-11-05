@@ -24,7 +24,10 @@
 //   available_gib          = 8          # available memory below this (a number: 7.5 is fine)
 //   commit_percent         = 90         # commit charge above this share of the commit limit
 //   hard_faults_per_second = 1000       # hard faults per second above this ...
-//   hard_faults_seconds    = 15         # ... for this long
+//   hard_faults_seconds    = 15         # ... for this long ...
+//   hard_faults_below_available_gib = 16  # ... while available memory is below this (with
+//                                       # more, hard faults are file reads and page-ins, not
+//                                       # a shortage); not below clear.available_gib
 //
 //   [clear]                             # leaving it: every signal at its exit threshold ...
 //   cpu_percent            = 80         # at most
@@ -39,8 +42,10 @@
 //   cap_commit_headroom_percent   = 25  # step 3: commit cap = tree commit + this share ...
 //   cap_commit_min_headroom_mib   = 64  # ... but at least this much above it
 //   resume_blocks_suspend_minutes = 10  # after the owner's Resume, no new suspend this long
-//   kill                          = []  # classes whose suspended trees step 5 kills:
-//                                       # build, test, default
+//   cap     = ["build", "test"]         # classes that step 3 caps; other trees stop at EcoQoS
+//   suspend = ["build", "test"]         # classes that step 4 suspends; others stop at the cap
+//   kill                          = []  # classes whose suspended trees step 5 kills
+//                                       # (each list: build, test, default)
 //
 //   [game_mode]
 //   pressure_seconds  = 5               # replaces cpu_seconds and hard_faults_seconds
@@ -87,6 +92,9 @@ struct PressurePolicy {
   double commit_enter_percent = 90.0;
   double hard_faults_enter = 1000.0;
   std::chrono::seconds hard_faults_dwell{15};
+  // Hard faults are a signal only while available memory is below this: with memory to spare
+  // they are file reads and page-ins after a shortage, and acting on them only hurts programs.
+  Bytes hard_faults_below_available{16ULL << 30U};
 
   double cpu_exit_percent = 80.0;
   Bytes available_exit{10ULL << 30U};
@@ -105,6 +113,11 @@ struct LadderPolicy {
   int cap_commit_headroom_percent = 25;
   Bytes cap_commit_min_headroom{64ULL << 20U};
   std::chrono::minutes resume_blocks_suspend{10};
+  // Classes whose trees step 3 caps and step 4 suspends. A tree of another class stops at
+  // EcoQoS (not in `cap`) or at the cap (not in `suspend`): a program the owner works in is
+  // never frozen, and no commit cap makes its allocations fail.
+  std::vector<rules::ProcessClass> cap{rules::ProcessClass::build, rules::ProcessClass::test};
+  std::vector<rules::ProcessClass> suspend{rules::ProcessClass::build, rules::ProcessClass::test};
   std::vector<rules::ProcessClass> kill;  // empty: step 5 never kills
   std::chrono::minutes notification_interval{5};
 };
@@ -125,6 +138,10 @@ struct GovernorPolicy {
   OrphanPolicy orphans;
 };
 
+// Whether step 3 may cap a tree whose root is of `process_class`.
+[[nodiscard]] bool cap_enabled(const LadderPolicy& policy, rules::ProcessClass process_class);
+// Whether step 4 may suspend a tree whose root is of `process_class`.
+[[nodiscard]] bool suspend_enabled(const LadderPolicy& policy, rules::ProcessClass process_class);
 // Whether step 5 may kill a suspended tree whose root is of `process_class`.
 [[nodiscard]] bool kill_enabled(const LadderPolicy& policy, rules::ProcessClass process_class);
 

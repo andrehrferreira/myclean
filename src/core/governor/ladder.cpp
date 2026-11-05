@@ -42,6 +42,12 @@ bool memory_pressure(const std::vector<Reason>& reasons) {
          has(reasons, Reason::hard_faults);
 }
 
+// Build and test trees are the work the governor exists to hold back; another tree (a program the
+// owner works in) takes a step only when no build or test tree can.
+bool deferrable(rules::ProcessClass process_class) {
+  return process_class == rules::ProcessClass::build || process_class == rules::ProcessClass::test;
+}
+
 Reason primary_reason(const std::vector<Reason>& reasons) {
   for (const Reason reason : {Reason::commit, Reason::available_memory, Reason::hard_faults}) {
     if (has(reasons, reason)) {
@@ -214,16 +220,21 @@ void LadderEngine::escalate(const LadderInput& input, std::vector<Command>& out)
     }
     const auto state = trees_.find(forest_.processes[tree.root].key);
     const std::optional<Step> step =
-        next_step(tree, state == trees_.end() ? nullptr : &state->second, input.now);
+        next_step(tree, state == trees_.end() ? nullptr : &state->second, input.now, by_commit);
     if (!step) {
       continue;
     }
-    const bool heavier = chosen == nullptr ||
-                         (by_commit ? tree.private_bytes > chosen->private_bytes
-                                    : tree.cpu_percent > chosen->cpu_percent) ||
-                         ((by_commit ? tree.private_bytes == chosen->private_bytes
-                                     : tree.cpu_percent == chosen->cpu_percent) &&
-                          forest_.processes[tree.root].key < forest_.processes[chosen->root].key);
+    const bool first = deferrable(forest_.processes[tree.root].process_class);
+    const bool chosen_first =
+        chosen != nullptr && deferrable(forest_.processes[chosen->root].process_class);
+    const bool heavier =
+        chosen == nullptr || (first && !chosen_first) ||
+        (first == chosen_first &&
+         ((by_commit ? tree.private_bytes > chosen->private_bytes
+                     : tree.cpu_percent > chosen->cpu_percent) ||
+          ((by_commit ? tree.private_bytes == chosen->private_bytes
+                      : tree.cpu_percent == chosen->cpu_percent) &&
+           forest_.processes[tree.root].key < forest_.processes[chosen->root].key)));
     if (heavier) {
       chosen = &tree;
       chosen_step = step;
@@ -241,8 +252,8 @@ void LadderEngine::escalate(const LadderInput& input, std::vector<Command>& out)
   apply(*chosen, *chosen_step, primary_reason(input.pressure.reasons), input.now, out);
 }
 
-std::optional<Step> LadderEngine::next_step(const Tree& tree, const TreeState* state,
-                                            MonoTime now) const {
+std::optional<Step> LadderEngine::next_step(const Tree& tree, const TreeState* state, MonoTime now,
+                                            bool memory) const {
   if (state == nullptr) {
     return Step::priority;
   }
@@ -250,13 +261,21 @@ std::optional<Step> LadderEngine::next_step(const Tree& tree, const TreeState* s
     return std::nullopt;
   }
   if (any_suspended(state->marks)) {
-    return kill_enabled(policy_, forest_.processes[tree.root].process_class)
+    return memory && kill_enabled(policy_, forest_.processes[tree.root].process_class)
                ? std::optional{Step::kill}
                : std::nullopt;
   }
+  const rules::ProcessClass process_class = forest_.processes[tree.root].process_class;
   const int level = level_of(state->marks);
+  if (level + 1 == cap_level && !cap_enabled(policy_, process_class)) {
+    return std::nullopt;
+  }
   if (level < cap_level) {
     return throttle_step(level + 1);
+  }
+  // Priority, EcoQoS and the cap settle a CPU shortage; only a memory shortage suspends.
+  if (!memory || !suspend_enabled(policy_, process_class)) {
+    return std::nullopt;
   }
   const bool blocked = std::ranges::any_of(tree.members, [&](std::size_t member) {
     const auto until = no_suspend_until_.find(forest_.processes[member].key);

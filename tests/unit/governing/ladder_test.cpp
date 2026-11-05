@@ -42,6 +42,20 @@ void cpu_pressure(Machine& machine) {
   machine.metrics()[std::string(telemetry::metric::cpu_utility)] = 95.0;
 }
 
+constexpr double gib = 1024.0 * 1024.0 * 1024.0;
+
+// Memory pressure as well: commit at 140 GiB of 150 GiB. A suspend or kill needs it.
+void memory_pressure(Machine& machine) {
+  cpu_pressure(machine);
+  machine.metrics()[std::string(telemetry::metric::memory_commit)] = 140.0 * gib;
+}
+
+// Every signal back inside its exit threshold.
+void calm(Machine& machine) {
+  machine.metrics()[std::string(telemetry::metric::cpu_utility)] = 30.0;
+  machine.metrics()[std::string(telemetry::metric::memory_commit)] = 40.0 * gib;
+}
+
 std::optional<GovernorEvent> find_event(Machine& machine, EventKind kind,
                                         std::optional<governor::Step> step) {
   for (const GovernorEvent& event : machine.events()) {
@@ -102,8 +116,12 @@ TEST(GovernorLadder, StepsAreAppliedWithCooldownAndRecorded) {
   EXPECT_EQ(machine.os().job_limits(caps[0].ref).commit_cap, Bytes{(3_GiB).count() / 4 * 5});
   EXPECT_EQ(machine.process(worker).jobs, machine.process(bigjob).jobs);
 
-  // Step 4: suspend, persisted first, with a notification for the owner.
-  machine.seconds(10);
+  // CPU pressure alone stops at the cap; with a memory shortage, step 4: suspend, persisted
+  // first, with a notification for the owner.
+  machine.seconds(30);
+  EXPECT_EQ(machine.process(bigjob).suspend_count, 0U);
+  memory_pressure(machine);
+  machine.second();
   EXPECT_EQ(machine.process(bigjob).suspend_count, 1U);
   EXPECT_EQ(machine.process(worker).suspend_count, 1U);
   EXPECT_EQ(machine.count("SELECT SUM(count) FROM governor_suspend"), 2);
@@ -143,10 +161,10 @@ TEST(GovernorLadder, ClearedPressureRollsBackButKeepsSuspends) {
             1);
 
   // A suspended tree is not resumed when pressure clears.
-  cpu_pressure(machine);
+  memory_pressure(machine);
   machine.seconds(45);
   EXPECT_EQ(machine.process(bigjob).suspend_count, 1U);
-  machine.metrics()[std::string(telemetry::metric::cpu_utility)] = 30.0;
+  calm(machine);
   machine.seconds(61);
   EXPECT_EQ(machine.process(bigjob).suspend_count, 1U);
   EXPECT_EQ(machine.count("SELECT SUM(count) FROM governor_suspend"), 1);
@@ -224,8 +242,9 @@ TEST(GovernorLadder, StopLiftsEveryCapAndResumesEverySuspend) {
   const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
   const os::JobRef tree = jobs_of(machine.store(), JobRole::tree_job).at(0).ref;
   const os::JobRef parent = jobs_of(machine.store(), JobRole::class_job).at(0).ref;
-  cpu_pressure(machine);
-  machine.seconds(45);
+  memory_pressure(machine);
+  machine.seconds(70);  // cargo first (a build tree), then bigjob
+  ASSERT_EQ(machine.process(cargo).suspend_count, 1U);
   ASSERT_EQ(machine.process(bigjob).suspend_count, 1U);
   const os::JobRef cap = jobs_of(machine.store(), JobRole::cap_job).at(0).ref;
 
@@ -238,11 +257,12 @@ TEST(GovernorLadder, StopLiftsEveryCapAndResumesEverySuspend) {
     EXPECT_FALSE(machine.os().job_exists(job));
   }
   EXPECT_TRUE(machine.process(cargo).alive);
+  EXPECT_EQ(machine.process(cargo).suspend_count, 0U);
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_job"), 0);
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_suspend"), 0);
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_event WHERE kind = 'resume' AND "
                           "reason = 'stop'"),
-            1);
+            2);
   machine.governor().stop();  // idempotent
 }
 
@@ -254,8 +274,8 @@ TEST(GovernorLadder, ObserveModeRecordsDecisionsAndAppliesNothing) {
   const ProcessKey cargo = machine.spawn(100, cargo_path);
   const ProcessKey rustc = machine.spawn(200, R"(C:\rust\rustc.exe)", cargo);
   const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
-  cpu_pressure(machine);
-  machine.seconds(60);
+  memory_pressure(machine);
+  machine.seconds(70);  // cargo's tree first (a build tree), then bigjob's
 
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_job"), 0);
   EXPECT_TRUE(machine.process(cargo).jobs.empty());
@@ -290,7 +310,7 @@ TEST(GovernorLadder, SwitchingToObserveFailsOpen) {
   machine.spawn(100, cargo_path);
   const os::JobRef tree = jobs_of(machine.store(), JobRole::tree_job).at(0).ref;
   cpu_pressure(machine);
-  machine.seconds(15);
+  machine.seconds(40);  // cargo's tree: priority, EcoQoS, cap; then bigjob's first step
   ASSERT_EQ(machine.process(bigjob).priority, os::PriorityClass::below_normal);
 
   machine.policy().mode = governor::GovernorMode::observe;
@@ -354,7 +374,7 @@ TEST(GovernorLadder, PauseRollsBackResumesAndExpires) {
   Machine machine;
   machine.start();
   const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
-  cpu_pressure(machine);
+  memory_pressure(machine);
   machine.seconds(45);
   ASSERT_EQ(machine.process(bigjob).suspend_count, 1U);
 
@@ -389,7 +409,7 @@ TEST(GovernorLadder, OwnerResumeResumesOnlyWhatTheGovernorSuspended) {
   Machine machine;
   machine.start();
   const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
-  cpu_pressure(machine);
+  memory_pressure(machine);
   machine.seconds(45);
   // Someone else suspends it once more: the owner's Resume undoes only the governor's suspend.
   ASSERT_TRUE(machine.os().suspend(os::ProcessKey{.pid = bigjob.pid, .created = bigjob.created}));
@@ -407,13 +427,13 @@ TEST(GovernorLadder, KillWhenEnabledForTheClass) {
   machine.policy().ladder.kill = {rules::ProcessClass::normal};
   machine.start();
   const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
-  cpu_pressure(machine);
+  memory_pressure(machine);
   machine.seconds(55);
   EXPECT_FALSE(machine.process(bigjob).alive);
   EXPECT_EQ(machine.process(bigjob).exit_code, kill_exit_code);
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_suspend"), 0);
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM action_log WHERE outcome = 'kill' AND reason = "
-                          "'cpu' AND metrics LIKE 'cpu=95.0%'"),
+                          "'commit' AND metrics LIKE 'cpu=95.0%'"),
             1);
 }
 

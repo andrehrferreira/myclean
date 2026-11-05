@@ -89,7 +89,7 @@ When the governor builds process trees
 Then PID 4120 is not attached to the exited parent's tree
 
 ### Requirement: Pressure Detection
-The governor MUST evaluate pressure once per second from total CPU, available memory, commit charge and hard faults per second, and SHALL enter the pressure state when total CPU stays above 90 % for 15 s, available memory falls below 8 GB, commit charge exceeds 90 % of the commit limit, or hard faults per second stay above the configured threshold (default 1000) for 15 s. Thresholds and dwell times SHALL be read from `data/governor.toml`; a malformed file MUST be rejected whole, keeping the previous policy.
+The governor MUST evaluate pressure once per second from total CPU, available memory, commit charge and hard faults per second, and SHALL enter the pressure state when total CPU stays above 90 % for 15 s, available memory falls below 8 GB, commit charge exceeds 90 % of the commit limit, or hard faults per second stay above the configured threshold (default 1000) for 15 s while available memory is below `hard_faults_below_available_gib` (default 16 GB; with more memory available, hard faults are file reads and page-ins, not a shortage). Thresholds and dwell times SHALL be read from `data/governor.toml`; a malformed file MUST be rejected whole, keeping the previous policy.
 
 #### Scenario: Sustained CPU enters pressure
 Given total CPU above 90 % for 14 consecutive seconds
@@ -112,7 +112,7 @@ When the sample is evaluated
 Then the governor enters the pressure state with reason `commit`
 
 ### Requirement: Pressure Clear Hysteresis
-The governor MUST leave the pressure state only after every pressure signal has stayed below its exit threshold for 60 continuous seconds. The default exit thresholds SHALL be total CPU at most 80 %, available memory at least 10 GB, commit charge at most 85 % of the commit limit and hard faults at most half their entry threshold.
+The governor MUST leave the pressure state only after every pressure signal has stayed below its exit threshold for 60 continuous seconds. The default exit thresholds SHALL be total CPU at most 80 %, available memory at least 10 GB, commit charge at most 85 % of the commit limit and hard faults at most half their entry threshold (or available memory at least `hard_faults_below_available_gib`).
 
 #### Scenario: Pressure clears after 60 s
 Given the governor is in the pressure state
@@ -125,7 +125,13 @@ When CPU rises above 90 % again for 15 s
 Then the pressure state does not clear and the 60 s clear timer restarts once all signals are below their exit thresholds again
 
 ### Requirement: Escalation Ladder
-While under pressure the governor MUST act on the heaviest non-protected process tree (CPU and memory summed over a root and its descendants), applying one step at a time with at least 10 s between steps on the same tree: (1) priority class `BELOW_NORMAL` and memory priority `MEMORY_PRIORITY_LOW`; (2) EcoQoS execution-speed throttling; (3) assignment to a cap job with a 50 % CPU hard cap and a commit cap at the tree's current commit plus 25 % (never less than 64 MB above it; spike X4 §5.3); (4) suspend of the whole tree with an owner notification; (5) kill, only when kill is enabled for the tree's class. Kill SHALL be disabled for every class by default.
+While under pressure the governor MUST act on the heaviest non-protected process tree (CPU and memory summed over a root and its descendants), applying one step at a time with at least 10 s between steps on the same tree: (1) priority class `BELOW_NORMAL` and memory priority `MEMORY_PRIORITY_LOW`; (2) EcoQoS execution-speed throttling; (3) assignment to a cap job with a 50 % CPU hard cap and a commit cap at the tree's current commit plus 25 % (never less than 64 MB above it; spike X4 §5.3); (4) suspend of the whole tree with an owner notification; (5) kill, only when kill is enabled for the tree's class. Kill SHALL be disabled for every class by default. Among the trees that can take a step, a `build` or `test` tree SHALL be chosen before any other. Steps 4 and 5 SHALL require a memory signal (commit, available memory or hard faults) among the pressure reasons: CPU pressure alone stops at the cap. Step 3 SHALL apply only to classes listed in `cap` and step 4 only to classes listed in `suspend`, both `build` and `test` by default: a tree of another class stops at EcoQoS, so a program the owner works in is never frozen and never has a commit cap that could make its allocations fail.
+
+#### Scenario: Programs the owner works in stop at EcoQoS
+Given default configuration and a `default`-class tree T under persistent pressure
+When T has received priority and EcoQoS
+Then T receives no cap job and is never suspended
+And a `build`-class tree under the same pressure is still capped and then suspended
 
 #### Scenario: Ladder escalates with cooldown
 Given pressure persists and tree T is the heaviest non-protected tree

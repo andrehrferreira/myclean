@@ -7,13 +7,16 @@
 #   observe  every decision (ladder steps, rollbacks, proactive build/test jobs, owner choices) is
 #            recorded in governor_event with detail "observe"; no process, priority or job object
 #            is changed and no job is created.
-#   act      every decision is applied, and each change also goes to action_log. The owner chose
-#            act on 2026-11-04, once antivirus, WSL, WMI, database servers and remote access were
-#            classed system (never throttled, suspended or killed).
+#   act      every decision is applied, and each change also goes to action_log.
+# Back to observe on 2026-11-05: in act mode the ladder froze the owner's programs (VS Code,
+# Chrome, Substance Painter, Claude) and capped Discord, Teams and ChatGPT. The ladder was fixed
+# (cap and suspend only for build and test trees, which go first; suspend only on a memory
+# shortage; hard faults only while memory is short); act comes back once the recorded decisions
+# show it spares the owner's programs and the owner approves.
 # Crash recovery and the clean stop lift MyClean's own caps and resume its own suspends in
 # either mode.
 [governor]
-mode = "act"
+mode = "observe"
 
 # Entering the pressure state: any one signal is enough.
 [pressure]
@@ -22,7 +25,9 @@ cpu_seconds = 15               # ... for this many seconds in a row
 available_gib = 8              # available memory below this many GiB
 commit_percent = 90            # commit charge above this share of the commit limit
 hard_faults_per_second = 1000  # hard page faults per second above this ...
-hard_faults_seconds = 15       # ... for this many seconds in a row
+hard_faults_seconds = 15       # ... for this many seconds in a row ...
+hard_faults_below_available_gib = 16  # ... while available memory is below this many GiB (with
+                               # more, hard faults are file reads and page-ins, not a shortage)
 
 # Leaving it: every signal at its exit threshold for `seconds` without a break; a signal past
 # its exit threshold restarts the count.
@@ -35,14 +40,18 @@ seconds = 60
 
 # The escalation ladder on the heaviest unprotected process tree: (1) below-normal priority and
 # low memory priority, (2) EcoQoS, (3) a cap job, (4) suspend with an owner notification,
-# (5) kill, only for the classes listed in `kill`.
+# (5) kill. Each class list holds build, test or default: a tree of a class not in `cap` stops
+# at EcoQoS, one not in `suspend` stops at the cap, and only classes in `kill` are ever killed.
+# Programs the owner works in (default) are never capped or frozen.
 [ladder]
 cooldown_seconds = 10                # at least this long between two steps on one tree
 cap_cpu_percent = 50                 # step 3: CPU hard cap of the cap job
 cap_commit_headroom_percent = 25     # step 3: commit cap = the tree's commit plus this share,
 cap_commit_min_headroom_mib = 64     #   but at least this many MiB above it
 resume_blocks_suspend_minutes = 10   # after the owner's Resume, no new suspend of that tree
-kill = []                            # e.g. ["default"]; allowed: build, test, default
+cap = ["build", "test"]              # step 3: classes that get a cap job
+suspend = ["build", "test"]          # step 4: classes that may be suspended
+kill = []                            # step 5: classes that may be killed, e.g. ["build"]
 
 # While a game runs (or the tray's override is "on").
 [game_mode]

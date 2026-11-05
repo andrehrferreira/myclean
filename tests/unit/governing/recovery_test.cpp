@@ -130,7 +130,10 @@ TEST(GovernorRecovery, NoCapOrSuspendSurvivesACrashAndRestart) {
   const ProcessKey cargo = machine.spawn(100, cargo_path);
   const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
   machine.metrics()[std::string(telemetry::metric::cpu_utility)] = 95.0;
-  machine.seconds(45);
+  // A memory shortage (commit at 140 GiB of 150 GiB): only then does the ladder suspend.
+  machine.metrics()[std::string(telemetry::metric::memory_commit)] = 140.0 * 1024 * 1024 * 1024;
+  machine.seconds(70);  // cargo's tree first (a build tree), then bigjob's
+  ASSERT_EQ(machine.process(cargo).suspend_count, 1U);
   ASSERT_EQ(machine.process(bigjob).suspend_count, 1U);
   const os::JobRef cap = jobs_of(machine.store(), JobRole::cap_job).at(0).ref;
   const os::JobRef tree = jobs_of(machine.store(), JobRole::tree_job).at(0).ref;
@@ -139,6 +142,7 @@ TEST(GovernorRecovery, NoCapOrSuspendSurvivesACrashAndRestart) {
   ASSERT_EQ(machine.os().job_limits(cap).cpu_cap_percent, 50.0);
   machine.start();
   EXPECT_EQ(machine.process(bigjob).suspend_count, 0U);
+  EXPECT_EQ(machine.process(cargo).suspend_count, 0U);
   EXPECT_EQ(machine.os().job_limits(cap), os::JobLimits{});
   EXPECT_FALSE(machine.os().job_exists(cap));
   EXPECT_EQ(machine.os().job_limits(tree).cpu_cap_percent, 75.0);  // the policy calls for it

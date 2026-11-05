@@ -122,7 +122,7 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     Ignore. Patterns set to always are ended as they appear; every end is recorded
     (`governor.orphans`, `[orphans]` in `data/governor.toml`, table
     `governor_orphan_rule`).
-  - The governor ships in `act` mode, and a process in session 0 (a service) is always of
+  - A process in session 0 (a service) is always of
     class `system`: in observe mode the ladder had chosen `vmms.exe`, `NVDisplay.Container.exe`
     and vendor services. Security suites, WSL/Hyper-V, WMI hosts, database servers and remote
     access tools are listed as `system` in the process classes (pack 1.1.0).
@@ -130,6 +130,16 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The governor no longer freezes programs the owner works in: a stress test on the reference
+  machine had it suspend VS Code, Chrome, Substance Painter and Claude, chosen by size while
+  a memory hog elsewhere caused the pressure. Cap jobs and suspends now apply only to the
+  classes listed in `[ladder] cap` and `suspend` (build and test by default); other trees stop
+  at EcoQoS. Hard faults count as pressure only while available memory is below
+  `[pressure] hard_faults_below_available_gib` (16): with 76 GiB free, page-ins after the hog
+  exited had kept the governor in pressure and stepping. Build and test trees take the ladder
+  first (a build had Discord, Teams and ChatGPT capped, each heavier than one compiler), and
+  only a memory shortage suspends or kills. The governor ships in observe mode again until its
+  recorded decisions are approved.
 - The WOF test helper passed the wrong structure and compressed with LZX instead of
   XPRESS4K.
 - `myclean metrics query --hours` measured its window from the system clock instead of

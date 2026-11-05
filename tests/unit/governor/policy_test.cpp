@@ -42,6 +42,7 @@ TEST(GovernorPolicy, DefaultsAreTheSpecValues) {
   EXPECT_EQ(policy.pressure.commit_enter_percent, 90.0);
   EXPECT_EQ(policy.pressure.hard_faults_enter, 1000.0);
   EXPECT_EQ(policy.pressure.hard_faults_dwell, seconds{15});
+  EXPECT_EQ(policy.pressure.hard_faults_below_available, 16_GiB);
   EXPECT_EQ(policy.pressure.cpu_exit_percent, 80.0);
   EXPECT_EQ(policy.pressure.available_exit, 10_GiB);
   EXPECT_EQ(policy.pressure.commit_exit_percent, 85.0);
@@ -67,6 +68,13 @@ TEST(GovernorPolicy, DefaultsAreTheSpecValues) {
        {rules::ProcessClass::build, rules::ProcessClass::test, rules::ProcessClass::normal}) {
     EXPECT_FALSE(kill_enabled(policy.ladder, process_class));
   }
+  for (const rules::ProcessClass process_class :
+       {rules::ProcessClass::build, rules::ProcessClass::test}) {
+    EXPECT_TRUE(cap_enabled(policy.ladder, process_class));
+    EXPECT_TRUE(suspend_enabled(policy.ladder, process_class));
+  }
+  EXPECT_FALSE(cap_enabled(policy.ladder, rules::ProcessClass::normal));
+  EXPECT_FALSE(suspend_enabled(policy.ladder, rules::ProcessClass::normal));
 }
 
 TEST(GovernorPolicy, ShippedFileHoldsTheDefaults) {
@@ -74,14 +82,16 @@ TEST(GovernorPolicy, ShippedFileHoldsTheDefaults) {
       load_policy(rules::DiskDataFiles{}, std::filesystem::path{MYCLEAN_DATA_DIR});
   ASSERT_TRUE(loaded.has_value()) << loaded.error().message;
   const GovernorPolicy defaults;
-  // The owner's choice (2026-11-04); without the key the governor only observes.
-  EXPECT_EQ(loaded->mode, GovernorMode::act);
+  // Observe until the fixed ladder's recorded decisions are approved (2026-11-05).
+  EXPECT_EQ(loaded->mode, GovernorMode::observe);
   EXPECT_EQ(loaded->pressure.cpu_enter_percent, defaults.pressure.cpu_enter_percent);
   EXPECT_EQ(loaded->pressure.cpu_dwell, defaults.pressure.cpu_dwell);
   EXPECT_EQ(loaded->pressure.available_enter, defaults.pressure.available_enter);
   EXPECT_EQ(loaded->pressure.commit_enter_percent, defaults.pressure.commit_enter_percent);
   EXPECT_EQ(loaded->pressure.hard_faults_enter, defaults.pressure.hard_faults_enter);
   EXPECT_EQ(loaded->pressure.hard_faults_dwell, defaults.pressure.hard_faults_dwell);
+  EXPECT_EQ(loaded->pressure.hard_faults_below_available,
+            defaults.pressure.hard_faults_below_available);
   EXPECT_EQ(loaded->pressure.cpu_exit_percent, defaults.pressure.cpu_exit_percent);
   EXPECT_EQ(loaded->pressure.available_exit, defaults.pressure.available_exit);
   EXPECT_EQ(loaded->pressure.commit_exit_percent, defaults.pressure.commit_exit_percent);
@@ -95,6 +105,8 @@ TEST(GovernorPolicy, ShippedFileHoldsTheDefaults) {
             defaults.ladder.cap_commit_headroom_percent);
   EXPECT_EQ(loaded->ladder.cap_commit_min_headroom, defaults.ladder.cap_commit_min_headroom);
   EXPECT_EQ(loaded->ladder.resume_blocks_suspend, defaults.ladder.resume_blocks_suspend);
+  EXPECT_EQ(loaded->ladder.cap, defaults.ladder.cap);
+  EXPECT_EQ(loaded->ladder.suspend, defaults.ladder.suspend);
   EXPECT_EQ(loaded->ladder.kill, defaults.ladder.kill);
   EXPECT_EQ(loaded->ladder.notification_interval, defaults.ladder.notification_interval);
   EXPECT_EQ(loaded->jobs.build.cpu_percent, defaults.jobs.build.cpu_percent);
@@ -170,6 +182,7 @@ available_gib = 7.5
 commit_percent = 92
 hard_faults_per_second = 2000
 hard_faults_seconds = 30
+hard_faults_below_available_gib = 20
 [clear]
 cpu_percent = 70
 available_gib = 12
@@ -181,6 +194,8 @@ cap_cpu_percent = 30
 cap_commit_headroom_percent = 50
 cap_commit_min_headroom_mib = 128
 resume_blocks_suspend_minutes = 15
+cap = ["build"]
+suspend = []
 kill = ["default", "build"]
 [game_mode]
 pressure_seconds = 3
@@ -205,6 +220,7 @@ interval_minutes = 10
   EXPECT_EQ(policy->pressure.commit_enter_percent, 92.0);
   EXPECT_EQ(policy->pressure.hard_faults_enter, 2000.0);
   EXPECT_EQ(policy->pressure.hard_faults_dwell, seconds{30});
+  EXPECT_EQ(policy->pressure.hard_faults_below_available, 20_GiB);
   EXPECT_EQ(policy->pressure.cpu_exit_percent, 70.0);
   EXPECT_EQ(policy->pressure.available_exit, 12_GiB);
   EXPECT_EQ(policy->pressure.commit_exit_percent, 80.0);
@@ -220,6 +236,9 @@ interval_minutes = 10
   EXPECT_TRUE(kill_enabled(policy->ladder, rules::ProcessClass::normal));
   EXPECT_TRUE(kill_enabled(policy->ladder, rules::ProcessClass::build));
   EXPECT_FALSE(kill_enabled(policy->ladder, rules::ProcessClass::test));
+  EXPECT_TRUE(cap_enabled(policy->ladder, rules::ProcessClass::build));
+  EXPECT_FALSE(cap_enabled(policy->ladder, rules::ProcessClass::test));
+  EXPECT_TRUE(policy->ladder.suspend.empty());
   EXPECT_EQ(policy->jobs.game_build_cpu_percent, 25);
   EXPECT_EQ(policy->jobs.notification_percent, 90);
   EXPECT_EQ(policy->jobs.rearm_percent, 60);
@@ -251,6 +270,9 @@ TEST(GovernorPolicy, RejectsInvalidValues) {
   EXPECT_NE(error_of("[ladder]\ncooldown_seconds = 2.5\n").find("whole number"), std::string::npos);
   EXPECT_NE(error_of("[ladder]\nkill = [\"system\"]\n").find("'ladder.kill'"), std::string::npos);
   EXPECT_NE(error_of("[ladder]\nkill = [\"games\"]\n").find("'ladder.kill'"), std::string::npos);
+  EXPECT_NE(error_of("[ladder]\ncap = [\"game\"]\n").find("'ladder.cap'"), std::string::npos);
+  EXPECT_NE(error_of("[ladder]\nsuspend = [\"allow\"]\n").find("'ladder.suspend'"),
+            std::string::npos);
   EXPECT_NE(error_of("[ladder]\ncap_commit_min_headroom_mib = 16\n")
                 .find("'ladder.cap_commit_min_headroom_mib'"),
             std::string::npos);
@@ -274,6 +296,9 @@ TEST(GovernorPolicy, ExitThresholdsMustNotBeStricterThanEntry) {
   EXPECT_NE(
       error_of("[clear]\nhard_faults_per_second = 5000\n").find("'clear.hard_faults_per_second'"),
       std::string::npos);
+  EXPECT_NE(error_of("[pressure]\nhard_faults_below_available_gib = 9\n")
+                .find("'pressure.hard_faults_below_available_gib'"),
+            std::string::npos);
 }
 
 }  // namespace

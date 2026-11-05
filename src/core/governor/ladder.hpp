@@ -53,14 +53,17 @@ enum class OwnerChoice { resume, kill, allow_once, always_allow };
 //     suspended processes stay suspended until the owner acts.
 //  3. A process that joined a throttled tree gets the tree's steps 1-3 (reason joined_tree); it
 //     is not suspended, since the owner's notification was about the tree as it was.
-//  4. Under pressure (not clearing, not paused), at most one step on one tree: the heaviest tree
-//     that can take a step, by summed commit charge when a memory signal (available_memory,
+//  4. Under pressure (not clearing, not paused), at most one step on one tree: among the trees
+//     that can take a step, a build or test tree first (another tree only when none can), and
+//     among those the heaviest, by summed commit charge when a memory signal (available_memory,
 //     commit, hard_faults) is among the reasons, by summed CPU otherwise (ties: lowest root
 //     key). The reason recorded is the first of commit, available_memory, hard_faults, cpu
 //     among the pressure reasons. A tree cannot take a step when it is exempt (Allow once or
-//     Always allow on its root), killed, suspended without kill enabled for its root's class,
-//     or at the cap-job step while its root is within the Resume block. When the chosen tree
-//     had a step less than the cooldown ago (game mode: game_cooldown), nothing happens this
+//     Always allow on its root), killed, at EcoQoS without cap enabled for its root's class, at
+//     the cap without suspend enabled for it or without a memory signal among the reasons,
+//     suspended without kill enabled for its class or without a memory signal, or at the
+//     cap-job step while its root is within the Resume block. When the chosen
+//     tree had a step less than the cooldown ago (game mode: game_cooldown), nothing happens this
 //     second: the ladder waits for it rather than moving on.
 // Steps: priority, ecoqos and cap_job each with one apply_step (cap_job with its limits); suspend
 // as persist_suspend then apply_step; kill only for a class in LadderPolicy::kill. Every step is
@@ -123,8 +126,9 @@ class LadderEngine {
   void roll_back_all(Reason reason, const Actor& actor, bool resume, std::vector<Command>& out);
   void catch_up(std::vector<Command>& out);
   void escalate(const LadderInput& input, std::vector<Command>& out);
+  // `memory`: a memory signal is among the pressure reasons (suspend and kill need one).
   [[nodiscard]] std::optional<Step> next_step(const Tree& tree, const TreeState* state,
-                                              MonoTime now) const;
+                                              MonoTime now, bool memory) const;
   void apply(const Tree& tree, Step step, Reason reason, MonoTime now, std::vector<Command>& out);
   void release(const ProcessKey& root, const TreeState& state, Reason reason, const Actor& actor,
                bool resume, std::vector<Command>& out) const;
