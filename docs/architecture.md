@@ -180,15 +180,16 @@ Specification: `.rulebook/tasks/phase3_resource-governor/specs/governor/spec.md`
 pure functions in `core/governor` (snapshot in, commands out); `core/governing` applies them in
 the service (`svc::GovernorComponent`), over the `core/os` job and process interfaces.
 
-- **Mode:** `[governor] mode` in `data/governor.toml`. `observe` (the pilot's default) records
-  every decision in `governor_event` with detail `observe` and changes nothing: no priority,
-  EcoQoS, suspend or kill, and no proactive job is created. `act` applies every decision and
-  also writes each change to `action_log`. Crash recovery and the clean stop lift MyClean's own
+- **Mode:** `[governor] mode` in `data/governor.toml` (shipped as `act` since the owner's choice
+  of 2026-11-04). `observe` records every decision in `governor_event` with detail `observe`
+  and changes nothing: no priority, EcoQoS, suspend or kill, and no proactive job is created.
+  `act` applies every decision and also writes each change to `action_log`. Crash recovery and the clean stop lift MyClean's own
   caps and resume its own suspends in either mode; a reload that switches from `act` to
   `observe` fails open first.
 - **Classification:** every process start (ETW, through the events component's router) is
   matched against the classes of the loaded knowledge packs (image, command-line regex, path
-  root, signer); the first match wins. A detected game is `game`; the owner's Always-allow
+  root, signer); the first match wins. A process in session 0 (a service) is always `system`,
+  whatever matched, so the ladder never acts on a service. A detected game is `game`; the owner's Always-allow
   images are `allow`. Policy and classes are reloaded every 5 minutes; a rejected file or pack
   keeps the previous ones.
 - **Proactive jobs, one per tree:** a `build`/`test` process whose parent is not in a MyClean
@@ -223,6 +224,13 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   every second; GPU engines are sampled only while there is a candidate). Game mode (or the
   tray's override) lowers every build job's CPU cap to 40 % and shortens dwell and cooldown to
   5 s; a game and its descendants are never acted on.
+- **Orphaned polling loops:** every 10 s the process table is searched for shell, interpreter
+  and polling-tool trees whose creator is gone (PID reuse checked), at least 10 minutes old,
+  grouped by normalized command line. A pattern with 3+ live trees is offered in the tray (End
+  now, Always end this pattern, Ignore; `governor.orphans`); rules persist in
+  `governor_orphan_rule`, and later orphans of an "always" pattern are ended without asking.
+  Protected classes, the foreground process and MyClean are never ended; each end is a kill
+  event with reason `orphaned_loop`.
 - **Fail-open:** on a clean stop the service rolls back every step, resumes every suspend,
   lifts and releases every job and resumes every persisted suspend as recorded, within the
   30 s stop budget. A crash leaves jobs (permanent) and suspend records behind: the restarted

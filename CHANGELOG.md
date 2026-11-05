@@ -122,6 +122,10 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     Ignore. Patterns set to always are ended as they appear; every end is recorded
     (`governor.orphans`, `[orphans]` in `data/governor.toml`, table
     `governor_orphan_rule`).
+  - The governor ships in `act` mode, and a process in session 0 (a service) is always of
+    class `system`: in observe mode the ladder had chosen `vmms.exe`, `NVDisplay.Container.exe`
+    and vendor services. Security suites, WSL/Hyper-V, WMI hosts, database servers and remote
+    access tools are listed as `system` in the process classes (pack 1.1.0).
 - Spike notes X1–X8 under `docs/spikes/`.
 
 ### Fixed
