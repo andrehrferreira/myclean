@@ -211,4 +211,38 @@ ORDER BY SUM(sent) + SUM(received) DESC)sql");
   return totals;
 }
 
+Result<std::vector<StoredStart>> process_starts(store::Store& store, WallTime from, WallTime to) {
+  std::vector<StoredStart> starts;
+  Result<void> read = store.read([&](store::Database& db) -> Result<void> {
+    Result<store::Statement> statement = db.prepare(R"sql(
+SELECT pid, time, parent_pid, parent_time, image FROM proc_start
+WHERE time >= ?1 AND time < ?2 ORDER BY time)sql");
+    if (!statement) {
+      return tl::unexpected(statement.error());
+    }
+    statement->bind(1, store::to_unix_seconds(from)).bind(2, store::to_unix_seconds(to));
+    for (;;) {
+      Result<bool> row = statement->step();
+      if (!row) {
+        return tl::unexpected(row.error());
+      }
+      if (!*row) {
+        return {};
+      }
+      starts.push_back({.pid = static_cast<std::uint32_t>(statement->column_int(0)),
+                        .time = store::from_unix_seconds(statement->column_int(1)),
+                        .parent_pid = static_cast<std::uint32_t>(statement->column_int(2)),
+                        .parent_time = statement->is_null(3)
+                                           ? std::nullopt
+                                           : std::optional<WallTime>{store::from_unix_seconds(
+                                                 statement->column_int(3))},
+                        .image = statement->column_text(4)});
+    }
+  });
+  if (!read) {
+    return tl::unexpected(read.error());
+  }
+  return starts;
+}
+
 }  // namespace myclean::events

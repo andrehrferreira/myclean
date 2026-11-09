@@ -169,6 +169,11 @@ class CleaningService {
   [[nodiscard]] Result<nlohmann::json> undo(const nlohmann::json& params);
   [[nodiscard]] Result<nlohmann::json> propose_optimization(const nlohmann::json& params,
                                                             const Actor& proposer);
+  // startup.list: the inventory read now; remembers the item of each "id".
+  [[nodiscard]] Result<nlohmann::json> startup_list();
+  // plans.propose_startup: the items of the latest startup.list answer named by "id".
+  [[nodiscard]] Result<nlohmann::json> propose_startup(const nlohmann::json& params,
+                                                       const Actor& proposer);
   [[nodiscard]] Result<nlohmann::json> space_answer(const std::string& key, bool refresh);
   [[nodiscard]] Result<nlohmann::json> analyze(const std::string& key, const std::stop_token& stop);
   [[nodiscard]] Result<space::ScanResult> scan_folder(const std::filesystem::path& root,
@@ -227,6 +232,7 @@ class CleaningService {
   std::vector<map::Area> uninstall_areas_;        // of registry_: reclaim kind uninstall
   std::vector<ipc::PackStatus> pack_status_;
   std::vector<PlanId> purges_;  // runs to purge early, oldest request first; the first runs now
+  std::vector<std::string> startup_items_;  // startup::Item::id of each id of startup.list, 1..n
   bool scan_requested_ = false;
   bool scanning_ = false;
   double progress_ = 0.0;

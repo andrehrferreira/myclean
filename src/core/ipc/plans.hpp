@@ -130,6 +130,22 @@ inline constexpr std::string_view plans_propose_cleanup_method = "plans.propose_
 // change (already at the requested value, or no healthy target with room).
 inline constexpr std::string_view plans_propose_optimization_method = "plans.propose_optimization";
 
+// No parameters. Every startup item of the owner and of the machine (startup::inventory), read
+// now by the service: {"items": [{"id": int, "key": string, "source", "scope", "name",
+// "display_name", "command", "enabled": bool|null, "signer"?, "start"?, "delayed"?, "impact"}]}.
+// "id" is the item's number in this answer, the only way plans.propose_startup names it;
+// "enabled" is null for RunOnce items, which cannot be disabled. "impact" is null when unknown,
+// else {"source": "myclean", "cpu_seconds", "io_bytes", "logons"}: the median use of the item's
+// program in the first 2 minutes after the latest logons MyClean measured.
+inline constexpr std::string_view startup_list_method = "startup.list";
+
+// Parameters: candidates (record, required): {"ids": [int]}, "id" values of the latest
+// startup.list answer; enable (boolean, optional, default false); client (token, optional).
+// Creates an awaiting_approval plan that disables (or enables) those items the way Windows does:
+// {"plan": int, "state": "awaiting_approval"}. Fails with not_found for an id that answer did not
+// list, and with invalid_argument for an item that cannot change that way.
+inline constexpr std::string_view plans_propose_startup_method = "plans.propose_startup";
+
 // TRAY ONLY. Parameters: candidates (record, required): {"ids": [int]}. The owner deletes
 // report-view items (a duplicate, an old download) to the Recycle Bin: an approved user-scope
 // cleanup plan, run by the tray through IFileOperation with FOFX_RECYCLEONDELETE.

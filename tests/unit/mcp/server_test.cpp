@@ -163,12 +163,16 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
     EXPECT_EQ(schema.at("additionalProperties"), false);
     EXPECT_EQ(tool.at("annotations").at("readOnlyHint"), !name.starts_with("propose_")) << name;
   }
-  EXPECT_EQ(names, (std::vector<std::string>{
-                       "health_snapshot", "metrics_latest", "metrics_history", "top_processes",
-                       "list_volumes", "explain_process", "disk_health", "list_alerts",
-                       "freeze_summary", "storage_top", "find_old_downloads", "find_duplicates",
-                       "find_used_installers", "find_owner_decisions", "list_plans", "get_plan",
-                       "propose_cleanup", "propose_optimization"}));
+  EXPECT_EQ(names, (std::vector<std::string>{"health_snapshot",      "metrics_latest",
+                                             "metrics_history",      "top_processes",
+                                             "list_volumes",         "explain_process",
+                                             "disk_health",          "list_alerts",
+                                             "freeze_summary",       "storage_top",
+                                             "find_old_downloads",   "find_duplicates",
+                                             "find_used_installers", "find_owner_decisions",
+                                             "list_plans",           "get_plan",
+                                             "propose_cleanup",      "propose_optimization",
+                                             "list_startup",         "propose_disable_startup"}));
   // No tool approves, rejects, executes, undoes, restores or deletes anything.
   for (const std::string& name : names) {
     for (const char* verb :
@@ -251,7 +255,13 @@ TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
   static_cast<void>(text(call_tool("propose_cleanup", {{"candidate_ids", {3, 4, 5}}}), false));
   static_cast<void>(text(
       call_tool("propose_optimization", {{"kind", "hibernation"}, {"mode", "reduced"}}), false));
-  ASSERT_EQ(calls().size(), 2U);
+  static_cast<void>(text(call_tool("list_startup"), false));
+  static_cast<void>(text(call_tool("propose_disable_startup", {{"item_ids", {2, 7}}}), false));
+  ASSERT_EQ(calls().size(), 4U);
+  EXPECT_EQ(calls()[2].method, "startup.list");
+  EXPECT_EQ(calls()[3].method, "plans.propose_startup");
+  EXPECT_EQ(calls()[3].params,
+            (Json{{"candidates", {{"ids", {2, 7}}}}, {"client", "claude-code"}}));
   EXPECT_EQ(calls()[0].method, "plans.propose_cleanup");
   EXPECT_EQ(calls()[0].params,
             (Json{{"candidates", {{"ids", {3, 4, 5}}}}, {"client", "claude-code"}}));
@@ -267,7 +277,10 @@ TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
             std::string::npos);
   static_cast<void>(text(call_tool("propose_cleanup", {{"candidate_ids", Json::array()}}), true));
   static_cast<void>(text(call_tool("propose_optimization", {{"kind", "format_disk"}}), true));
-  EXPECT_EQ(calls().size(), 2U);
+  // A startup item is named by its number only, never by a registry value name.
+  static_cast<void>(
+      text(call_tool("propose_disable_startup", {{"item_ids", {"run:user:Discord"}}}), true));
+  EXPECT_EQ(calls().size(), 4U);
 }
 
 TEST_F(ServerTest, HealthSnapshotCombinesQualifyingTreesAndSystemSignals) {
@@ -378,7 +391,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 18U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 20U);
 }
 
 }  // namespace

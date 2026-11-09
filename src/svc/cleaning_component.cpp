@@ -49,6 +49,9 @@ Result<void> CleaningComponent::start(const Context& context) {
   if (sources_.bin && !context.owner_sid().empty()) {
     bin_ = sources_.bin(context.owner_sid());
   }
+  if (sources_.startup && !context.owner_sid().empty()) {
+    startup_ = sources_.startup(context.owner_sid());
+  }
   cleaning::ServiceSources sources{
       .store = &context.store(),
       .clock = &context.clock(),
@@ -62,7 +65,8 @@ Result<void> CleaningComponent::start(const Context& context) {
                  .dism = sources_.dism,
                  .system = sources_.system.get(),
                  .tools = sources_.tools.get(),
-                 .drives = sources_.drives.get()},
+                 .drives = sources_.drives.get(),
+                 .startup = startup_.get()},
       .owner = [owner = sources_.owner,
                 sid = context.owner_sid()]() -> Result<cleaning::OwnerContext> {
         if (!owner) {

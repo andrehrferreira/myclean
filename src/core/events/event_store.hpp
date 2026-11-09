@@ -89,4 +89,17 @@ struct ProcessNetwork {
 [[nodiscard]] Result<std::vector<ProcessNetwork>> network_by_process(store::Store& store,
                                                                      WallTime from, WallTime to);
 
+// One stored process start (whole seconds, as proc_start keeps them).
+struct StoredStart {
+  std::uint32_t pid = 0;
+  WallTime time;
+  std::uint32_t parent_pid = 0;
+  std::optional<WallTime> parent_time;
+  std::string image;
+};
+
+// The process starts stored in [from, to), oldest first.
+[[nodiscard]] Result<std::vector<StoredStart>> process_starts(store::Store& store, WallTime from,
+                                                              WallTime to);
+
 }  // namespace myclean::events

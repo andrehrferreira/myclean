@@ -6,6 +6,7 @@
 
 #include "core/cleaning/service.hpp"
 #include "core/model/result.hpp"
+#include "core/model/units.hpp"
 
 // What the service learns about the owner from Windows: the owner's logon session (environment,
 // deny-list locations, Downloads) for cleaning, and whether a pipe client is the owner's tray.
@@ -17,6 +18,10 @@ namespace myclean::svc {
 // of that token (CreateEnvironmentBlock), the deny-list locations and the Downloads folder.
 // Fails with not_found while the owner is not logged on.
 [[nodiscard]] Result<cleaning::OwnerContext> owner_context(std::string_view owner_sid);
+
+// When the owner's current logon session began (WTSSessionInfo LogonTime). Fails with not_found
+// while the owner is not logged on.
+[[nodiscard]] Result<WallTime> owner_logon_time(std::string_view owner_sid);
 
 // True when process `pid` runs the image `tray_image` (the same file, also when one of the paths
 // goes through a junction), as the user `owner_sid`, in an interactive session (not session 0).

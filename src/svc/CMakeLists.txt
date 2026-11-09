@@ -21,6 +21,8 @@ myclean_add_library(svc
     owner_session.hpp
     service.cpp
     service.hpp
+    startup_component.cpp
+    startup_component.hpp
     telemetry_component.cpp
     telemetry_component.hpp
     trust_component.cpp
@@ -44,7 +46,9 @@ myclean_add_library(svc
     myclean::platform_scan
     myclean::platform_service
     myclean::platform_settings
+    myclean::platform_startup
     myclean::rules
+    myclean::startup
     myclean::store
     myclean::telemetry
     myclean::trust

@@ -817,6 +817,60 @@ TEST_F(CleaningServiceTest, SystemSettingsChangeOnlyAfterTheOwnerApproves) {
             "invalid_state");  // already reduced
 }
 
+// Startup spec "MCP proposal waits", "Prompt 2 disables only the selection", "Run item
+// re-enabled": items are named by their number in startup.list, change only after approval, and
+// undo restores them.
+TEST_F(CleaningServiceTest, StartupItemsChangeOnlyAfterTheOwnerApprovesAndUndoRestoresThem) {
+  startup().snapshot.run = {
+      {.scope = startup::Scope::user, .name = "Discord", .command = "Update.exe"},
+      {.scope = startup::Scope::user, .name = "Steam", .command = "steam.exe -silent"},
+      {.scope = startup::Scope::user, .name = "OneDrive", .command = "OneDrive.exe"}};
+  startup().snapshot.services = {
+      {.name = "asus", .start = {.type = startup::StartType::automatic, .delayed = true}}};
+  start();
+  work();
+  EXPECT_EQ(error_of("plans.propose_startup", Json{{"candidates", {{"ids", {1}}}}}, true)
+                .at("data")
+                .at("errc"),
+            "not_found");  // no startup.list answer yet
+  const Json listed = call("startup.list");
+  ASSERT_EQ(listed.at("items").size(), 4U);
+  EXPECT_EQ(listed.at("items")[0].at("key"), "run:user:Discord");
+  EXPECT_EQ(listed.at("items")[0].at("enabled"), true);
+  EXPECT_EQ(listed.at("items")[3].at("key"), "service:machine:asus");
+  EXPECT_EQ(listed.at("items")[3].at("delayed"), true);
+
+  const Json proposed = call("plans.propose_startup",
+                             Json{{"candidates", {{"ids", {1, 4}}}}, {"client", "claude"}}, false);
+  const std::int64_t id = proposed.at("plan").get<std::int64_t>();
+  EXPECT_EQ(proposed.at("state"), "awaiting_approval");
+  EXPECT_EQ(get(id).at("kind"), "system_setting");
+  EXPECT_EQ(get(id).at("proposer"), "mcp:claude");
+  work();
+  EXPECT_EQ(startup().writes, 0);
+
+  approve_all(id);
+  work();
+  EXPECT_EQ(get(id).at("state"), "verified");
+  EXPECT_TRUE(startup::approved_disabled(
+      startup().approved(startup::Scope::user, startup::ApprovedKey::run, "Discord")->bytes));
+  EXPECT_EQ(startup().approved(startup::Scope::user, startup::ApprovedKey::run, "Steam"), nullptr);
+  EXPECT_EQ(startup().snapshot.services[0].start.type, startup::StartType::manual);
+  EXPECT_EQ(startup().snapshot.run.size(), 3U);
+
+  static_cast<void>(call("plans.undo", Json{{"id", id}}));
+  work();
+  EXPECT_EQ(get(id).at("state"), "rolled_back");
+  EXPECT_EQ(startup().approved(startup::Scope::user, startup::ApprovedKey::run, "Discord"),
+            nullptr);
+  EXPECT_EQ(startup().snapshot.services[0].start,
+            (startup::ServiceStart{.type = startup::StartType::automatic, .delayed = true}));
+  EXPECT_EQ(error_of("plans.propose_startup", Json{{"candidates", {{"ids", {9}}}}}, true)
+                .at("data")
+                .at("errc"),
+            "not_found");
+}
+
 TEST_F(CleaningServiceTest, AConsoleRunNeverAppliesHandlersOrSystemSettings) {
   add_targets();
   start(ServiceSettings{.executor = {.system_changes = false}});

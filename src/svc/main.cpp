@@ -52,6 +52,7 @@
 #include "platform/settings/process_runner.hpp"
 #include "platform/settings/seek_penalty.hpp"
 #include "platform/settings/system_space.hpp"
+#include "platform/startup/win32_startup.hpp"
 #include "platform/trust/win_image_inspector.hpp"
 #include "svc/alerts_component.hpp"
 #include "svc/cleaning_component.hpp"
@@ -62,6 +63,7 @@
 #include "svc/host.hpp"
 #include "svc/input_component.hpp"
 #include "svc/owner_session.hpp"
+#include "svc/startup_component.hpp"
 #include "svc/telemetry_component.hpp"
 #include "svc/trust_component.hpp"
 
@@ -173,6 +175,9 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
       .bin = [](std::string_view owner) -> std::unique_ptr<myclean::cleanup::IBinRecords> {
         return std::make_unique<platform::Win32BinRecords>(
             std::wstring(owner.begin(), owner.end()));
+      },
+      .startup = [](std::string_view owner) -> std::unique_ptr<myclean::startup::IStartupSystem> {
+        return std::make_unique<platform::Win32StartupSystem>(std::string(owner));
       }};
   // "C:" / "" stays "C:" (a drive-relative path); the handlers need the volume root "C:\".
   const std::filesystem::path root =
@@ -275,6 +280,9 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
 
   auto governor = make_governor(options, files, *telemetry, *events);
   auto cleaning = make_cleaning(options, files, *telemetry, *disk_health);
+  auto startup = std::make_unique<svc::StartupComponent>(svc::StartupSources{
+      .view = [telemetry = telemetry.get()] { return telemetry->processes(); },
+      .logon = [](std::string_view owner) { return svc::owner_logon_time(owner); }});
 
   std::vector<std::unique_ptr<svc::IComponent>> components;
   components.push_back(std::move(alerts));
@@ -284,6 +292,7 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
   components.push_back(std::move(events));
   components.push_back(std::move(governor));
   components.push_back(std::make_unique<svc::InputComponent>());
+  components.push_back(std::move(startup));
   components.push_back(std::move(cleaning));
   return components;
 }

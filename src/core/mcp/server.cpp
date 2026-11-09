@@ -295,6 +295,27 @@ const Json& tool_list() {
                  {"enum", {"move", "regenerate"}},
                  {"description", "relocate: move the existing content, or let it regenerate"}}}},
               Json::array({"kind"}))),
+      tool("list_startup",
+           "Every program that starts automatically: Run and RunOnce registry values (both "
+           "registry views), Startup-folder files, scheduled tasks with a logon or boot trigger "
+           "and auto-start services not published by Microsoft Windows, each with its source, "
+           "command, signer and whether it is enabled (null for RunOnce, which cannot be "
+           "disabled). The 'id' values are what propose_disable_startup takes. Reads only.",
+           object_schema()),
+      proposal_tool(
+          "propose_disable_startup",
+          "Proposes disabling startup items the way Windows does (StartupApproved for Run and "
+          "Startup-folder items, the task's Enabled flag, a service's start type set to Manual); "
+          "nothing is deleted and each change is undone exactly. It only creates a plan in state "
+          "'awaiting_approval' and notifies the owner: nothing changes until the owner approves "
+          "it in the MyClean tray. Takes only the 'id' values of the latest list_startup answer.",
+          object_schema({{"item_ids",
+                          {{"type", "array"},
+                           {"items", {{"type", "integer"}}},
+                           {"minItems", 1},
+                           {"maxItems", 64},
+                           {"description", "Up to 64 'id' values from list_startup"}}}},
+                        Json::array({"item_ids"}))),
   });
   return list;
 }
@@ -416,6 +437,14 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
                        .params = Json{{"candidates", {{"ids", arguments.at("candidate_ids")}}},
                                       {"client", client}}};
   }
+  if (tool == "list_startup") {
+    return ServiceCall{.method = ipc::startup_list_method, .params = Json::object()};
+  }
+  if (tool == "propose_disable_startup") {
+    return ServiceCall{
+        .method = ipc::plans_propose_startup_method,
+        .params = Json{{"candidates", {{"ids", arguments.at("item_ids")}}}, {"client", client}}};
+  }
   if (tool == "propose_optimization") {
     Json proposal = arguments;
     proposal["client"] = client;
@@ -535,9 +564,10 @@ Json Server::initialize(const Json& params) {
        "View of this PC from the MyClean service: live CPU, memory, disk, GPU, volume and "
        "process-tree telemetry and its history, the trust signal of processes "
        "(explain_process), disk health, alerts, copy/paste freezes, the largest files, old "
-       "downloads, duplicates, used installers and MyClean's plans. No tool changes anything: "
-       "nothing can close, suspend or reprioritize a process, and propose_cleanup and "
-       "propose_optimization only create plans that wait for the owner's approval in the "
+       "downloads, duplicates, used installers, startup items and MyClean's plans. No tool "
+       "changes anything: nothing can close, suspend or reprioritize a process, and "
+       "propose_cleanup, propose_optimization and propose_disable_startup only create plans "
+       "that wait for the owner's approval in the "
        "MyClean tray; no tool approves or executes a plan. A process flagged "
        "'unrecognized' is not in MyClean's knowledge base and has a stated reason (unsigned, "
        "invalid signature, signer not listed, user-writable path); describe it with those "

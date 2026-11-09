@@ -34,6 +34,7 @@
 #include "core/placement/settings.hpp"
 #include "core/rules/schema.hpp"
 #include "core/safety/deny_list.hpp"
+#include "core/startup/startup.hpp"
 
 // The cleaning executor (cleaning spec C4): turns what the rules select into plans by tier and
 // scope, and runs the approved service-scope plans through the action framework.
@@ -57,6 +58,7 @@ struct Probes {
   const placement::IDriveFacts* drives = nullptr;
   // The owner's environment, registry and running programs: where automatic recipes are now.
   const placement::Tools* owner_tools = nullptr;
+  startup::IStartupSystem* startup = nullptr;  // the owner's startup items and the machine's
 };
 
 struct ExecutorOptions {
@@ -151,6 +153,12 @@ class Executor {
   // {"recipe": placement::recipe_json(), "instance", "target", "content"}).
   [[nodiscard]] Result<Plan> propose_optimization(const Optimization& request,
                                                   const Actor& proposer);
+  // An approval-only plan that disables (or enables) the startup items `ids` (startup::Item::id):
+  // action "SetStartupItems", kind system_setting, one item per id with the id as its path,
+  // params {"items", "enable"}. Fails with invalid_state without the startup probe, and as
+  // StartupToggle::preview does for an id it cannot change.
+  [[nodiscard]] Result<Plan> propose_startup(std::span<const std::string> ids, bool enable,
+                                             const Actor& proposer);
   // When the system volume has less than low_space_ratio free: automatic plans (approved at once,
   // run by the service, undoable) that reduce full hibernation and that keep a 4096 MB page file
   // on the system volume for crash dumps while a system-managed one goes to the best healthy

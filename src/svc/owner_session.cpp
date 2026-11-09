@@ -1,7 +1,9 @@
 #include "svc/owner_session.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <cwctype>
 #include <filesystem>
 #include <map>
@@ -173,7 +175,13 @@ std::shared_ptr<const placement::Tools> owner_tools(std::map<std::wstring, std::
   return {owned, &owned->tools};
 }
 
-Result<wil::unique_handle> session_token(std::string_view owner_sid) {
+struct OwnerSession {
+  DWORD id = 0;
+  wil::unique_handle token;
+};
+
+// The owner's active or disconnected session and its user token.
+Result<OwnerSession> owner_session(std::string_view owner_sid) {
   PWTS_SESSION_INFOW sessions = nullptr;
   DWORD count = 0;
   if (::WTSEnumerateSessionsW(WTS_CURRENT_SERVER_HANDLE, 0, 1, &sessions, &count) == FALSE) {
@@ -191,10 +199,18 @@ Result<wil::unique_handle> session_token(std::string_view owner_sid) {
     wil::unique_handle token(raw);
     if (const Result<std::string> sid = platform::token_user_sid(token.get());
         sid && *sid == owner_sid) {
-      return token;
+      return OwnerSession{.id = session.SessionId, .token = std::move(token)};
     }
   }
   return fail(Errc::not_found, "the owner is not logged on");
+}
+
+Result<wil::unique_handle> session_token(std::string_view owner_sid) {
+  Result<OwnerSession> session = owner_session(owner_sid);
+  if (!session) {
+    return tl::unexpected(session.error());
+  }
+  return std::move(session->token);
 }
 
 // The environment block of `token`: its NUL-terminated entries and the final NUL.
@@ -315,6 +331,29 @@ Result<cleaning::OwnerContext> owner_context(std::string_view owner_sid) {
       .git = git ? std::make_unique<platform::GitCli>(*git, owner_identity(std::string(owner_sid)))
                  : nullptr,
       .tools = owner_tools(std::move(variables), std::string(owner_sid))};
+}
+
+Result<WallTime> owner_logon_time(std::string_view owner_sid) {
+  Result<OwnerSession> session = owner_session(owner_sid);
+  if (!session) {
+    return tl::unexpected(session.error());
+  }
+  LPWSTR buffer = nullptr;
+  DWORD bytes = 0;
+  if (::WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, session->id, WTSSessionInfo, &buffer,
+                                    &bytes) == FALSE ||
+      bytes < sizeof(WTSINFOW)) {
+    return fail(Errc::io_error,
+                "WTSQuerySessionInformation failed: " + std::to_string(::GetLastError()));
+  }
+  const auto release = wil::scope_exit([&] { ::WTSFreeMemory(buffer); });
+  WTSINFOW info{};
+  std::memcpy(&info, buffer, sizeof(info));
+  // FILETIME: 100-ns intervals since 1601-01-01; system_clock counts from 1970-01-01.
+  constexpr std::int64_t epoch_offset = 116444736000000000;
+  const std::int64_t ticks = info.LogonTime.QuadPart - epoch_offset;
+  return WallTime{std::chrono::duration_cast<WallTime::duration>(
+      std::chrono::duration<std::int64_t, std::ratio<1, 10'000'000>>{ticks})};
 }
 
 bool is_owner_tray(std::uint32_t pid, std::string_view owner_sid, const fs::path& tray_image) {

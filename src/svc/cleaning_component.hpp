@@ -27,6 +27,7 @@
 #include "core/space/duplicates.hpp"
 #include "core/space/installers.hpp"
 #include "core/space/scanner.hpp"
+#include "core/startup/startup.hpp"
 #include "core/store/migrations.hpp"
 #include "svc/component.hpp"
 
@@ -59,6 +60,8 @@ struct CleaningSources {
   std::function<Result<std::optional<std::filesystem::path>>()> owner_packs;
   // The $I records of the bins of the owner with this SID; empty: no aged Recycle Bin items.
   std::function<std::unique_ptr<cleanup::IBinRecords>(std::string_view owner_sid)> bin;
+  // The startup items of the owner with this SID and of the machine; empty: no startup items.
+  std::function<std::unique_ptr<startup::IStartupSystem>(std::string_view owner_sid)> startup;
 };
 
 // How this service runs cleaning.
@@ -103,6 +106,7 @@ class CleaningComponent final : public IComponent {
   const packs::IPackFiles* files_;
   std::unique_ptr<packs::IMachine> machine_;
   std::unique_ptr<cleanup::IBinRecords> bin_;
+  std::unique_ptr<startup::IStartupSystem> startup_;
   CleaningMode mode_;
   std::unique_ptr<cleaning::CleaningService> service_;
   std::mutex mutex_;

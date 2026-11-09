@@ -54,6 +54,8 @@
 #include "core/safety/safe_remove.hpp"
 #include "core/scanall/findings.hpp"
 #include "core/scanall/owner_decisions.hpp"
+#include "core/startup/startup.hpp"
+#include "core/startup/toggle.hpp"
 #include "core/store/database.hpp"
 #include "core/store/plan_repository.hpp"
 
@@ -614,6 +616,14 @@ Result<std::unique_ptr<Action>> Executor::action_for(const Plan& plan, const Pla
       }
       return std::make_unique<cleanup::DismCleanup>(*probes_.commands, probes_.dism, spec.tier);
     }
+    if (plan.action == startup::toggle_action_name) {
+      if (probes_.startup == nullptr) {
+        return missing("the startup items");
+      }
+      return std::make_unique<startup::StartupToggle>(
+          *probes_.startup, *environment_.clock, params.at("items").get<std::vector<std::string>>(),
+          params.at("enable").get<bool>());
+    }
     if (probes_.system == nullptr || probes_.tools == nullptr || probes_.drives == nullptr) {
       return missing("the system settings");
     }
@@ -1003,6 +1013,31 @@ Result<Plan> Executor::propose_optimization(const Optimization& request, const A
                           : propose_relocation(request, *volumes, proposer);
   }
   return fail(Errc::invalid_argument, "unknown optimization \"" + request.kind + "\"");
+}
+
+Result<Plan> Executor::propose_startup(std::span<const std::string> ids, bool enable,
+                                       const Actor& proposer) {
+  if (probes_.startup == nullptr) {
+    return fail(Errc::invalid_state, "the startup items cannot be read here");
+  }
+  if (ids.empty()) {
+    return fail(Errc::invalid_argument, "no startup item named");
+  }
+  const std::vector<std::string> items(ids.begin(), ids.end());
+  startup::StartupToggle action(*probes_.startup, *environment_.clock, items, enable);
+  const std::string verb = enable ? "Enable" : "Disable";
+  return submit_setting(
+      action, std::string(startup::toggle_action_name),
+      PlanSpec{.kind = PlanKind::system_setting,
+               .tier = Tier::ask,
+               .scope = ExecutionContext::service,
+               .title = verb + " " + std::to_string(items.size()) + " startup item" +
+                        (items.size() == 1 ? "" : "s"),
+               .commands = {verb + " through StartupApproved, the task's Enabled flag or the "
+                                   "service's start type (Manual)"},
+               .undo = "restores each item's previous state exactly",
+               .params = Json{{"items", items}, {"enable", enable}}},
+      proposer);
 }
 
 Result<Plan> Executor::propose_hibernation(const Optimization& request, const Actor& proposer) {

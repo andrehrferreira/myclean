@@ -26,5 +26,6 @@ myclean_add_library(cleaning
     myclean::scanall
     myclean::sched
     myclean::space
+    myclean::startup
     myclean::store
     nlohmann_json::nlohmann_json)

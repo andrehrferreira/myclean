@@ -300,11 +300,13 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   methods: `health_snapshot` (qualifying trees with trust and the
   unrecognized ones, system signals), `metrics_latest`, `metrics_history`,
   `top_processes`, `list_volumes`, `explain_process`, `disk_health`,
-  `list_alerts`, `freeze_summary`. Phase 1 has no tool that changes
-  anything. Proposal tools (`propose_cleanup`, `propose_disable_startup`,
-  `propose_uninstall`, `propose_optimization`) arrive with the action phases
-  and create plans in the `awaiting_approval` state, which triggers a tray
-  notification.
+  `list_alerts`, `freeze_summary`, the storage tools, `list_plans`,
+  `get_plan` and `list_startup`. Proposal tools (`propose_cleanup`,
+  `propose_optimization`, `propose_disable_startup`; `propose_uninstall`
+  arrives later) create plans in the `awaiting_approval` state, which
+  triggers a tray notification. They name what they propose only by the
+  numbers a read tool returned (candidate ids, startup item ids), never by
+  a path or registry name, so no client string reaches an OS API.
 
 ## 9. Security
 

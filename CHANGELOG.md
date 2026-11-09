@@ -126,6 +126,15 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     class `system`: in observe mode the ladder had chosen `vmms.exe`, `NVDisplay.Container.exe`
     and vendor services. Security suites, WSL/Hyper-V, WMI hosts, database servers and remote
     access tools are listed as `system` in the process classes (pack 1.1.0).
+- **Optimize (M4, in progress):**
+  - Startup items: every automatic start source (Run and RunOnce in both registry views,
+    Startup folders, logon and boot tasks, auto-start services not signed by Microsoft
+    Windows) with its enabled state from StartupApproved (`startup.list`, MCP
+    `list_startup`). `plans.propose_startup` and MCP `propose_disable_startup` take only
+    the numbers of that list and create a plan that waits for the owner's approval; the
+    service then disables each item the way Task Manager does (StartupApproved, the task's
+    Enabled flag, a service's start type set to Manual), deletes nothing, and undo restores
+    the exact state before.
 - Spike notes X1–X8 under `docs/spikes/`.
 
 ### Fixed

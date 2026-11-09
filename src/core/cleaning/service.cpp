@@ -54,6 +54,8 @@
 #include "core/space/json.hpp"
 #include "core/space/scanner.hpp"
 #include "core/space/top.hpp"
+#include "core/startup/impact.hpp"
+#include "core/startup/startup.hpp"
 #include "core/store/database.hpp"
 #include "core/store/plan_repository.hpp"
 
@@ -633,6 +635,79 @@ Result<Json> CleaningService::propose_optimization(const Json& params, const Act
   return Json{{"plan", plan->id.value()}, {"state", to_string(plan->state)}};
 }
 
+// How many of the latest logons the impact shown in startup.list is the median of.
+constexpr std::size_t startup_logons = 10;
+
+Result<Json> CleaningService::startup_list() {
+  if (sources_.probes.startup == nullptr) {
+    return fail(Errc::invalid_state, "the startup items cannot be read here");
+  }
+  Result<startup::Snapshot> snapshot = sources_.probes.startup->read();
+  if (!snapshot) {
+    return tl::unexpected(snapshot.error());
+  }
+  const std::vector<startup::Item> items = startup::inventory(*snapshot);
+  // The impact of the latest logons the startup component measured; none before the first.
+  Result<std::vector<std::vector<startup::ImageImpact>>> history =
+      startup::logon_history(*sources_.store, startup_logons);
+  const std::vector<std::optional<startup::ItemImpact>> impacts = startup::item_impacts(
+      items, history ? *history : std::vector<std::vector<startup::ImageImpact>>{}, {});
+  Json listed = Json::array();
+  std::vector<std::string> ids;
+  ids.reserve(items.size());
+  for (std::size_t index = 0; index < items.size(); ++index) {
+    const startup::Item& item = items[index];
+    ids.push_back(item.id);
+    Json entry{{"id", static_cast<std::int64_t>(ids.size())},
+               {"key", item.id},
+               {"source", startup::to_string(item.source)},
+               {"scope", startup::to_string(item.scope)},
+               {"name", item.name},
+               {"display_name", item.display_name},
+               {"command", item.command},
+               {"enabled", item.enabled ? Json(*item.enabled) : Json(nullptr)}};
+    if (item.signer) {
+      entry["signer"] = *item.signer;
+    }
+    if (item.start) {
+      entry["start"] = startup::to_string(item.start->type);
+      entry["delayed"] = item.start->delayed;
+    }
+    entry["impact"] = nullptr;
+    if (const std::optional<startup::ItemImpact>& impact = impacts[index]) {
+      entry["impact"] = Json{{"source", startup::to_string(impact->source)},
+                             {"cpu_seconds", impact->cpu_seconds},
+                             {"io_bytes", impact->io_bytes},
+                             {"logons", impact->logons},
+                             {"delay_seconds", impact->delay_seconds}};
+    }
+    listed.push_back(std::move(entry));
+  }
+  {
+    const std::scoped_lock lock(mutex_);
+    startup_items_ = std::move(ids);
+  }
+  return Json{{"items", std::move(listed)}};
+}
+
+Result<Json> CleaningService::propose_startup(const Json& params, const Actor& proposer) {
+  std::vector<std::string> chosen;
+  {
+    const std::scoped_lock lock(mutex_);
+    for (const std::int64_t id : ids_of(params.at("candidates"), "ids")) {
+      if (id < 1 || std::cmp_greater(id, startup_items_.size())) {
+        return fail(Errc::not_found,
+                    "no startup item " + std::to_string(id) + " in the latest startup.list answer");
+      }
+      chosen.push_back(startup_items_[static_cast<std::size_t>(id - 1)]);
+    }
+  }
+  const bool enable = params.value("enable", false);
+  return on_executor([&](Executor& executor) {
+    return plan_answer(executor.propose_startup(chosen, enable, proposer));
+  });
+}
+
 Result<Json> CleaningService::space_answer(const std::string& key, bool refresh) {
   const WallTime now = sources_.clock->now();
   bool queued = false;
@@ -1132,6 +1207,14 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
                              [this](const Json& params, const ipc::Caller& caller) {
                                return propose_optimization(params, proposer_of(params, caller));
                              }));
+  added.push_back(
+      add(ipc::startup_list_method, {}, [this](const Json& /*params*/) { return startup_list(); }));
+  added.push_back(methods.add_for_caller(
+      std::string(ipc::plans_propose_startup_method),
+      {candidates, client, Param{.name = "enable", .type = ParamType::boolean}},
+      [this](const Json& params, const ipc::Caller& caller) {
+        return propose_startup(params, proposer_of(params, caller));
+      }));
   added.push_back(add(
       ipc::plans_recycle_method, {candidates},
       [this](const Json& params) {

@@ -35,6 +35,7 @@
 #include "packs/pack_fakes.hpp"
 #include "placement/placement_fakes.hpp"
 #include "space/space_fakes.hpp"
+#include "startup/startup_fakes.hpp"
 
 namespace myclean::cleaning::testing {
 
@@ -225,7 +226,8 @@ class CleaningFixture : public ::testing::Test {
                    .handlers = &handlers_,
                    .system = &system_,
                    .tools = &tools_,
-                   .drives = &drives_},
+                   .drives = &drives_,
+                   .startup = &startup_},
         .owner = [this]() -> Result<OwnerContext> {
           if (!owner_available_) {
             return fail(Errc::not_found, "the owner is not logged on");
@@ -320,6 +322,7 @@ class CleaningFixture : public ::testing::Test {
   placement::testing::FakeSystemSpace& system() { return system_; }
   placement::testing::FakeProcessRunner& tools() { return tools_; }
   placement::testing::FakeDriveFacts& drives() { return drives_; }
+  startup::testing::FakeStartupSystem& startup() { return startup_; }
   space::testing::FakeDirectoryReader& reader() { return reader_; }
   CleaningService& service() { return *service_; }
   packs::testing::FakePackFiles& pack_files() { return files_; }
@@ -354,6 +357,7 @@ class CleaningFixture : public ::testing::Test {
   placement::testing::FakeSystemSpace system_;
   placement::testing::FakeProcessRunner tools_;
   placement::testing::FakeDriveFacts drives_;
+  startup::testing::FakeStartupSystem startup_;
   space::testing::FakeDirectoryReader reader_;
   NameDigitHasher hasher_;
   packs::testing::FakePackFiles files_;

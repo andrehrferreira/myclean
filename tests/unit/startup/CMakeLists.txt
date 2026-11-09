@@ -1,5 +1,6 @@
 myclean_add_test(startup
   SOURCES
+    impact_test.cpp
     startup_fakes.hpp
     startup_test.cpp
     toggle_test.cpp
