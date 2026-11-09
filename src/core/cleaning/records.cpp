@@ -20,6 +20,7 @@
 #include "core/model/ids.hpp"
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/model/units.hpp"
 #include "core/store/database.hpp"
 #include "core/store/migrations.hpp"
@@ -36,8 +37,7 @@ constexpr std::array<std::string_view, 9> kind_names = {
     "recycle_bin", "archive", "uninstall"};
 
 std::string utf8(const std::filesystem::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 std::filesystem::path from_utf8(const std::string& text) {

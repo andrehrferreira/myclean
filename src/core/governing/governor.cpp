@@ -41,6 +41,7 @@
 #include "core/ipc/governor.hpp"
 #include "core/model/actor.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/model/units.hpp"
 #include "core/os/jobs.hpp"
 #include "core/os/process_control.hpp"
@@ -60,8 +61,7 @@ namespace metric = telemetry::metric;
 constexpr int max_ancestors = 64;
 
 std::string utf8(const std::filesystem::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 std::filesystem::path from_utf8(std::string_view text) {

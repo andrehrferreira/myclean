@@ -39,6 +39,7 @@
 #include "core/model/ids.hpp"
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/model/units.hpp"
 #include "core/os/file_system.hpp"
 #include "core/packs/schema.hpp"
@@ -79,8 +80,7 @@ constexpr std::string_view hibernation_group = "auto:hibernation";
 constexpr std::string_view page_file_group = "auto:page-file";
 
 std::string utf8(const fs::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 fs::path from_utf8(const std::string& text) {

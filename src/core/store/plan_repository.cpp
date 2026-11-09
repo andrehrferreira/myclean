@@ -15,6 +15,7 @@
 #include "core/model/ids.hpp"
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/model/units.hpp"
 #include "core/store/database.hpp"
 
@@ -136,9 +137,9 @@ Result<Plan> add_plan(Database& db, Plan plan) {
       return tl::unexpected(insert_item.error());
     }
     for (PlanItem& item : plan.items) {
-      const std::u8string path = item.path.u8string();
+      const std::string path = utf8_text(item.path);
       insert_item->bind(1, plan.id.value())
-          .bind(2, std::string(path.begin(), path.end()))
+          .bind(2, std::string_view{path})
           .bind(3, item.identity.volume_serial)
           .bind(4, std::span<const std::uint8_t>(item.identity.file_id))
           .bind(5, item.size.count())

@@ -20,6 +20,7 @@
 #include "core/model/ids.hpp"
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/model/units.hpp"
 #include "core/store/database.hpp"
 #include "core/store/plan_repository.hpp"
@@ -31,8 +32,7 @@ namespace {
 using Json = nlohmann::json;
 
 std::string utf8(const std::filesystem::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 std::string text_of(const Json& result, const char* member) {

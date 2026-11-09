@@ -5,6 +5,8 @@
 #include <string>
 #include <string_view>
 
+#include "core/model/text.hpp"
+
 namespace myclean::games {
 
 namespace {
@@ -56,8 +58,7 @@ std::filesystem::path path_from_utf8(std::string_view text) {
 }
 
 std::string utf8(const std::filesystem::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 }  // namespace myclean::games

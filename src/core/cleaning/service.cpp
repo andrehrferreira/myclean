@@ -34,6 +34,7 @@
 #include "core/model/ids.hpp"
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/model/units.hpp"
 #include "core/packs/applies.hpp"
 #include "core/packs/loader.hpp"
@@ -72,8 +73,7 @@ using ipc::ParamType;
 constexpr std::size_t max_problems = 8;
 
 std::string utf8(const fs::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 PlanId plan_param(const Json& params, const char* name = "id") {

@@ -16,6 +16,7 @@
 #include <sqlite3.h>
 
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/model/units.hpp"
 
 namespace myclean::store {
@@ -40,8 +41,7 @@ Errc errc_for(int code) {
 }
 
 std::string utf8(const std::filesystem::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 }  // namespace

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 
 namespace myclean::safety {
 
@@ -26,8 +27,7 @@ bool is_valid_component(std::wstring_view component) {
 }  // namespace
 
 std::string to_utf8(const std::filesystem::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 Result<std::filesystem::path> normalize_path(const std::filesystem::path& path) {

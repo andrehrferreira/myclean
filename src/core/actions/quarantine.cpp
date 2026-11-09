@@ -24,6 +24,7 @@
 #include "core/model/ids.hpp"
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/model/units.hpp"
 #include "core/os/file_system.hpp"
 #include "core/safety/paths.hpp"
@@ -38,8 +39,7 @@ namespace fs = std::filesystem;
 constexpr std::array<std::string_view, 3> quarantine_state_names = {"held", "restored", "purged"};
 
 std::string text_of(const fs::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 fs::path path_of(const std::string& text) {

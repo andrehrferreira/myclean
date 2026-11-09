@@ -4,13 +4,14 @@
 #include <string>
 #include <string_view>
 
+#include "core/model/text.hpp"
+
 // Small text helpers shared by the space analyses.
 namespace myclean::space {
 
 // UTF-8 text of a path.
 [[nodiscard]] inline std::string utf8(const std::filesystem::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 // `text` with ASCII letters lower-cased; other bytes unchanged.

@@ -17,6 +17,7 @@
 #include <toml++/toml.hpp>
 
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/rules/data_files.hpp"
 
 namespace myclean::map {
@@ -46,8 +47,7 @@ std::optional<Enum> parse_name(const std::array<std::string_view, Size>& names,
 }
 
 std::string utf8(const std::filesystem::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 // Thrown at the first schema violation; returned as invalid_data.

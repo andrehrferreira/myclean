@@ -11,6 +11,7 @@
 #include "core/map/attribution.hpp"
 #include "core/map/disk_map.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 
 namespace myclean::map {
 
@@ -19,8 +20,7 @@ namespace {
 using Json = nlohmann::json;
 
 std::string utf8(const std::filesystem::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 Json area_of(const DiskMap& map, std::optional<std::size_t> match) {

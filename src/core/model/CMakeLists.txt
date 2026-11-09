@@ -15,6 +15,8 @@ myclean_add_library(model
     result.cpp
     result.hpp
     series.hpp
+    text.cpp
+    text.hpp
     units.hpp
   DEPENDS
     tl::expected)

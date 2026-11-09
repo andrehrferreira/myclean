@@ -16,6 +16,7 @@
 #include "cli/cli.hpp"
 #include "cli/map_command.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/packs/applies.hpp"
 #include "core/packs/fixtures.hpp"
 #include "core/packs/loader.hpp"
@@ -32,8 +33,7 @@ namespace fs = std::filesystem;
 using Json = nlohmann::json;
 
 std::string utf8(const fs::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 fs::path from_utf8(const std::string& text) {

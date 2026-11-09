@@ -14,6 +14,7 @@
 
 #include "core/model/enum_names.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/rules/schema.hpp"
 
 namespace myclean::trust {
@@ -41,8 +42,7 @@ bool equal_folded(std::string_view left, std::string_view right) {
 }
 
 std::string utf8(const std::filesystem::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 // The normalized, case-folded path with backslash separators and no trailing separator.

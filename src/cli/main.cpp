@@ -1,6 +1,9 @@
 // myclean.exe: the read-only command line and MCP server. See cli/cli.hpp.
 
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <exception>
 #include <iostream>
 #include <span>
 #include <string>
@@ -25,10 +28,32 @@ std::string utf8(const wchar_t* text) {
   return result;
 }
 
+// An exception nothing caught ends the program with its message on stderr instead of a bare
+// abort, so a failure on an unusual machine can be traced.
+[[noreturn]] void report_and_abort() noexcept {
+  try {
+    if (const std::exception_ptr current = std::current_exception()) {
+      std::rethrow_exception(current);
+    }
+    static_cast<void>(
+        std::fputs("\nmyclean: internal error: terminate without an exception\n", stderr));
+  } catch (const std::exception& error) {
+    // C stdio: nothing here may throw again.
+    static_cast<void>(std::fputs("\nmyclean: internal error: ", stderr));
+    static_cast<void>(std::fputs(error.what(), stderr));
+    static_cast<void>(std::fputs("\n", stderr));
+  } catch (...) {
+    static_cast<void>(std::fputs("\nmyclean: internal error: unknown exception\n", stderr));
+  }
+  static_cast<void>(std::fflush(stderr));
+  std::abort();
+}
+
 }  // namespace
 
 // NOLINTNEXTLINE(misc-use-internal-linkage): the program entry point
 int wmain(int argc, wchar_t** argv) {
+  std::set_terminate(&report_and_abort);
   // Lines end in "\n" only: the MCP stdio transport and JSON consumers expect no "\r".
   static_cast<void>(::_setmode(::_fileno(stdout), _O_BINARY));
   static_cast<void>(::_setmode(::_fileno(stdin), _O_BINARY));

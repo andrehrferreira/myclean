@@ -26,6 +26,7 @@
 #include "core/map/json.hpp"
 #include "core/map/project_areas.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/model/units.hpp"
 #include "core/rules/data_files.hpp"
 #include "core/space/scanner.hpp"
@@ -41,8 +42,7 @@ namespace fs = std::filesystem;
 constexpr double gib = 1024.0 * 1024.0 * 1024.0;
 
 std::string utf8(const fs::path& path) {
-  const std::u8string text = path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(path);
 }
 
 // Lowers this process to below-normal CPU priority and background I/O and memory priority for

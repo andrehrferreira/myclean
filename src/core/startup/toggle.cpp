@@ -14,6 +14,7 @@
 #include "core/model/action.hpp"
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/startup/startup.hpp"
 
 namespace myclean::startup {
@@ -27,8 +28,7 @@ std::filesystem::path id_path(const std::string& id) {
 }
 
 std::string id_of(const PlanItem& item) {
-  const std::u8string text = item.path.u8string();
-  return {text.begin(), text.end()};
+  return utf8_text(item.path);
 }
 
 // One item's state as far as the toggle is concerned.
