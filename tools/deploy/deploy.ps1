@@ -324,7 +324,9 @@ function Start-MyCleanService {
     if ($svc.Status -ne 'Stopped') { Stop-MyCleanService; $svc.Refresh() }
     Write-Log 'Starting service'
     $svc.Start()
-    $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
+    # The store's integrity check reads the whole database before the service reports Running:
+    # 20 s for 790 MB with a cold cache on 2026-11-09, which a 20 s wait lost by half a second.
+    $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds(120))
     $startedPid = Get-ServiceProcessId
     Start-Sleep -Seconds $HealthSeconds
     $svc.Refresh()
