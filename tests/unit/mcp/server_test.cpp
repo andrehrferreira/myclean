@@ -163,15 +163,29 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
     EXPECT_EQ(schema.at("additionalProperties"), false);
     EXPECT_EQ(tool.at("annotations").at("readOnlyHint"), !name.starts_with("propose_")) << name;
   }
-  EXPECT_EQ(
-      names,
-      (std::vector<std::string>{
-          "health_snapshot",        "metrics_latest",       "metrics_history",    "top_processes",
-          "list_volumes",           "explain_process",      "disk_health",        "list_alerts",
-          "freeze_summary",         "storage_top",          "find_old_downloads", "find_duplicates",
-          "find_used_installers",   "find_owner_decisions", "list_plans",         "get_plan",
-          "propose_cleanup",        "propose_optimization", "list_startup",       "boot_times",
-          "propose_disable_startup"}));
+  EXPECT_EQ(names, (std::vector<std::string>{"health_snapshot",
+                                             "metrics_latest",
+                                             "metrics_history",
+                                             "top_processes",
+                                             "list_volumes",
+                                             "explain_process",
+                                             "disk_health",
+                                             "list_alerts",
+                                             "background_costs",
+                                             "memory_trend",
+                                             "freeze_summary",
+                                             "storage_top",
+                                             "find_old_downloads",
+                                             "find_duplicates",
+                                             "find_used_installers",
+                                             "find_owner_decisions",
+                                             "list_plans",
+                                             "get_plan",
+                                             "propose_cleanup",
+                                             "propose_optimization",
+                                             "list_startup",
+                                             "boot_times",
+                                             "propose_disable_startup"}));
   // No tool approves, rejects, executes, undoes, restores or deletes anything.
   for (const std::string& name : names) {
     for (const char* verb :
@@ -203,8 +217,14 @@ TEST_F(ServerTest, ToolsCallTheirReadMethods) {
   EXPECT_EQ(Json::parse(text(call_tool("list_alerts"), false)), (Json{{"method", "alerts.list"}}));
   EXPECT_EQ(Json::parse(text(call_tool("freeze_summary"), false)),
             (Json{{"method", "input.summary"}}));
+  EXPECT_EQ(Json::parse(text(call_tool("background_costs"), false)),
+            (Json{{"method", "resident.costs"}}));
+  EXPECT_EQ(Json::parse(text(call_tool("memory_trend", {{"key", "armourycrate.exe"}}), false)),
+            (Json{{"method", "resident.trend"}}));
 
-  ASSERT_EQ(calls().size(), 9U);
+  ASSERT_EQ(calls().size(), 11U);
+  EXPECT_EQ(calls()[9].params, Json::object());
+  EXPECT_EQ(calls()[10].params, (Json{{"key", "armourycrate.exe"}}));
   EXPECT_EQ(calls()[5].params, (Json{{"pid", 4321}}));
   EXPECT_EQ(calls()[6].params, Json::object());
   EXPECT_EQ(calls()[0].method, "metrics.latest");
@@ -393,7 +413,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 21U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 23U);
 }
 
 }  // namespace

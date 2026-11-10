@@ -13,6 +13,7 @@ myclean_add_test(svc
     input_component_test.cpp
     phase1_fakes.hpp
     phase1_service_test.cpp
+    resident_component_test.cpp
     service_test.cpp
     svc_test_support.hpp
     telemetry_component_test.cpp

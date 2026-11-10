@@ -147,6 +147,7 @@ write, owner read).
 | Time series | `ts_raw` (in-memory ring, 1 h), `ts_minute`, `ts_hour` keyed by (metric, entity, time) | 1 h / 30 d / 2 y |
 | Entities | `disk`, `volume`, `process_image`, `app`, `startup_item`, `extension`, `service` | current + history |
 | Events | `proc_start`, `governor_event`, `input_incident`, `alert`, `health_sample` | 2 y |
+| Resident processes | `resident_fine` (5-min private bytes per program), `resident_hour` (hourly CPU, RAM, disk, network per program) | 2 d / 35 d |
 | Findings & plans | `finding`, `plan`, `plan_item`, `approval` | 2 y |
 | Actions | `action_log` (append-only; trigger blocks UPDATE/DELETE), `undo_blob`, `quarantine` | permanent |
 | Index | `ntfs_dir_size` (folder sizes + growth), per volume | live |
@@ -266,7 +267,8 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   (`src/core/ipc`). Methods are typed and registered by the service
   components; the exact JSON of each is documented in the contract headers
   of `src/core/ipc/` (`status.hpp`, `telemetry.hpp`, `disk_health.hpp`,
-  `alerts.hpp`, `input.hpp`, `plans.hpp`, `governor.hpp`). Phase 1 and the governor:
+  `alerts.hpp`, `input.hpp`, `plans.hpp`, `governor.hpp`, `resident.hpp`).
+  Phase 1, the governor and the resident processes:
 
   | Method | Parameters | Component |
   |---|---|---|
@@ -289,6 +291,8 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   | `governor.pause` (tray only) | minutes | governor |
   | `governor.game_mode` (tray only) | override | governor |
   | `governor.user_state` (tray only) | state, foreground_pid | governor |
+  | `resident.costs` | none | resident |
+  | `resident.trend` | key | resident |
 
   Tray-only methods are checked via the client process image and session. Later phases add
   `scan.run` and so on (the cleaning methods are in `plans.hpp`).
@@ -314,7 +318,8 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   unrecognized ones, system signals), `metrics_latest`, `metrics_history`,
   `top_processes`, `list_volumes`, `explain_process`, `disk_health`,
   `list_alerts`, `freeze_summary`, the storage tools, `list_plans`,
-  `get_plan`, `list_startup` and `boot_times`. Proposal tools (`propose_cleanup`,
+  `get_plan`, `list_startup`, `boot_times`, `background_costs` and
+  `memory_trend`. Proposal tools (`propose_cleanup`,
   `propose_optimization`, `propose_disable_startup`; `propose_uninstall`
   arrives later) create plans in the `awaiting_approval` state, which
   triggers a tray notification. They name what they propose only by the

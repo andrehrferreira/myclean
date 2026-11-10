@@ -1,0 +1,10 @@
+myclean_add_test(resident
+  SOURCES
+    history_test.cpp
+    leak_test.cpp
+    resident_fixtures.hpp
+    sampler_test.cpp
+    tracker_test.cpp
+  DEPENDS
+    myclean::resident
+    myclean::fakes)

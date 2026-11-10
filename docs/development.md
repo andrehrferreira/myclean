@@ -96,6 +96,8 @@ src/core/cleaning/      cleaning in the service: executor, scheduled auto run an
                         tasks of the tray, space analyses, the methods of ipc/plans.hpp
 src/core/tray_model/    tray state, the poller, the dashboard model and the approval inbox
                         (no UI)
+src/core/resident/      resident processes: per-program use from the process tables (resident_fine,
+                        resident_hour), the 30-day cost report and the memory-leak detector
 src/core/user_tasks/    the user-scope plans the tray runs under the owner's token: native
                         commands, user-profile cleanup handlers, relocations; their reports
 src/platform/<module>/  Win32 implementations of src/core interfaces (proc, perf, disk,
@@ -255,6 +257,7 @@ started in this order (stopped in reverse), so that each starts after those it u
 | `governor` | resource governor (`core/governing`): build/test trees into their jobs on the ETW start, the 1 s pressure loop and ladder on the telemetry samples, game detection and game mode, crash recovery at start and fail-open at stop; `[governor] mode` in `data/governor.toml` (`observe`, the default, records only) | `governor.*` |
 | `input` | `input_incident` table for the tray's watchdog | `input.*` |
 | `startup` | measures the first 2 minutes of each owner logon (`logon_impact`) and, every 10 min, records the boots Windows measured from the Diagnostics-Performance log (`boot_time`) | (read by `startup.*`) |
+| `resident` | every second hands the newest process table to `resident::Tracker`: per program (the lower-case image of its trees' root) and minute, CPU time, private bytes, RAM, disk I/O and the network bytes of `net_minute`; 5-minute private bytes in `resident_fine` (2 days), hourly totals in `resident_hour` (35 days); at each closed 5-minute bucket the leak readings go to `alerts` (rule `process.memory-leak`). Reads only: it cannot act on a process | `resident.*` |
 | `cleaning` | rule scans (the clean cases of the knowledge packs that apply, reloaded at every scan) and plans by tier; runs approved service-scope plans and, after every scan, its auto-tier plan; auto run hourly (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge (runs past 7 days, and at once every run on a volume under 10 % free) on the in-app scheduler; user tasks for the tray; space analyses; the startup items, their impact and the boot and logon times | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*`, `startup.*` |
 
 The contracts of the cleaning methods are in `src/core/ipc/plans.hpp`, the governor's in

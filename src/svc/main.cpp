@@ -19,6 +19,7 @@
 #include <wil/resource.h>
 #include <windows.h>
 
+#include "core/events/event_store.hpp"
 #include "core/games/library_roots.hpp"
 #include "core/governing/governor.hpp"
 #include "core/model/result.hpp"
@@ -64,6 +65,7 @@
 #include "svc/host.hpp"
 #include "svc/input_component.hpp"
 #include "svc/owner_session.hpp"
+#include "svc/resident_component.hpp"
 #include "svc/startup_component.hpp"
 #include "svc/telemetry_component.hpp"
 #include "svc/trust_component.hpp"
@@ -249,6 +251,26 @@ std::unique_ptr<svc::GovernorComponent> make_governor(const svc::HostOptions& op
       files, &events.router());
 }
 
+// The network bytes per process of the stored minutes in [from, to), for the resident history.
+Result<std::vector<myclean::resident::ProcessTraffic>> network_traffic(myclean::store::Store& store,
+                                                                       myclean::WallTime from,
+                                                                       myclean::WallTime to) {
+  Result<std::vector<myclean::events::ProcessNetwork>> totals =
+      myclean::events::network_by_process(store, from, to);
+  if (!totals) {
+    return tl::unexpected(totals.error());
+  }
+  std::vector<myclean::resident::ProcessTraffic> traffic;
+  traffic.reserve(totals->size());
+  for (myclean::events::ProcessNetwork& process : *totals) {
+    traffic.push_back({.pid = process.pid,
+                       .created = process.created,
+                       .image = std::move(process.image),
+                       .bytes = process.sent + process.received});
+  }
+  return traffic;
+}
+
 // Every component the service runs, in start order: a component starts after those it uses and
 // stops before them. Collectors are registered here.
 std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOptions& options) {
@@ -286,6 +308,10 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
       .view = [telemetry = telemetry.get()] { return telemetry->processes(); },
       .logon = [](std::string_view owner) { return svc::owner_logon_time(owner); },
       .diagnostics = std::make_unique<platform::Win32DiagnosticsLog>()});
+  auto resident = std::make_unique<svc::ResidentComponent>(
+      svc::ResidentSources{.view = [telemetry = telemetry.get()] { return telemetry->processes(); },
+                           .network = network_traffic},
+      alerts.get());
 
   std::vector<std::unique_ptr<svc::IComponent>> components;
   components.push_back(std::move(alerts));
@@ -296,6 +322,7 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
   components.push_back(std::move(governor));
   components.push_back(std::make_unique<svc::InputComponent>());
   components.push_back(std::move(startup));
+  components.push_back(std::move(resident));
   components.push_back(std::move(cleaning));
   return components;
 }

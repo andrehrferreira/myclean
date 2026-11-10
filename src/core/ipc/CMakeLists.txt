@@ -12,6 +12,7 @@ myclean_add_library(ipc
     json_rpc.hpp
     plans.cpp
     plans.hpp
+    resident.hpp
     status.cpp
     status.hpp
     telemetry.cpp

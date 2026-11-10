@@ -19,6 +19,8 @@ myclean_add_library(svc
     input_component.hpp
     owner_session.cpp
     owner_session.hpp
+    resident_component.cpp
+    resident_component.hpp
     service.cpp
     service.hpp
     startup_component.cpp
@@ -47,6 +49,7 @@ myclean_add_library(svc
     myclean::platform_service
     myclean::platform_settings
     myclean::platform_startup
+    myclean::resident
     myclean::rules
     myclean::startup
     myclean::store

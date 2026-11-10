@@ -19,6 +19,7 @@
 #include "core/ipc/input.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/plans.hpp"
+#include "core/ipc/resident.hpp"
 #include "core/ipc/telemetry.hpp"
 #include "core/mcp/client.hpp"
 #include "core/os/clock.hpp"
@@ -165,10 +166,28 @@ const Json& tool_list() {
            object_schema()),
       tool("list_alerts",
            "Alerts MyClean has raised (drive almost full or filling up, disk health changes, "
-           "drive temperature), newest first: rule, entity, title, severity, first and last "
-           "time, count, whether active or snoozed, and detail. Reads only; snoozing and "
-           "dismissing are left to the owner.",
+           "drive temperature, a program whose memory keeps growing), newest first: rule, "
+           "entity, title, severity, first and last time, count, whether active or snoozed, and "
+           "detail. Reads only; snoozing and dismissing are left to the owner.",
            object_schema()),
+      tool("background_costs",
+           "Every program that ran resident (at least 24 hours) in the last 30 days, most CPU "
+           "time first: its 30-day CPU seconds, average and peak RAM (private working set of "
+           "its process trees, sampled each minute), disk I/O bytes and network bytes, and the "
+           "hours it ran. A program is the image name of its process trees' root. Reads only; "
+           "nothing can close or limit a program.",
+           object_schema()),
+      tool("memory_trend",
+           "The private-bytes (commit charge) trend of one program over the last 48 hours in "
+           "5-minute steps, and whether it is growing steadily (the hours of growth and the "
+           "median of each hour), as behind the process.memory-leak alert. Reads only; MyClean "
+           "never acts on a program it suspects of leaking.",
+           object_schema({{"key",
+                           {{"type", "string"},
+                            {"description",
+                             "The program: the 'key' of background_costs or the 'entity' of a "
+                             "process.memory-leak alert, such as 'armourycrate.service.exe'"}}}},
+                         Json::array({"key"}))),
       tool("freeze_summary",
            "Copy/paste freezes over 250 ms recorded by the input watchdog, grouped by "
            "mechanism (delayed rendering, clipboard held open, viewer chain, slow keyboard hook, "
@@ -635,6 +654,10 @@ tl::expected<Json, std::string> Server::call_tool(const Json& params) const {
     reply = call_(ipc::alerts_list_method, Json::object());
   } else if (tool_name == "freeze_summary") {
     reply = call_(ipc::input_summary_method, Json::object());
+  } else if (tool_name == "background_costs") {
+    reply = call_(ipc::resident_costs_method, Json::object());
+  } else if (tool_name == "memory_trend") {
+    reply = call_(ipc::resident_trend_method, Json{{"key", arguments.at("key")}});
   } else {
     reply = call_(ipc::volumes_list_method, Json::object());
   }
