@@ -871,6 +871,32 @@ TEST_F(CleaningServiceTest, StartupItemsChangeOnlyAfterTheOwnerApprovesAndUndoRe
             "not_found");
 }
 
+// Startup spec "Fallback before history exists": before MyClean has measured a logon, an item
+// shows the boot delay Windows attributed to its program in the last 30 days, labelled as such;
+// an item Windows did not report shows no impact.
+TEST_F(CleaningServiceTest, StartupImpactFallsBackToWindowsBootDelaysBeforeAnyLogonIsMeasured) {
+  startup().snapshot.run = {
+      {.scope = startup::Scope::user, .name = "OneDrive", .command = "OneDrive.exe /background"},
+      {.scope = startup::Scope::user, .name = "Steam", .command = "steam.exe -silent"}};
+  diagnostics().xml = {
+      startup::testing::delay_event_xml("OneDrive.exe", 2500, "2026-10-30T08:01:00.5000000Z"),
+      startup::testing::delay_event_xml("OneDrive.exe", 4000, "2026-10-20T08:01:00Z"),
+      // Older than 30 days: no longer counts.
+      startup::testing::delay_event_xml("steam.exe", 9000, "2026-09-01T08:01:00Z")};
+  start();
+  const Json items = call("startup.list").at("items");
+  ASSERT_EQ(items.size(), 2U);
+  EXPECT_EQ(items[0].at("name"), "OneDrive");
+  EXPECT_EQ(items[0].at("impact").at("source"), "diagnostics");
+  EXPECT_DOUBLE_EQ(items[0].at("impact").at("delay_seconds").get<double>(), 4.0);
+  EXPECT_EQ(items[1].at("name"), "Steam");
+  EXPECT_TRUE(items[1].at("impact").is_null());
+
+  // A log the service may not read: no impact, and the list still answers.
+  diagnostics().error = Error{.code = Errc::access_denied, .message = "denied"};
+  EXPECT_TRUE(call("startup.list").at("items")[0].at("impact").is_null());
+}
+
 TEST_F(CleaningServiceTest, AConsoleRunNeverAppliesHandlersOrSystemSettings) {
   add_targets();
   start(ServiceSettings{.executor = {.system_changes = false}});

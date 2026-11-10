@@ -82,7 +82,8 @@ Result<void> CleaningComponent::start(const Context& context) {
                 .zones = sources_.zones.get(),
                 .hasher = sources_.hasher.get(),
                 .installers = sources_.installers.get()},
-      .busy = sources_.busy};
+      .busy = sources_.busy,
+      .diagnostics = sources_.diagnostics.get()};
   service_ = std::make_unique<cleaning::CleaningService>(std::move(sources), std::move(settings));
   service_->on_work([this] { wake(); });
   if (Result<void> started = service_->start(context.methods()); !started) {

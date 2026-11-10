@@ -118,6 +118,7 @@ they are tested by replaying recorded fixtures.
 | NTFS index | `$MFT` read + `FSCTL_READ_USN_JOURNAL` per NTFS volume | continuous | svc |
 | Sensor bridge | HWiNFO shared memory / LibreHardwareMonitor (optional) | 2 s | tray |
 | Inventories | registry, Task Scheduler (read via `ITaskService`), SCM, Appx, Uninstall keys, browser profiles, backup sources | on demand + daily | svc / tray |
+| Boot diagnostics | `Microsoft-Windows-Diagnostics-Performance/Operational` via `EvtQuery` (readable only by SYSTEM, elevated administrators and service logons): event 101, the boot delay Windows attributed to a program, is the impact `startup.list` shows for a startup item until MyClean has measured a logon running it (last 30 days, `DegradationTime`) | on demand | svc |
 | Input watchdog | raw input (`RIDEV_INPUTSINK`), clipboard listener, `SendMessageTimeout` probes | events | tray |
 
 The **sample bus** is an in-process, lock-free single-producer ring per

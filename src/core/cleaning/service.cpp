@@ -55,6 +55,7 @@
 #include "core/space/json.hpp"
 #include "core/space/scanner.hpp"
 #include "core/space/top.hpp"
+#include "core/startup/diagnostics.hpp"
 #include "core/startup/impact.hpp"
 #include "core/startup/startup.hpp"
 #include "core/store/database.hpp"
@@ -650,8 +651,15 @@ Result<Json> CleaningService::startup_list() {
   // The impact of the latest logons the startup component measured; none before the first.
   Result<std::vector<std::vector<startup::ImageImpact>>> history =
       startup::logon_history(*sources_.store, startup_logons);
+  // Until then, the boot delays Windows attributed to programs in the last 30 days.
+  std::vector<startup::BootDelay> delays;
+  if (sources_.diagnostics != nullptr) {
+    if (const Result<std::vector<std::string>> events = sources_.diagnostics->events(); events) {
+      delays = startup::boot_delays(*events, sources_.clock->now() - startup::delay_span);
+    }
+  }
   const std::vector<std::optional<startup::ItemImpact>> impacts = startup::item_impacts(
-      items, history ? *history : std::vector<std::vector<startup::ImageImpact>>{}, {});
+      items, history ? *history : std::vector<std::vector<startup::ImageImpact>>{}, delays);
   Json listed = Json::array();
   std::vector<std::string> ids;
   ids.reserve(items.size());

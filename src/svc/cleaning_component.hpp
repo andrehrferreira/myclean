@@ -27,6 +27,7 @@
 #include "core/space/duplicates.hpp"
 #include "core/space/installers.hpp"
 #include "core/space/scanner.hpp"
+#include "core/startup/diagnostics.hpp"
 #include "core/startup/startup.hpp"
 #include "core/store/migrations.hpp"
 #include "svc/component.hpp"
@@ -62,6 +63,8 @@ struct CleaningSources {
   std::function<std::unique_ptr<cleanup::IBinRecords>(std::string_view owner_sid)> bin;
   // The startup items of the owner with this SID and of the machine; empty: no startup items.
   std::function<std::unique_ptr<startup::IStartupSystem>(std::string_view owner_sid)> startup;
+  // Windows' Diagnostics-Performance boot events; null: none.
+  std::unique_ptr<startup::IDiagnosticsLog> diagnostics;
 };
 
 // How this service runs cleaning.

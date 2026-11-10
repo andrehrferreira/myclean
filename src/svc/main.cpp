@@ -30,6 +30,7 @@
 #include "platform/cleanup/win32_command_runner.hpp"
 #include "platform/cleanup/win32_handler_host.hpp"
 #include "platform/cleanup/win32_recycle_bin.hpp"
+#include "platform/diagnostics/win32_diagnostics_log.hpp"
 #include "platform/disk/win32_volume_info.hpp"
 #include "platform/disk_health/win32_disk_health.hpp"
 #include "platform/etw/etw_event_source.hpp"
@@ -178,7 +179,8 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
       },
       .startup = [](std::string_view owner) -> std::unique_ptr<myclean::startup::IStartupSystem> {
         return std::make_unique<platform::Win32StartupSystem>(std::string(owner));
-      }};
+      },
+      .diagnostics = std::make_unique<platform::Win32DiagnosticsLog>()};
   // "C:" / "" stays "C:" (a drive-relative path); the handlers need the volume root "C:\".
   const std::filesystem::path root =
       std::filesystem::path((drive.empty() ? std::string("C:") : drive) + "\\");

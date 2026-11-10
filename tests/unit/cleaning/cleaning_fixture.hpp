@@ -244,7 +244,8 @@ class CleaningFixture : public ::testing::Test {
         .files = &files_,
         .data_dir = data_dir,
         .space = {.reader = &reader_, .hasher = &hasher_},
-        .busy = [this] { return busy_; }};
+        .busy = [this] { return busy_; },
+        .diagnostics = &diagnostics_};
     service_ = std::make_unique<CleaningService>(std::move(sources), std::move(settings));
     ASSERT_TRUE(service_->start(*methods_).has_value());
   }
@@ -323,6 +324,7 @@ class CleaningFixture : public ::testing::Test {
   placement::testing::FakeProcessRunner& tools() { return tools_; }
   placement::testing::FakeDriveFacts& drives() { return drives_; }
   startup::testing::FakeStartupSystem& startup() { return startup_; }
+  startup::testing::FakeDiagnosticsLog& diagnostics() { return diagnostics_; }
   space::testing::FakeDirectoryReader& reader() { return reader_; }
   CleaningService& service() { return *service_; }
   packs::testing::FakePackFiles& pack_files() { return files_; }
@@ -358,6 +360,7 @@ class CleaningFixture : public ::testing::Test {
   placement::testing::FakeProcessRunner tools_;
   placement::testing::FakeDriveFacts drives_;
   startup::testing::FakeStartupSystem startup_;
+  startup::testing::FakeDiagnosticsLog diagnostics_;
   space::testing::FakeDirectoryReader reader_;
   NameDigitHasher hasher_;
   packs::testing::FakePackFiles files_;

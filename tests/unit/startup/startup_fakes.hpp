@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "core/model/result.hpp"
+#include "core/startup/diagnostics.hpp"
 #include "core/startup/startup.hpp"
 
 namespace myclean::startup::testing {
@@ -85,6 +86,33 @@ class FakeStartupSystem final : public IStartupSystem {
       return fail(Errc::access_denied, "denied");
     }
     return {};
+  }
+};
+
+// An event 101 as the Diagnostics-Performance log renders it: program `name` slowed the boot by
+// `degradation_ms`; written at `created` (xs:dateTime).
+inline std::string delay_event_xml(std::string_view name, std::uint32_t degradation_ms,
+                                   std::string_view created) {
+  return "<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System>"
+         "<Provider Name='Microsoft-Windows-Diagnostics-Performance'/><EventID>101</EventID>"
+         "<TimeCreated SystemTime='" +
+         std::string(created) + "'/></System><EventData><Data Name='Name'>" + std::string(name) +
+         "</Data><Data Name='TotalTime'>" + std::to_string(degradation_ms + 1000) +
+         "</Data><Data Name='DegradationTime'>" + std::to_string(degradation_ms) +
+         "</Data></EventData></Event>";
+}
+
+// The Diagnostics-Performance log in memory: `xml`, newest first, or `error`.
+class FakeDiagnosticsLog final : public IDiagnosticsLog {
+ public:
+  std::vector<std::string> xml;
+  std::optional<Error> error;
+
+  [[nodiscard]] Result<std::vector<std::string>> events() const override {
+    if (error) {
+      return tl::unexpected(*error);
+    }
+    return xml;
   }
 };
 

@@ -45,6 +45,7 @@
 #include "core/space/duplicates.hpp"
 #include "core/space/installers.hpp"
 #include "core/space/scanner.hpp"
+#include "core/startup/diagnostics.hpp"
 #include "core/store/store.hpp"
 
 // Cleaning in the service (cleaning spec C4, C5; approvals spec; space spec, prompt 3): the
@@ -95,6 +96,9 @@ struct ServiceSources {
   SpaceProbes space;
   // True while the system volume is critically busy: the auto run waits. Empty: never busy.
   std::function<bool()> busy;
+  // Windows' boot measurements: the startup impact shown before MyClean has measured a logon.
+  // Null: none.
+  const startup::IDiagnosticsLog* diagnostics = nullptr;
 };
 
 struct ServiceSettings {

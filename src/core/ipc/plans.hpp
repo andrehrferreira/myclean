@@ -135,8 +135,11 @@ inline constexpr std::string_view plans_propose_optimization_method = "plans.pro
 // "display_name", "command", "enabled": bool|null, "signer"?, "start"?, "delayed"?, "impact"}]}.
 // "id" is the item's number in this answer, the only way plans.propose_startup names it;
 // "enabled" is null for RunOnce items, which cannot be disabled. "impact" is null when unknown,
-// else {"source": "myclean", "cpu_seconds", "io_bytes", "logons"}: the median use of the item's
-// program in the first 2 minutes after the latest logons MyClean measured.
+// else {"source", "cpu_seconds", "io_bytes", "logons", "delay_seconds"}: with source "myclean",
+// the median use of the item's program in the first 2 minutes after the latest logons MyClean
+// measured (cpu_seconds, io_bytes, logons; delay_seconds 0); with source "diagnostics", for a
+// program none of those logons ran, the largest boot delay Windows attributed to it in the last
+// 30 days (Diagnostics-Performance event 101, DegradationTime; the others 0).
 inline constexpr std::string_view startup_list_method = "startup.list";
 
 // Parameters: candidates (record, required): {"ids": [int]}, "id" values of the latest
