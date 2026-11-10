@@ -1,6 +1,7 @@
 #include "core/startup/toggle.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -15,7 +16,10 @@
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
 #include "core/model/text.hpp"
+#include "core/startup/boot_times.hpp"
+#include "core/startup/diagnostics.hpp"
 #include "core/startup/startup.hpp"
+#include "core/store/database.hpp"
 
 namespace myclean::startup {
 namespace {
@@ -126,6 +130,7 @@ struct Change {
   std::string id;
   State before;
   State written;
+  std::optional<WallTime> applied;  // when apply wrote it; absent in undo data of older plans
 };
 
 Result<std::vector<Change>> parse_undo(const Undo& undo) {
@@ -146,10 +151,15 @@ Result<std::vector<Change>> parse_undo(const Undo& undo) {
       if (!written) {
         return tl::unexpected(written.error());
       }
+      const std::optional<WallTime> applied =
+          json.contains("applied")
+              ? std::optional(store::from_unix_seconds(json.at("applied").get<std::int64_t>()))
+              : std::nullopt;
       changes.push_back(Change{.key = *std::move(key),
                                .id = id,
                                .before = *std::move(before),
-                               .written = *std::move(written)});
+                               .written = *std::move(written),
+                               .applied = applied});
     }
   } catch (const Json::exception& error) {
     return fail(Errc::invalid_data, std::string("startup undo data: ") + error.what());
@@ -264,7 +274,8 @@ Result<Undo> StartupToggle::apply(const Preview& preview) {
     undo.items.push_back(UndoItem{.item = planned.id,
                                   .data = Json{{"id", id},
                                                {"before", state_json(change.before)},
-                                               {"written", state_json(change.written)}}
+                                               {"written", state_json(change.written)},
+                                               {"applied", store::to_unix_seconds(now)}}
                                               .dump()});
     done.push_back(std::move(change));
   }
@@ -289,10 +300,33 @@ Result<Verification> StartupToggle::verify(const Undo& undo) {
     const std::optional<State> now = current_state(*snapshot, items, change);
     return now && still_written(*now, change.written);
   });
-  return Verification{.metric = "startup_items_changed",
-                      .before = 0.0,
-                      .after = static_cast<double>(applied),
-                      .effect = applied == std::ssize(*changes) ? Effect::better : Effect::worse};
+  Verification held{.metric = "startup_items_changed",
+                    .before = 0.0,
+                    .after = static_cast<double>(applied),
+                    .effect = applied == std::ssize(*changes) ? Effect::better : Effect::worse};
+  if (held.effect == Effect::worse || enable_ || !boots_ || changes->empty() ||
+      !changes->front().applied) {
+    return held;
+  }
+  Result<std::vector<BootRecord>> boots = boots_();
+  if (!boots) {
+    return tl::unexpected(boots.error());
+  }
+  const WallTime when = *changes->front().applied;
+  const std::optional<DurationMedian> before = median_of(boots_before(*boots, when, change_boots));
+  if (!before) {
+    return held;  // no logon measured before the change: nothing to compare with
+  }
+  const double logon_before = std::chrono::duration<double>(before->logon).count();
+  const std::optional<DurationMedian> after = median_of(boots_after(*boots, when, change_boots));
+  if (!after) {
+    return Verification{.metric = "logon_seconds", .before = logon_before, .pending = true};
+  }
+  const double logon_after = std::chrono::duration<double>(after->logon).count();
+  return Verification{.metric = "logon_seconds",
+                      .before = logon_before,
+                      .after = logon_after,
+                      .effect = lower_is_better(logon_before, logon_after, logon_tolerance)};
 }
 
 Result<void> StartupToggle::undo(const Undo& undo) {

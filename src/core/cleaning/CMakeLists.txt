@@ -17,13 +17,16 @@ myclean_add_library(cleaning
     views.hpp
   DEPENDS
     myclean::actions
+    myclean::alerts
     myclean::clean
     myclean::cleanup
     myclean::devdrive
+    myclean::health
     myclean::indexer
     myclean::ipc
     myclean::packs
     myclean::placement
+    myclean::resident
     myclean::rules
     myclean::scanall
     myclean::sched

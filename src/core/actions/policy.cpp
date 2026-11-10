@@ -311,8 +311,50 @@ Result<RunReport> PolicyEngine::execute(PlanId id, Action& action, const Actor& 
     return tl::unexpected(*rejection);
   }
 
-  RunReport report{.state = PlanState::applied, .undo = *undo};
-  const Result<Verification> verification = action.verify(*undo);
+  return conclude(id, action, actor, auto_undo,
+                  RunReport{.state = PlanState::applied, .undo = *undo}, action.verify(*undo));
+}
+
+Result<RunReport> PolicyEngine::verify_pending(PlanId id, Action& action, const Actor& actor,
+                                               bool auto_undo) {
+  Result<Plan> plan = fail(Errc::io_error, "plan not read");
+  Result<std::optional<LogEntry>> latest = fail(Errc::io_error, "log not read");
+  Result<Undo> stored = fail(Errc::not_found, "no undo data");
+  if (Result<void> read = store_->read([&](store::Database& db) -> Result<void> {
+        plan = store::get_plan(db, id);
+        latest = last_verification(db, id);
+        stored = load_undo(db, id);
+        return {};
+      });
+      !read) {
+    return tl::unexpected(read.error());
+  }
+  if (!plan) {
+    return tl::unexpected(plan.error());
+  }
+  if (!latest) {
+    return tl::unexpected(latest.error());
+  }
+  const std::optional<LogEntry>& newest = *latest;
+  if (plan->state != PlanState::applied || !newest || newest->outcome != "pending") {
+    return fail(Errc::invalid_state,
+                "plan " + std::to_string(id.value()) + " has no pending verification");
+  }
+  if (!stored) {
+    return tl::unexpected(stored.error());
+  }
+  const Result<Verification> verification = action.verify(*stored);
+  RunReport report{.state = PlanState::applied, .undo = *std::move(stored)};
+  if (verification && verification->pending) {
+    report.verification = *verification;
+    return report;
+  }
+  return conclude(id, action, actor, auto_undo, std::move(report), verification);
+}
+
+Result<RunReport> PolicyEngine::conclude(PlanId id, Action& action, const Actor& actor,
+                                         bool auto_undo, RunReport report,
+                                         const Result<Verification>& verification) {
   LogEntry verify_entry{.time = clock_->now(),
                         .plan = id,
                         .actor = actor.to_string(),
@@ -320,6 +362,9 @@ Result<RunReport> PolicyEngine::execute(PlanId id, Action& action, const Actor& 
                         .outcome = "error"};
   if (!verification) {
     verify_entry.detail = verification.error().message;
+  } else if (verification->pending) {
+    verify_entry.outcome = "pending";
+    verify_entry.metrics = std::format("{} before={}", verification->metric, verification->before);
   } else {
     verify_entry.outcome = std::string(to_string(verification->effect));
     verify_entry.metrics = std::format("{} before={} after={}", verification->metric,
@@ -330,9 +375,13 @@ Result<RunReport> PolicyEngine::execute(PlanId id, Action& action, const Actor& 
   }
   if (!verification) {
     report.alert = true;
+    report.unverified = verification.error().message;
     return report;
   }
   report.verification = *verification;
+  if (verification->pending) {
+    return report;
+  }
 
   if (verification->effect != Effect::worse) {
     if (Result<void> verified = transition(id, PlanState::verified, actor); !verified) {
@@ -341,7 +390,7 @@ Result<RunReport> PolicyEngine::execute(PlanId id, Action& action, const Actor& 
     report.state = PlanState::verified;
     return report;
   }
-  if (undo->reversible() && auto_undo) {
+  if (report.undo.reversible() && auto_undo) {
     if (const Result<void> undone = this->undo(id, action, actor); undone) {
       report.state = PlanState::rolled_back;
       return report;

@@ -73,6 +73,31 @@ metric = "disk.health_status"
 severity = "critical"
 above = 1.5
 
+# A plan's verification (optimizer spec, "Auto-Undo When Worse"; src/core/cleaning/executor.hpp):
+# the entity is the plan id. An optimization that made the metric it targets worse is undone at
+# once when it can be; any plan that made it worse and was kept, and an optimization whose effect
+# could not be measured, are reported. The detail gives the metric before and after.
+[[rule]]
+id = "plan.rolled-back"
+title = "MyClean undid a change that made things worse"
+metric = "plan.rolled_back"
+severity = "warning"
+above = 0.5
+
+[[rule]]
+id = "plan.worse"
+title = "A change made things worse"
+metric = "plan.worse"
+severity = "warning"
+above = 0.5
+
+[[rule]]
+id = "plan.unverified"
+title = "MyClean could not measure a change's effect"
+metric = "plan.unverified"
+severity = "info"
+above = 0.5
+
 # A program whose process trees' private bytes (commit charge) rose hour after hour without
 # falling back (core/resident/leak.hpp); the entity is the program's lower-case image name and
 # the value the whole hours of steady growth, so this fires at 6 hours. MyClean only reports it:

@@ -71,6 +71,9 @@ struct PlanRow {
   std::int64_t items = 0;
   Bytes bytes;
   bool needs_restart = false;
+  // The newest re-measurement of the plan's metric: pending, better, unchanged, worse, error;
+  // empty before it was applied (or from a service older than this field).
+  std::string verification;
 };
 
 // One item of plans.get. `approved` is nullopt while the owner has not decided.
@@ -243,6 +246,9 @@ inline constexpr std::string_view awaiting_approval = "awaiting_approval";
 // commands and handlers regenerate and cannot be undone. The service decides; this only offers the
 // button.
 [[nodiscard]] bool undoable(const PlanRow& plan);
+// The state of `plan` as the inbox shows it: "applied, verification pending" while its metric is
+// still to be measured again (it is not counted as verified), its state otherwise.
+[[nodiscard]] std::string state_text(const PlanRow& plan);
 // The bytes of the pending plans per tier, and per kind, in order of first appearance.
 using ByteTotals = std::vector<std::pair<std::string, Bytes>>;
 [[nodiscard]] ByteTotals pending_bytes_by_tier(const std::vector<PlanRow>& plans);

@@ -271,7 +271,7 @@ void draw_plan(const PlanRow& plan, const CleanupView& cleanup, const std::chron
   const bool waiting = tray_model::pending(plan);
   const std::optional<double> share = applied(plan, cleanup);
   const std::string progress =
-      share ? std::format("{} {:.0f} %", plan.state, *share * 100.0) : plan.state;
+      share ? std::format("{} {:.0f} %", plan.state, *share * 100.0) : tray_model::state_text(plan);
   const std::string header =
       waiting ? std::format("{}  -  {}  -  {}  -  tier {}###plan", plan.title,
                             size_text(plan.bytes), plural(plan.items, "item"), plan.tier)

@@ -152,7 +152,8 @@ myclean::Result<std::optional<std::filesystem::path>> owner_packs() {
 std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& options,
                                                       const myclean::packs::IPackFiles& files,
                                                       const svc::TelemetryComponent& telemetry,
-                                                      const svc::DiskHealthComponent& disks) {
+                                                      const svc::DiskHealthComponent& disks,
+                                                      svc::AlertsComponent& alerts) {
   namespace platform = myclean::platform;
   const std::string drive = system_drive();
   const std::optional<std::filesystem::path> git = platform::find_git();
@@ -190,7 +191,8 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
         return std::make_unique<platform::Win32StartupSystem>(std::string(owner));
       },
       .diagnostics = std::make_unique<platform::Win32DiagnosticsLog>(),
-      .indexer = std::make_unique<platform::Win32IndexerScope>()};
+      .indexer = std::make_unique<platform::Win32IndexerScope>(),
+      .alerts = &alerts};
   // "C:" / "" stays "C:" (a drive-relative path); the handlers need the volume root "C:\".
   const std::filesystem::path root =
       std::filesystem::path((drive.empty() ? std::string("C:") : drive) + "\\");
@@ -311,7 +313,7 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
       trust.get());
 
   auto governor = make_governor(options, files, *telemetry, *events);
-  auto cleaning = make_cleaning(options, files, *telemetry, *disk_health);
+  auto cleaning = make_cleaning(options, files, *telemetry, *disk_health, *alerts);
   auto startup = std::make_unique<svc::StartupComponent>(svc::StartupSources{
       .view = [telemetry = telemetry.get()] { return telemetry->processes(); },
       .logon = [](std::string_view owner) { return svc::owner_logon_time(owner); },

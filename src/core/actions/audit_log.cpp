@@ -1,10 +1,12 @@
 #include "core/actions/audit_log.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "core/model/action.hpp"
@@ -90,6 +92,38 @@ Result<std::vector<LogEntry>> plan_log(store::Database& db, PlanId plan) {
     return tl::unexpected(row.error());
   }
   return entries;
+}
+
+Result<std::optional<LogEntry>> last_verification(store::Database& db, PlanId plan) {
+  Result<std::vector<LogEntry>> entries = plan_log(db, plan);
+  if (!entries) {
+    return tl::unexpected(entries.error());
+  }
+  const auto entry = std::ranges::find(entries->rbegin(), entries->rend(),
+                                       std::string_view("verify"), &LogEntry::event);
+  if (entry == entries->rend()) {
+    return std::optional<LogEntry>();
+  }
+  return std::optional<LogEntry>(std::move(*entry));
+}
+
+Result<std::vector<PlanId>> pending_verifications(store::Database& db) {
+  Result<store::Statement> query = db.prepare(
+      "SELECT p.id FROM plan p WHERE p.state = 'applied' AND (SELECT a.outcome FROM action_log a "
+      "WHERE a.plan_id = p.id AND a.event = 'verify' ORDER BY a.id DESC LIMIT 1) = 'pending' "
+      "ORDER BY p.id");
+  if (!query) {
+    return tl::unexpected(query.error());
+  }
+  std::vector<PlanId> plans;
+  Result<bool> row = query->step();
+  for (; row && *row; row = query->step()) {
+    plans.emplace_back(query->column_int(0));
+  }
+  if (!row) {
+    return tl::unexpected(row.error());
+  }
+  return plans;
 }
 
 Result<void> save_undo(store::Database& db, std::int64_t log_id, PlanId plan, const Undo& undo) {

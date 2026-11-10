@@ -7,6 +7,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/model/result.hpp"
@@ -107,5 +108,10 @@ struct Cost {
 // `min_running` in them (the resident ones); most CPU time first, then by key.
 [[nodiscard]] Result<std::vector<Cost>> costs(store::Store& store, WallTime from,
                                               std::chrono::minutes min_running);
+
+// What program `key` cost in the stored hours that start in [from, to); every member is 0 when
+// it did not run in them.
+[[nodiscard]] Result<Cost> cost_of(store::Store& store, std::string_view key, WallTime from,
+                                   WallTime to);
 
 }  // namespace myclean::resident

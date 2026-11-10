@@ -125,6 +125,11 @@ TEST_F(HistoryTest, HoursAddUpToTheCostOfEachResidentProgram) {
   EXPECT_EQ(resident->front().key, "armourycrate.service.exe");
   // Hours before `from` are left out.
   EXPECT_TRUE(costs(store(), noon + 1h, 1min).value().empty());
+  // One program over a span: the same totals; nothing outside the span or for another key.
+  EXPECT_EQ(cost_of(store(), "armourycrate.service.exe", noon, noon + 1h).value(), all->at(0));
+  EXPECT_EQ(cost_of(store(), "armourycrate.service.exe", noon + 1h, noon + 2h).value(),
+            Cost{.key = "armourycrate.service.exe"});
+  EXPECT_EQ(cost_of(store(), "searchindexer.exe", noon, noon + 1h)->running, 0min);
 }
 
 TEST_F(HistoryTest, ABucketWrittenAtAStopIsAddedToAfterTheRestart) {

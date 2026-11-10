@@ -50,6 +50,14 @@ std::optional<Effect> parse_effect(std::string_view text) {
   return detail::enum_from_name<Effect>(effect_names, text);
 }
 
+Effect lower_is_better(double before, double after, double tolerance) {
+  const double margin = before * tolerance;
+  if (after < before - margin) {
+    return Effect::better;
+  }
+  return after > before + margin ? Effect::worse : Effect::unchanged;
+}
+
 Bytes Preview::total_size() const {
   Bytes total;
   for (const PlanItem& item : items) {

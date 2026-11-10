@@ -183,6 +183,21 @@ Each transition goes to `action_log` with the actor (`scheduler`, `governor`,
 `owner`, `mcp:<client>`). Actors of type `mcp:*` can create proposals but
 can never trigger the `approved` transition.
 
+**Verify loop (O7):** every applied plan's `verify` result is an `action_log` entry `verify` with
+the metric before and after. A metric measured over time reports `pending` with its value
+before; the plan stays `applied` (shown as pending in `plans.list` / `plans.get`, never as
+verified) and the cleaning worker measures it again every minute, also after a restart
+(`PolicyEngine::verify_pending`), until a result settles it. Disabling startup items is measured
+by the median logon of the 5 boots before the change against the boots after it (pending until
+the next boot is recorded); an index exclusion by the indexer's CPU seconds per hour it ran
+(`searchindexer.exe` in `resident_hour`) over up to 7 days before against the hours after (24
+running hours, or 7 days); both count a difference within 10 % as unchanged and fall back to
+checking that their change still holds when there is no history to compare with. Optimizations
+(plan kinds `system_setting` and `compact`) that got worse are undone at once when reversible
+(`rolled_back`); a worse result that is kept, and an optimization whose metric could not be
+measured, stay `applied`. Each outcome but `verified` raises an alert (rules `plan.rolled-back`,
+`plan.worse`, `plan.unverified` in `data/alerts.toml`; the entity is the plan id).
+
 `SafeRemove` is the only code path that deletes or moves files. It enforces
 the deny-list, never follows reparse points, skips cloud placeholders,
 accepts only items that belong to a stored plan, and re-validates each item

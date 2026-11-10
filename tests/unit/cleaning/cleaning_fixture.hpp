@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -20,13 +21,16 @@
 #include "cleanup/fakes.hpp"
 #include "core/actions/audit_log.hpp"
 #include "core/actions/schema.hpp"
+#include "core/alerts/engine.hpp"
 #include "core/clean/probes.hpp"
 #include "core/cleaning/records.hpp"
 #include "core/cleaning/service.hpp"
 #include "core/devdrive/advisor.hpp"
+#include "core/health/analysis.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/resident/history.hpp"
 #include "core/space/duplicates.hpp"
 #include "core/space/photos.hpp"
 #include "core/startup/impact.hpp"
@@ -254,6 +258,18 @@ class FakeDevDriveProbe final : public devdrive::IDevDriveProbe {
 
 // A CleaningService over fakes, with its methods on a dispatcher. Volumes as on the owner's
 // machine: C: has 8 % free (its quarantine overflows to L:), F: 13 %.
+// Keeps every alert reading reported to it.
+class AlertRecorder final : public health::IAlertSink {
+ public:
+  AlertRecorder() = default;
+
+  void report(std::span<const alerts::Reading> reported) override {
+    readings.insert(readings.end(), reported.begin(), reported.end());
+  }
+
+  std::vector<alerts::Reading> readings;
+};
+
 class CleaningFixture : public ::testing::Test {
  protected:
   CleaningFixture() {
@@ -284,7 +300,8 @@ class CleaningFixture : public ::testing::Test {
                    .drives = &drives_,
                    .startup = &startup_,
                    .disks = &disks_,
-                   .indexer = &indexer_},
+                   .indexer = &indexer_,
+                   .alerts = &alerts_},
         .owner = [this]() -> Result<OwnerContext> {
           if (!owner_available_) {
             return fail(Errc::not_found, "the owner is not logged on");
@@ -389,6 +406,7 @@ class CleaningFixture : public ::testing::Test {
   vhdx::testing::FakeVirtualDisks& disks() { return disks_; }
   startup::testing::FakeDiagnosticsLog& diagnostics() { return diagnostics_; }
   indexer::testing::FakeScope& indexer() { return indexer_; }
+  AlertRecorder& alerts() { return alerts_; }
   space::testing::FakeDirectoryReader& reader() { return reader_; }
   CleaningService& service() { return *service_; }
   store::Store& store() { return *store_; }
@@ -411,7 +429,8 @@ class CleaningFixture : public ::testing::Test {
  private:
   void open_store() {
     const std::vector<store::MigrationSet> sets = {
-        actions::action_migrations(), cleaning_migrations(), startup::impact_migrations()};
+        actions::action_migrations(), cleaning_migrations(), startup::impact_migrations(),
+        resident::resident_migrations()};
     store_ = store::Store::open(folder_.path() / "myclean.db", clock_, sets).value();
   }
 
@@ -429,6 +448,7 @@ class CleaningFixture : public ::testing::Test {
   startup::testing::FakeStartupSystem startup_;
   startup::testing::FakeDiagnosticsLog diagnostics_;
   indexer::testing::FakeScope indexer_;
+  AlertRecorder alerts_;
   space::testing::FakeDirectoryReader reader_;
   NameDigitHasher hasher_;
   NameDigitDecoder images_;

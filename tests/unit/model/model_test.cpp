@@ -18,6 +18,15 @@ namespace {
 
 using namespace myclean::literals;
 
+TEST(Effect, LowerIsBetterIgnoresChangesWithinTheTolerance) {
+  EXPECT_EQ(lower_is_better(40.0, 30.0, 0.10), Effect::better);
+  EXPECT_EQ(lower_is_better(40.0, 37.0, 0.10), Effect::unchanged);
+  EXPECT_EQ(lower_is_better(40.0, 43.0, 0.10), Effect::unchanged);
+  EXPECT_EQ(lower_is_better(40.0, 45.0, 0.10), Effect::worse);
+  EXPECT_EQ(lower_is_better(0.0, 0.0, 0.10), Effect::unchanged);
+  EXPECT_EQ(lower_is_better(0.0, 1.0, 0.10), Effect::worse);
+}
+
 TEST(Bytes, LiteralsUseBinaryMultiples) {
   EXPECT_EQ((1_KiB).count(), 1024U);
   EXPECT_EQ((3_MiB).count(), 3U * 1024U * 1024U);

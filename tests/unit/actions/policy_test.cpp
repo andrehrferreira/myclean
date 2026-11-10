@@ -47,6 +47,13 @@ class ScriptedAction final : public Action {
                 .not_reversible = reversible ? "" : "regenerates"};
   }
   [[nodiscard]] Result<Verification> verify(const Undo& /*undo*/) override {
+    ++verified;
+    if (verify_fails) {
+      return fail(Errc::io_error, "no samples");
+    }
+    if (pending) {
+      return Verification{.metric = "volume.free", .before = 1.0, .pending = true};
+    }
     return Verification{.metric = "volume.free", .before = 1.0, .after = 2.0, .effect = effect};
   }
   [[nodiscard]] Result<void> undo(const Undo& undo) override {
@@ -56,7 +63,10 @@ class ScriptedAction final : public Action {
 
   bool apply_fails = false;
   bool reversible = true;
+  bool pending = false;  // the metric is measured again later
+  bool verify_fails = false;
   Effect effect = Effect::better;
+  int verified = 0;                 // verify calls
   std::vector<std::size_t> undone;  // the item count of each undo call
 };
 
@@ -311,6 +321,98 @@ TEST_F(PolicyTest, FailedApplyMovesThePlanToFailed) {
             Errc::io_error);
   EXPECT_EQ(stored(plan.id).state, PlanState::failed);
   EXPECT_EQ(log(plan.id).back().reason, "disk gone");
+}
+
+// Spec "Pending verification visible": an action whose metric is measured later stays applied,
+// with its measurement before in the log, until a later measurement settles it.
+TEST_F(PolicyTest, APendingVerificationKeepsThePlanAppliedUntilItIsMeasured) {
+  const Plan plan = automatic();
+  ScriptedAction action;
+  action.pending = true;
+  const RunReport report = engine().execute(plan.id, action, Actor::scheduler(), true).value();
+  EXPECT_EQ(report.state, PlanState::applied);
+  EXPECT_FALSE(report.alert);
+  EXPECT_TRUE(report.verification.has_value() && report.verification->pending);
+  EXPECT_EQ(stored(plan.id).state, PlanState::applied);
+  EXPECT_EQ(log(plan.id).back().event, "verify");
+  EXPECT_EQ(log(plan.id).back().outcome, "pending");
+  EXPECT_EQ(log(plan.id).back().metrics, "volume.free before=1");
+  const auto pending = [&] {
+    std::vector<PlanId> plans;
+    EXPECT_TRUE(store()
+                    .read([&](store::Database& db) -> Result<void> {
+                      plans = pending_verifications(db).value();
+                      return {};
+                    })
+                    .has_value());
+    return plans;
+  };
+  EXPECT_EQ(pending(), std::vector<PlanId>{plan.id});
+
+  // Still not measured: nothing is logged and nothing changes.
+  const std::size_t entries = log(plan.id).size();
+  const RunReport still =
+      engine().verify_pending(plan.id, action, Actor::scheduler(), true).value();
+  EXPECT_TRUE(still.verification.has_value() && still.verification->pending);
+  EXPECT_EQ(log(plan.id).size(), entries);
+  EXPECT_EQ(stored(plan.id).state, PlanState::applied);
+
+  // Measured: better -> verified, with before and after in the log.
+  action.pending = false;
+  const RunReport settled =
+      engine().verify_pending(plan.id, action, Actor::scheduler(), true).value();
+  EXPECT_EQ(settled.state, PlanState::verified);
+  EXPECT_EQ(stored(plan.id).state, PlanState::verified);
+  const LogEntry verify = log(plan.id).at(log(plan.id).size() - 2);
+  EXPECT_EQ(verify.outcome, "better");
+  EXPECT_EQ(verify.metrics, "volume.free before=1 after=2");
+  EXPECT_TRUE(pending().empty());
+  EXPECT_EQ(engine().verify_pending(plan.id, action, Actor::scheduler(), true).error().code,
+            Errc::invalid_state);
+}
+
+// Spec "Reversible and worse", measured later: undone, rolled_back.
+TEST_F(PolicyTest, APendingVerificationThatEndsWorseUndoesAReversibleChange) {
+  const Plan plan = automatic();
+  ScriptedAction action;
+  action.pending = true;
+  ASSERT_TRUE(engine().execute(plan.id, action, Actor::scheduler(), true).has_value());
+  action.pending = false;
+  action.effect = Effect::worse;
+  const RunReport report =
+      engine().verify_pending(plan.id, action, Actor::scheduler(), true).value();
+  EXPECT_EQ(report.state, PlanState::rolled_back);
+  EXPECT_FALSE(report.alert);
+  EXPECT_EQ(action.undone, (std::vector<std::size_t>{1}));
+  EXPECT_EQ(stored(plan.id).state, PlanState::rolled_back);
+}
+
+// Spec "Not reversible and worse", measured later: kept, with an alert.
+TEST_F(PolicyTest, APendingVerificationThatEndsWorseKeepsAnIrreversibleChangeAndAlerts) {
+  const Plan plan = automatic();
+  ScriptedAction action;
+  action.pending = true;
+  action.reversible = false;
+  ASSERT_TRUE(engine().execute(plan.id, action, Actor::scheduler(), true).has_value());
+  action.pending = false;
+  action.effect = Effect::worse;
+  const RunReport report =
+      engine().verify_pending(plan.id, action, Actor::scheduler(), true).value();
+  EXPECT_EQ(report.state, PlanState::applied);
+  EXPECT_TRUE(report.alert);
+  EXPECT_TRUE(action.undone.empty());
+}
+
+TEST_F(PolicyTest, AMetricThatCannotBeMeasuredAlertsWithTheReason) {
+  const Plan plan = automatic();
+  ScriptedAction action;
+  action.verify_fails = true;
+  const RunReport report = engine().execute(plan.id, action, Actor::scheduler(), true).value();
+  EXPECT_EQ(report.state, PlanState::applied);
+  EXPECT_TRUE(report.alert);
+  EXPECT_EQ(report.unverified, "no samples");
+  EXPECT_EQ(log(plan.id).back().outcome, "error");
+  EXPECT_EQ(log(plan.id).back().detail, "no samples");
 }
 
 }  // namespace

@@ -1153,7 +1153,9 @@ TEST_F(CleaningServiceTest, BootTimesAttributeTheLatestLogonAndMeasureADisabledI
                               .get<std::int64_t>();
   approve_all(id);
   work();  // Discord is disabled at noon on 2026-10-31
-  ASSERT_EQ(get(id).at("state"), "verified");
+  // Its logon is measured at the next boot: until then the verification is pending.
+  ASSERT_EQ(get(id).at("state"), "applied");
+  EXPECT_EQ(get(id).at("verification").at("result"), "pending");
 
   // Two boots after it: 20 s, then a slow 70 s logon that MyClean measured.
   diagnostics().xml.insert(

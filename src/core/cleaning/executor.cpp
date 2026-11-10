@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <iterator>
 #include <limits>
 #include <map>
@@ -28,6 +29,7 @@
 #include "core/actions/item_action.hpp"
 #include "core/actions/policy.hpp"
 #include "core/actions/quarantine.hpp"
+#include "core/alerts/engine.hpp"
 #include "core/clean/engine.hpp"
 #include "core/cleaning/records.hpp"
 #include "core/cleanup/dism_cleanup.hpp"
@@ -50,12 +52,15 @@
 #include "core/placement/relocation.hpp"
 #include "core/placement/settings.hpp"
 #include "core/placement/system_space.hpp"
+#include "core/resident/history.hpp"
 #include "core/rules/schema.hpp"
 #include "core/safety/deny_list.hpp"
 #include "core/safety/paths.hpp"
 #include "core/safety/safe_remove.hpp"
 #include "core/scanall/findings.hpp"
 #include "core/scanall/owner_decisions.hpp"
+#include "core/startup/boot_times.hpp"
+#include "core/startup/diagnostics.hpp"
 #include "core/startup/startup.hpp"
 #include "core/startup/toggle.hpp"
 #include "core/store/database.hpp"
@@ -588,7 +593,8 @@ actions::QuarantineRoot Executor::quarantine_root() const {
 namespace {
 
 // The IndexerExclusion of a stored plan's params {"folders"}.
-Result<std::unique_ptr<Action>> index_exclusion(indexer::IIndexerScope* scope, const Json& params) {
+Result<std::unique_ptr<Action>> index_exclusion(indexer::IIndexerScope* scope, const Json& params,
+                                                const actions::Environment& environment) {
   if (scope == nullptr) {
     return fail(Errc::invalid_state, "SetIndexerScope needs the Windows Search scope");
   }
@@ -596,7 +602,17 @@ Result<std::unique_ptr<Action>> index_exclusion(indexer::IIndexerScope* scope, c
   for (const std::string& folder : params.at("folders").get<std::vector<std::string>>()) {
     folders.push_back(from_utf8(folder));
   }
-  return std::make_unique<indexer::IndexerExclusion>(*scope, std::move(folders));
+  // The indexer's use from the resident-process history (resident_hour).
+  indexer::IndexerLoad load = [store = environment.store](
+                                  WallTime from, WallTime to) -> Result<indexer::IndexerUse> {
+    Result<resident::Cost> cost = resident::cost_of(*store, indexer::indexer_program, from, to);
+    if (!cost) {
+      return tl::unexpected(cost.error());
+    }
+    return indexer::IndexerUse{.cpu_seconds = cost->cpu_seconds, .running = cost->running};
+  };
+  return std::make_unique<indexer::IndexerExclusion>(*scope, std::move(folders), std::move(load),
+                                                     environment.clock);
 }
 
 }  // namespace
@@ -618,6 +634,46 @@ Result<std::unique_ptr<Action>> compaction(const os::IFileSystem& file_system, c
 }
 
 }  // namespace
+
+bool optimization(PlanKind kind) {
+  return kind == PlanKind::system_setting || kind == PlanKind::compact;
+}
+
+std::vector<alerts::Reading> verification_readings(PlanId id, const PlanSpec& spec,
+                                                   const actions::RunReport& report) {
+  const std::string entity = std::to_string(id.value());
+  const auto measured = [&](const Verification& verification) {
+    return std::format("{}: {} was {} before the change and {} after it", spec.title,
+                       verification.metric, verification.before, verification.after);
+  };
+  if (report.state == PlanState::rolled_back && report.verification) {
+    return {alerts::Reading{.metric = std::string(rolled_back_metric),
+                            .entity = entity,
+                            .value = 1.0,
+                            .detail = measured(*report.verification) + ", so it was undone"}};
+  }
+  if (!report.alert) {
+    return {};
+  }
+  if (report.verification) {
+    return {alerts::Reading{
+        .metric = std::string(worse_metric),
+        .entity = entity,
+        .value = 1.0,
+        .detail =
+            measured(*report.verification) +
+            (report.undo.reversible() ? "; the change was kept and can be undone in the inbox"
+                                      : "; it cannot be undone: " + report.undo.not_reversible)}};
+  }
+  if (!optimization(spec.kind)) {
+    return {};
+  }
+  return {alerts::Reading{
+      .metric = std::string(unverified_metric),
+      .entity = entity,
+      .value = 1.0,
+      .detail = spec.title + ": its effect could not be measured: " + report.unverified}};
+}
 
 Result<std::unique_ptr<Action>> Executor::action_for(const Plan& plan, const PlanSpec& spec,
                                                      const Actor& actor) const {
@@ -653,7 +709,7 @@ Result<std::unique_ptr<Action>> Executor::action_for(const Plan& plan, const Pla
       return std::make_unique<cleanup::DismCleanup>(*probes_.commands, probes_.dism, spec.tier);
     }
     if (plan.action == indexer::exclusion_action_name) {
-      return index_exclusion(probes_.indexer, params);
+      return index_exclusion(probes_.indexer, params, environment_);
     }
     if (plan.action == startup::toggle_action_name) {
       if (probes_.startup == nullptr) {
@@ -661,7 +717,8 @@ Result<std::unique_ptr<Action>> Executor::action_for(const Plan& plan, const Pla
       }
       return std::make_unique<startup::StartupToggle>(
           *probes_.startup, *environment_.clock, params.at("items").get<std::vector<std::string>>(),
-          params.at("enable").get<bool>());
+          params.at("enable").get<bool>(),
+          [store = environment_.store] { return startup::stored_boots(*store); });
     }
     if (plan.action == vhdx::compact_action_name) {
       return compaction(*environment_.file_system, probes_, params);
@@ -747,14 +804,94 @@ Result<actions::RunReport> Executor::execute(PlanId id) {
     }
   }
   progress_.start(std::move(applying));
-  Result<actions::RunReport> report = engine_->execute(id, **action, actor, false);
+  Result<actions::RunReport> report =
+      engine_->execute(id, **action, actor, optimization(spec->kind));
   progress_.finish();
+  if (report) {
+    raise_alerts(id, *spec, *report);
+  }
   if (report && plan->action == "DeleteItems") {
     if (Result<void> manifest = write_manifest(id); !manifest) {
       return tl::unexpected(manifest.error());
     }
   }
   return report;
+}
+
+Result<std::pair<Plan, PlanSpec>> Executor::stored_plan(PlanId id) const {
+  Result<Plan> plan = fail(Errc::not_found, "plan not read");
+  Result<PlanSpec> spec = fail(Errc::not_found, "plan not read");
+  if (Result<void> read = environment_.store->read([&](store::Database& db) -> Result<void> {
+        plan = store::get_plan(db, id);
+        if (plan) {
+          spec = spec_of(db, *plan);
+        }
+        return {};
+      });
+      !read) {
+    return tl::unexpected(read.error());
+  }
+  if (!plan || !spec) {
+    return tl::unexpected(plan ? spec.error() : plan.error());
+  }
+  return std::pair{*std::move(plan), *std::move(spec)};
+}
+
+Result<std::vector<PlanId>> Executor::pending_verifications() const {
+  Result<std::vector<PlanId>> pending = fail(Errc::io_error, "not read");
+  if (Result<void> read = environment_.store->read([&](store::Database& db) -> Result<void> {
+        pending = actions::pending_verifications(db);
+        if (!pending) {
+          return {};
+        }
+        std::erase_if(*pending, [&](PlanId id) {
+          Result<Plan> plan = store::get_plan(db, id);
+          Result<PlanSpec> spec =
+              plan ? spec_of(db, *plan) : Result<PlanSpec>(tl::unexpected(plan.error()));
+          return !spec || spec->scope != ExecutionContext::service;
+        });
+        return {};
+      });
+      !read) {
+    return tl::unexpected(read.error());
+  }
+  return pending;
+}
+
+Result<actions::RunReport> Executor::verify_pending(PlanId id) {
+  Result<std::pair<Plan, PlanSpec>> stored = stored_plan(id);
+  if (!stored) {
+    return tl::unexpected(stored.error());
+  }
+  const auto& [plan, spec] = *stored;
+  const Actor actor = plan.proposer.kind() == Actor::Kind::scheduler && spec.tier == Tier::automatic
+                          ? Actor::scheduler()
+                          : Actor::owner();
+  if (!options_.system_changes && plan.action != "DeleteItems" &&
+      plan.action != "QuarantineItems") {
+    return fail(Errc::refused, "system settings are not measured in console mode");
+  }
+  Result<std::unique_ptr<Action>> action = action_for(plan, spec, actor);
+  if (!action) {
+    return tl::unexpected(action.error());
+  }
+  Result<actions::RunReport> report =
+      engine_->verify_pending(id, **action, actor, optimization(spec.kind));
+  if (report) {
+    raise_alerts(id, spec, *report);
+  }
+  return report;
+}
+
+void Executor::raise_alerts(PlanId id, const PlanSpec& spec,
+                            const actions::RunReport& report) const {
+  if (probes_.alerts == nullptr) {
+    return;
+  }
+  if (const std::vector<alerts::Reading> readings = verification_readings(id, spec, report);
+      !readings.empty()) {
+    probes_.alerts->report(readings);
+  }
 }
 
 Result<void> Executor::write_manifest(PlanId id) const {

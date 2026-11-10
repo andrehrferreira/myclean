@@ -23,7 +23,9 @@ namespace myclean::actions {
 //   apply, restore, purge
 //               what SafeRemove did with one item: a safety::Disposition text form, the
 //               reason code and "freed=<bytes>" in metrics
-//   verify      the re-measured metric: an Effect text form, "<metric> before=<x> after=<y>"
+//   verify      the re-measured metric: an Effect text form, "<metric> before=<x> after=<y>"; or
+//               "pending", "<metric> before=<x>" while it is measured again later; or "error"
+//               with why it could not be measured in detail
 struct LogEntry {
   WallTime time;
   PlanId plan;                     // 0 when the request named no stored plan
@@ -42,6 +44,11 @@ struct LogEntry {
 [[nodiscard]] Result<std::int64_t> append_log(store::Database& db, const LogEntry& entry);
 // The entries of `plan`, oldest first.
 [[nodiscard]] Result<std::vector<LogEntry>> plan_log(store::Database& db, PlanId plan);
+
+// The newest "verify" entry of `plan`; nullopt when it has none.
+[[nodiscard]] Result<std::optional<LogEntry>> last_verification(store::Database& db, PlanId plan);
+// The applied plans whose newest verification is pending, oldest first.
+[[nodiscard]] Result<std::vector<PlanId>> pending_verifications(store::Database& db);
 
 // Stores the undo data of `plan`, linked to the action_log entry `log_id`.
 [[nodiscard]] Result<void> save_undo(store::Database& db, std::int64_t log_id, PlanId plan,

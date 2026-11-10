@@ -24,7 +24,8 @@ namespace myclean::ipc {
 //    "state": "proposed"|"auto"|"awaiting_approval"|"approved"|"applying"|"applied"|"verified"|
 //             "rolled_back"|"failed"|"rejected",
 //    "proposer": "scheduler"|"governor"|"owner"|"mcp:<client>", "created_at": int,
-//    "items": int (count), "bytes": int (total size of the items), "needs_restart": bool}
+//    "items": int (count), "bytes": int (total size of the items), "needs_restart": bool,
+//    "verification": null|"pending"|"better"|"unchanged"|"worse"|"error"}
 //   kind: cleanup = files deleted, quarantined or recycled; handler = Windows disk-cleanup
 //   handlers or DISM; native = a package manager's prune command; relocate = a cache or TEMP
 //   moved through its setting; system_setting = hibernation, page file or shadow storage;
@@ -35,6 +36,12 @@ namespace myclean::ipc {
 //   (plans.propose_compact; not reversible).
 //   scope: "service" plans run in the service; "user" plans run in the tray with the owner's
 //   token (user_tasks.*).
+//   verification: the newest re-measurement of the metric the plan targets (optimizer spec,
+//   "Before-and-After Verification"), null before the plan was applied. "pending": the metric is
+//   measured again later (the next logon after a startup change, a day of indexer use after an
+//   index exclusion); the plan stays applied and is not counted as verified. An optimization
+//   (kind system_setting or compact) whose metric got worse is undone at once (rolled_back) when
+//   it is reversible, and an alert tells the owner (data/alerts.toml, rules plan.*).
 //
 // PlanItem:
 //   {"id": int, "path": string, "bytes": int, "rule": string|null, "reason": string,
@@ -83,7 +90,10 @@ inline constexpr std::size_t max_listed_plans = 500;
 //    "commands": [string] (exactly what runs), "undo": string (how it is undone, or why it
 //    cannot be), "warnings": [string], "params": object (the action parameters),
 //    "freed": int|null (bytes freed, once applied), "detail": string|null (why it failed,
-//    was rejected or rolled back)}
+//    was rejected or rolled back), "verification": null | {"result": "pending"|"better"|
+//    "unchanged"|"worse"|"error", "metric": string|null, "before": number|null, "after":
+//    number|null (null while pending), "time": int, "detail": string|null (why it could not be
+//    measured)}}
 // Fails with not_found for an unknown id.
 inline constexpr std::string_view plans_get_method = "plans.get";
 inline constexpr std::size_t max_plan_items = 2000;

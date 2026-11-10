@@ -8,6 +8,7 @@
 
 #include "core/model/action.hpp"
 #include "core/model/result.hpp"
+#include "core/startup/diagnostics.hpp"
 #include "core/startup/startup.hpp"
 #include "fakes/fake_clock.hpp"
 #include "startup_fakes.hpp"
@@ -49,12 +50,30 @@ class StartupToggleTest : public ::testing::Test {
     return {system_, clock_, std::move(ids), enable};
   }
 
+  // A toggle verified with the boots in boots().
+  StartupToggle measured(std::vector<std::string> ids, bool enable = false) {
+    return {system_, clock_, std::move(ids), enable,
+            [this] { return Result<std::vector<BootRecord>>(boots_); }};
+  }
+
+  std::vector<BootRecord>& boots() { return boots_; }
+
   FakeStartupSystem& system() { return system_; }
 
  private:
   FakeStartupSystem system_;
   FakeClock clock_{now};
+  std::vector<BootRecord> boots_;
 };
+
+// A boot `days` from `now` whose logon took `logon_seconds`.
+BootRecord boot(int days, int logon_seconds) {
+  return BootRecord{.start = now + std::chrono::days{days} - 2h,
+                    .boot = 60s,
+                    .main_path = 30s,
+                    .post_boot = 20s,
+                    .logon = std::chrono::seconds{logon_seconds}};
+}
 
 TEST_F(StartupToggleTest, DescribesAnAskTierServiceAction) {
   const ActionInfo info = toggle({"run:user:Discord"}).describe();
@@ -197,6 +216,65 @@ TEST_F(StartupToggleTest, UndoFailsWhenTheItemIsGone) {
   ASSERT_TRUE(undo);
   system().snapshot.tasks.clear();
   EXPECT_EQ(action.undo(*undo).error().code, Errc::invalid_state);
+}
+
+// Spec "Verification recorded": the logon before and after the disable, pending until the next
+// logon is measured.
+TEST_F(StartupToggleTest, ADisableIsVerifiedWithTheLogonBeforeAndAfterIt) {
+  boots() = {boot(-3, 30), boot(-2, 50), boot(-1, 40)};  // median 40 s
+  StartupToggle action = measured({"run:user:Discord"});
+  const Result<Undo> undo = action.apply(*action.preview());
+  ASSERT_TRUE(undo) << undo.error().message;
+
+  const Result<Verification> waiting = action.verify(*undo);
+  ASSERT_TRUE(waiting) << waiting.error().message;
+  EXPECT_TRUE(waiting->pending);
+  EXPECT_EQ(waiting->metric, "logon_seconds");
+  EXPECT_DOUBLE_EQ(waiting->before, 40.0);
+
+  boots().push_back(boot(1, 30));  // shorter by more than logon_tolerance
+  const Result<Verification> shorter = action.verify(*undo);
+  ASSERT_TRUE(shorter) << shorter.error().message;
+  EXPECT_FALSE(shorter->pending);
+  EXPECT_DOUBLE_EQ(shorter->after, 30.0);
+  EXPECT_EQ(shorter->effect, Effect::better);
+
+  boots().back() = boot(1, 42);  // within the tolerance
+  EXPECT_EQ(action.verify(*undo)->effect, Effect::unchanged);
+  boots().back() = boot(1, 60);
+  EXPECT_EQ(action.verify(*undo)->effect, Effect::worse);
+}
+
+TEST_F(StartupToggleTest, WithoutALogonBeforeTheChangeOnlyTheChangeIsVerified) {
+  boots() = {boot(1, 30)};  // after the change only
+  StartupToggle action = measured({"run:user:Discord"});
+  const Result<Undo> undo = action.apply(*action.preview());
+  ASSERT_TRUE(undo);
+  const Result<Verification> verified = action.verify(*undo);
+  ASSERT_TRUE(verified) << verified.error().message;
+  EXPECT_EQ(verified->metric, "startup_items_changed");
+  EXPECT_EQ(verified->effect, Effect::better);
+  EXPECT_FALSE(verified->pending);
+}
+
+TEST_F(StartupToggleTest, AnItemChangedBackIsWorseWithoutWaitingForALogon) {
+  boots() = {boot(-1, 40)};
+  StartupToggle action = measured({"run:user:Discord"});
+  const Result<Undo> undo = action.apply(*action.preview());
+  ASSERT_TRUE(undo);
+  system().snapshot.approved.clear();  // Discord is enabled again
+  const Result<Verification> verified = action.verify(*undo);
+  ASSERT_TRUE(verified);
+  EXPECT_EQ(verified->metric, "startup_items_changed");
+  EXPECT_EQ(verified->effect, Effect::worse);
+}
+
+TEST_F(StartupToggleTest, AnEnableIsNotMeasuredByTheLogon) {
+  boots() = {boot(-1, 40)};
+  StartupToggle action = measured({"run:user:OneDrive"}, true);
+  const Result<Undo> undo = action.apply(*action.preview());
+  ASSERT_TRUE(undo) << undo.error().message;
+  EXPECT_EQ(action.verify(*undo)->metric, "startup_items_changed");
 }
 
 }  // namespace

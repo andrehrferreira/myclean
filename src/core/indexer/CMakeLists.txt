@@ -15,5 +15,6 @@ myclean_add_library(indexer
     myclean::clean
     myclean::map
     myclean::model
+    myclean::os
     myclean::rules
     nlohmann_json::nlohmann_json)

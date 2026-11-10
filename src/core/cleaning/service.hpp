@@ -127,6 +127,8 @@ class CleaningService {
   static constexpr std::string_view auto_job = "cleaning.auto";
   static constexpr std::string_view purge_job = "quarantine.purge";
   static constexpr std::chrono::seconds owner_retry{60};
+  // How often the plans whose verification is pending are measured again.
+  static constexpr std::chrono::seconds verify_interval{60};
 
   CleaningService(ServiceSources sources, ServiceSettings settings);
   CleaningService(const CleaningService&) = delete;
@@ -143,7 +145,8 @@ class CleaningService {
 
   // One pass of the cleaning worker: resolves the owner context while it is missing, starts the
   // due jobs (the auto run waits while the system volume is critically busy), runs a requested
-  // scan, then every approved service-scope plan. Never call it concurrently with itself.
+  // scan, then every approved service-scope plan, and every verify_interval (at once on the first
+  // pass) the plans whose verification is pending. Never call it concurrently with itself.
   void work(const std::stop_token& stop);
   // One pass of the space worker: runs the queued analyses.
   void work_space(const std::stop_token& stop);
@@ -176,6 +179,8 @@ class CleaningService {
   void run_jobs(const std::stop_token& stop);
   void run_scan(bool scheduled, const std::stop_token& stop);
   void run_approved();
+  // Measures again every plan whose verification is pending (the cleaning worker only).
+  void run_verifications();
   void note(std::string problem);
   [[nodiscard]] Executor* executor() const { return ready_.load(); }
   [[nodiscard]] Result<Executor*> require_executor() const;
@@ -264,6 +269,7 @@ class CleaningService {
   std::unique_ptr<Executor> executor_;
   std::atomic<Executor*> ready_{nullptr};
   std::optional<MonoTime> owner_tried_;  // the cleaning worker only
+  std::optional<MonoTime> verified_at_;  // the cleaning worker only
   bool auto_pending_ = false;            // the cleaning worker only
 
   mutable std::mutex mutex_;  // guards the members below

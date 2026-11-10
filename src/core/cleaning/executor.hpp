@@ -16,6 +16,7 @@
 #include "core/actions/item_action.hpp"
 #include "core/actions/policy.hpp"
 #include "core/actions/quarantine.hpp"
+#include "core/alerts/engine.hpp"
 #include "core/clean/probes.hpp"
 #include "core/clean/workspaces.hpp"
 #include "core/cleaning/progress.hpp"
@@ -23,6 +24,7 @@
 #include "core/cleanup/command_runner.hpp"
 #include "core/cleanup/handler_host.hpp"
 #include "core/cleanup/recycle_bin.hpp"
+#include "core/health/analysis.hpp"
 #include "core/indexer/scope.hpp"
 #include "core/model/actor.hpp"
 #include "core/model/ids.hpp"
@@ -64,6 +66,8 @@ struct Probes {
   vhdx::IVirtualDisks* disks = nullptr;        // compacts virtual disks, run by the service
   vhdx::IWsl* wsl = nullptr;                   // stops WSL as the owner
   indexer::IIndexerScope* indexer = nullptr;   // the Windows Search crawl scope
+  // Told when a verification undid a change, found it worse or could not measure it.
+  health::IAlertSink* alerts = nullptr;
 };
 
 struct ExecutorOptions {
@@ -89,6 +93,23 @@ inline constexpr std::string_view indexed_folders_source = "space.indexed_folder
 // Below this share of free space a volume's quarantined items go to the overflow volume, and a
 // quarantine already on it is purged by the next scheduled purge.
 inline constexpr double low_space_ratio = 0.10;
+
+// The metrics of the alerts a plan's verification raises (data/alerts.toml); the entity is the
+// plan id. rolled_back: the change made its metric worse and was undone; worse: it made it worse
+// and was kept; unverified: an optimization's metric could not be measured.
+inline constexpr std::string_view rolled_back_metric = "plan.rolled_back";
+inline constexpr std::string_view worse_metric = "plan.worse";
+inline constexpr std::string_view unverified_metric = "plan.unverified";
+
+// Whether plans of `kind` are optimizations (optimizer spec, "Auto-Undo When Worse"): a
+// reversible change that made its metric worse is undone at once, and a metric that could not be
+// measured is reported. Cleanups keep a worse result and only report it.
+[[nodiscard]] bool optimization(PlanKind kind);
+
+// The alerts of `report`, the verification of plan `id` with `spec`: undone, worse and kept, or
+// (optimizations only) not measured; none when the plan was verified or is still pending.
+[[nodiscard]] std::vector<alerts::Reading> verification_readings(PlanId id, const PlanSpec& spec,
+                                                                 const actions::RunReport& report);
 
 // The rules a scan evaluates.
 struct RuleSet {
@@ -136,9 +157,16 @@ class Executor {
 
   // The approved service-scope plans, oldest first.
   [[nodiscard]] Result<std::vector<PlanId>> approved_service_plans() const;
-  // Runs approved service-scope plan `id`. An auto run of DeleteItems also writes its manifest:
-  // an action_log entry "manifest" with the bytes freed, items removed and skipped, per rule.
+  // Runs approved service-scope plan `id`, undoing it at once when it is an optimization that
+  // made its metric worse, and reports its verification_readings to Probes::alerts. An auto run
+  // of DeleteItems also writes its manifest: an action_log entry "manifest" with the bytes freed,
+  // items removed and skipped, per rule.
   [[nodiscard]] Result<actions::RunReport> execute(PlanId id);
+  // The applied service-scope plans whose verification is pending, oldest first.
+  [[nodiscard]] Result<std::vector<PlanId>> pending_verifications() const;
+  // Measures pending plan `id` again (PolicyEngine::verify_pending), as execute() would settle
+  // it, and reports its verification_readings.
+  [[nodiscard]] Result<actions::RunReport> verify_pending(PlanId id);
   // Undoes applied or verified service-scope plan `id` for the owner; the new state.
   [[nodiscard]] Result<PlanState> undo(PlanId id);
 
@@ -262,6 +290,10 @@ class Executor {
       std::optional<WallTime> since = std::nullopt) const;
   [[nodiscard]] Result<std::unique_ptr<Action>> action_for(const Plan& plan, const PlanSpec& spec,
                                                            const Actor& actor) const;
+  // Stored plan `id` and its spec.
+  [[nodiscard]] Result<std::pair<Plan, PlanSpec>> stored_plan(PlanId id) const;
+  // Sends the verification_readings of `report` to Probes::alerts.
+  void raise_alerts(PlanId id, const PlanSpec& spec, const actions::RunReport& report) const;
   // Where QuarantineItems keeps each item, judged from the volumes as they are now.
   [[nodiscard]] actions::QuarantineRoot quarantine_root() const;
   [[nodiscard]] Result<void> write_manifest(PlanId id) const;

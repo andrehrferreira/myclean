@@ -1,6 +1,8 @@
 #include "core/indexer/exclusion.hpp"
 
+#include <chrono>
 #include <filesystem>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -8,7 +10,9 @@
 #include "core/indexer/scope.hpp"
 #include "core/model/action.hpp"
 #include "core/model/result.hpp"
+#include "core/model/units.hpp"
 #include "fake_scope.hpp"
+#include "fakes/fake_clock.hpp"
 
 namespace myclean::indexer {
 namespace {
@@ -152,6 +156,70 @@ TEST_F(IndexerExclusionTest, AFailedChangeReversesTheOnesMade) {
   ASSERT_FALSE(undo.has_value());
   EXPECT_EQ(undo.error().code, Errc::access_denied);
   EXPECT_EQ(scope().rules_list, before);
+}
+
+// Spec "Before-and-After Verification" for an index exclusion: the indexer's CPU time per hour it
+// ran, before against after, pending until the hours after are complete.
+TEST_F(IndexerExclusionTest, AnExclusionIsVerifiedWithTheIndexersCpuTime) {
+  fakes::FakeClock clock(std::chrono::sys_days{std::chrono::November / 9 / 2026} +
+                         std::chrono::minutes{(10 * 60) + 30});
+  const WallTime hour = std::chrono::floor<std::chrono::hours>(clock.now());
+  IndexerUse after_use{.cpu_seconds = 0.0, .running = std::chrono::minutes{0}};
+  std::vector<std::pair<WallTime, WallTime>> asked;
+  const IndexerLoad load = [&](WallTime from, WallTime to) -> Result<IndexerUse> {
+    asked.emplace_back(from, to);
+    if (to <= hour) {  // before: 10 hours running, 100 s of CPU per hour
+      return IndexerUse{.cpu_seconds = 1000.0, .running = std::chrono::minutes{600}};
+    }
+    return after_use;
+  };
+  IndexerExclusion action(scope(), {node_modules}, load, &clock);
+  const Result<Undo> undo = action.apply(action.preview().value());
+  ASSERT_TRUE(undo.has_value()) << undo.error().message;
+
+  const Result<Verification> waiting = action.verify(*undo);
+  ASSERT_TRUE(waiting.has_value()) << waiting.error().message;
+  EXPECT_TRUE(waiting->pending);
+  EXPECT_EQ(waiting->metric, "indexer_cpu_seconds_per_hour");
+  EXPECT_DOUBLE_EQ(waiting->before, 100.0);
+  // The hour of the change counts on neither side.
+  ASSERT_GE(asked.size(), 2U);
+  EXPECT_EQ(asked[0], std::pair(hour - load_span_before, hour));
+  EXPECT_EQ(asked[1].first, hour + std::chrono::hours{1});
+
+  after_use = {.cpu_seconds = 24.0 * 40.0, .running = load_enough_running};
+  const Result<Verification> lower = action.verify(*undo);
+  ASSERT_TRUE(lower.has_value());
+  EXPECT_FALSE(lower->pending);
+  EXPECT_DOUBLE_EQ(lower->after, 40.0);
+  EXPECT_EQ(lower->effect, Effect::better);
+
+  after_use.cpu_seconds = 24.0 * 150.0;
+  EXPECT_EQ(action.verify(*undo)->effect, Effect::worse);
+
+  // Fewer hours than enough, but the span is over: what ran counts.
+  after_use = {.cpu_seconds = 300.0, .running = std::chrono::minutes{180}};
+  EXPECT_TRUE(action.verify(*undo)->pending);
+  clock.advance(load_span_after + std::chrono::hours{2});
+  EXPECT_EQ(action.verify(*undo)->effect, Effect::unchanged);
+
+  // The indexer did not run after it: only the exclusion is verified.
+  after_use = {};
+  EXPECT_EQ(action.verify(*undo)->metric, "folders_out_of_index");
+}
+
+TEST_F(IndexerExclusionTest, WithoutIndexerHistoryOnlyTheExclusionIsVerified) {
+  fakes::FakeClock clock(std::chrono::sys_days{std::chrono::November / 9 / 2026});
+  IndexerExclusion action(
+      scope(), {node_modules},
+      [](WallTime /*from*/, WallTime /*to*/) -> Result<IndexerUse> { return IndexerUse{}; },
+      &clock);
+  const Result<Undo> undo = action.apply(action.preview().value());
+  ASSERT_TRUE(undo.has_value());
+  const Result<Verification> verified = action.verify(*undo);
+  ASSERT_TRUE(verified.has_value());
+  EXPECT_EQ(verified->metric, "folders_out_of_index");
+  EXPECT_EQ(verified->effect, Effect::better);
 }
 
 }  // namespace

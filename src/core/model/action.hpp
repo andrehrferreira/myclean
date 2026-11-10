@@ -69,11 +69,20 @@ enum class Effect { better, unchanged, worse };
 [[nodiscard]] std::string_view to_string(Effect effect);
 [[nodiscard]] std::optional<Effect> parse_effect(std::string_view text);
 
+// The direction of a metric where less is better (logon seconds, CPU time): a change within
+// `tolerance` of `before` (a share: 0.10 is 10 %) is unchanged, so noise between two
+// measurements is not taken for an effect.
+[[nodiscard]] Effect lower_is_better(double before, double after, double tolerance);
+
 struct Verification {
   std::string metric;
   double before = 0.0;
   double after = 0.0;
   Effect effect = Effect::unchanged;
+  // The metric is measured again later (at the next logon, after a day of use): `before` is
+  // measured, `after` and `effect` are not yet. The plan stays applied until verify() reports a
+  // result.
+  bool pending = false;
 };
 
 // Every change MyClean makes implements this contract (docs/architecture.md section 6).
@@ -91,7 +100,7 @@ class Action {
   [[nodiscard]] virtual Result<Preview> preview() = 0;
   // Re-validates every item of `preview`, executes, and returns the undo data of what changed.
   [[nodiscard]] virtual Result<Undo> apply(const Preview& preview) = 0;
-  // Measures the targeted metric again.
+  // Measures the targeted metric again; pending while its new measurement is not available yet.
   [[nodiscard]] virtual Result<Verification> verify(const Undo& undo) = 0;
   // Reverses the change; fails with Errc::not_reversible and the reason when it cannot.
   [[nodiscard]] virtual Result<void> undo(const Undo& undo) = 0;

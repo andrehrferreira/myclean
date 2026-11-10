@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -37,8 +38,10 @@ std::string utf8(const std::filesystem::path& path) {
   return utf8_text(path);
 }
 
+// `verification`: the outcome of the plan's newest verify entry; empty when it has none.
 Json summary(std::int64_t id, const PlanSpec& spec, const std::string& proposer, PlanState state,
-             WallTime created_at, std::int64_t items, std::uint64_t bytes) {
+             WallTime created_at, std::int64_t items, std::uint64_t bytes,
+             const std::string& verification) {
   return Json{{"id", id},
               {"title", spec.title},
               {"kind", to_string(spec.kind)},
@@ -49,7 +52,42 @@ Json summary(std::int64_t id, const PlanSpec& spec, const std::string& proposer,
               {"created_at", store::to_unix_seconds(created_at)},
               {"items", items},
               {"bytes", bytes},
-              {"needs_restart", spec.needs_restart}};
+              {"needs_restart", spec.needs_restart},
+              {"verification", verification.empty() ? Json(nullptr) : Json(verification)}};
+}
+
+// The number after "<name>=" among the words of `metrics`; null when there is none.
+Json metric_value(std::string_view metrics, std::string_view name) {
+  const std::string key = " " + std::string(name) + "=";
+  const std::size_t at = metrics.find(key);
+  if (at == std::string_view::npos) {
+    return nullptr;
+  }
+  const std::string_view rest = metrics.substr(at + key.size());
+  const std::string number(rest.substr(0, rest.find(' ')));
+  try {
+    return std::stod(number);
+  } catch (const std::exception&) {
+    return nullptr;
+  }
+}
+
+// The "verification" member of plans.get: the newest verify entry of `log`.
+Json verification_json(const std::vector<actions::LogEntry>& log) {
+  const auto entry =
+      std::ranges::find(log.rbegin(), log.rend(), std::string("verify"), &actions::LogEntry::event);
+  if (entry == log.rend()) {
+    return nullptr;
+  }
+  const std::string_view metrics = entry->metrics;
+  const std::size_t space = metrics.find(' ');
+  return Json{{"result", entry->outcome},
+              {"metric", entry->metrics.empty() ? Json(nullptr)
+                                                : Json(std::string(metrics.substr(0, space)))},
+              {"before", metric_value(metrics, "before")},
+              {"after", metric_value(metrics, "after")},
+              {"time", store::to_unix_seconds(entry->time)},
+              {"detail", entry->detail.empty() ? Json(nullptr) : Json(entry->detail)}};
 }
 
 // One PlanItem of plans.get.
@@ -114,9 +152,11 @@ Result<Json> plan_json(store::Database& db, const Plan& plan) {
     return tl::unexpected(log.error());
   }
   auto [freed, detail] = outcome_of(*log);
-  Json result =
-      summary(plan.id.value(), *spec, plan.proposer.to_string(), plan.state, plan.created_at,
-              static_cast<std::int64_t>(plan.items.size()), total.count());
+  Json verification = verification_json(*log);
+  Json result = summary(
+      plan.id.value(), *spec, plan.proposer.to_string(), plan.state, plan.created_at,
+      static_cast<std::int64_t>(plan.items.size()), total.count(),
+      verification.is_null() ? std::string() : verification.at("result").get<std::string>());
   result["items"] = std::move(items);
   result["items_total"] = plan.items.size();
   result["commands"] = spec->commands;
@@ -125,6 +165,7 @@ Result<Json> plan_json(store::Database& db, const Plan& plan) {
   result["params"] = spec->params;
   result["freed"] = std::move(freed);
   result["detail"] = std::move(detail);
+  result["verification"] = std::move(verification);
   return result;
 }
 
@@ -137,7 +178,9 @@ Result<Json> list_plans(store::Store& store, std::optional<PlanState> state) {
         "SELECT p.id, p.action, p.proposer, p.state, p.created_at, "
         "(SELECT COUNT(*) FROM plan_item i WHERE i.plan_id = p.id), "
         "(SELECT COALESCE(SUM(i.size), 0) FROM plan_item i WHERE i.plan_id = p.id), "
-        "COALESCE(pp.params, '') FROM plan p LEFT JOIN plan_params pp ON pp.plan_id = p.id "
+        "COALESCE(pp.params, ''), (SELECT a.outcome FROM action_log a WHERE a.plan_id = p.id "
+        "AND a.event = 'verify' ORDER BY a.id DESC LIMIT 1) "
+        "FROM plan p LEFT JOIN plan_params pp ON pp.plan_id = p.id "
         "WHERE ?1 IS NULL OR p.state = ?1 ORDER BY p.id DESC LIMIT ?2");
     if (!query) {
       return tl::unexpected(query.error());
@@ -162,7 +205,8 @@ Result<Json> list_plans(store::Store& store, std::optional<PlanState> state) {
       }
       plans.push_back(summary(query->column_int(0), *spec, query->column_text(2), *plan_state,
                               store::from_unix_seconds(query->column_int(4)), query->column_int(5),
-                              static_cast<std::uint64_t>(query->column_int(6))));
+                              static_cast<std::uint64_t>(query->column_int(6)),
+                              query->is_null(8) ? std::string() : query->column_text(8)));
     }
     return row ? Result<void>{} : tl::unexpected(row.error());
   });

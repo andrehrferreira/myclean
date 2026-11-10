@@ -414,6 +414,24 @@ void CleaningService::work(const std::stop_token& stop) {
   if (settings_.execute && executor() != nullptr && !stop.stop_requested()) {
     run_purges();
     run_approved();
+    const MonoTime now = sources_.clock->monotonic();
+    if (!verified_at_ || now - *verified_at_ >= verify_interval) {
+      verified_at_ = now;
+      run_verifications();
+    }
+  }
+}
+
+void CleaningService::run_verifications() {
+  Result<std::vector<PlanId>> pending = executor()->pending_verifications();
+  if (!pending) {
+    note("verifications: " + pending.error().message);
+    return;
+  }
+  for (const PlanId id : *pending) {
+    if (Result<actions::RunReport> verified = executor()->verify_pending(id); !verified) {
+      note("plan " + std::to_string(id.value()) + " verification: " + verified.error().message);
+    }
   }
 }
 

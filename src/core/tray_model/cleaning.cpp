@@ -86,18 +86,22 @@ std::optional<ApplyingRow> applying_of(const Json& reply) {
 // A PlanSummary; in a plans.get answer "items" is the item list and "items_total" the count.
 PlanRow parse_plan(const Json& plan) {
   const Json& items = plan.at("items");
-  return PlanRow{.id = plan.at("id").get<std::int64_t>(),
-                 .title = plan.at("title").get<std::string>(),
-                 .kind = plan.at("kind").get<std::string>(),
-                 .tier = plan.at("tier").get<std::string>(),
-                 .scope = plan.at("scope").get<std::string>(),
-                 .state = plan.at("state").get<std::string>(),
-                 .proposer = plan.at("proposer").get<std::string>(),
-                 .created_at = time_of(plan, "created_at"),
-                 .items = items.is_array() ? plan.at("items_total").get<std::int64_t>()
-                                           : items.get<std::int64_t>(),
-                 .bytes = bytes_of(plan, "bytes"),
-                 .needs_restart = plan.at("needs_restart").get<bool>()};
+  return PlanRow{
+      .id = plan.at("id").get<std::int64_t>(),
+      .title = plan.at("title").get<std::string>(),
+      .kind = plan.at("kind").get<std::string>(),
+      .tier = plan.at("tier").get<std::string>(),
+      .scope = plan.at("scope").get<std::string>(),
+      .state = plan.at("state").get<std::string>(),
+      .proposer = plan.at("proposer").get<std::string>(),
+      .created_at = time_of(plan, "created_at"),
+      .items =
+          items.is_array() ? plan.at("items_total").get<std::int64_t>() : items.get<std::int64_t>(),
+      .bytes = bytes_of(plan, "bytes"),
+      .needs_restart = plan.at("needs_restart").get<bool>(),
+      .verification = plan.contains("verification") && plan.at("verification").is_object()
+                          ? plan.at("verification").at("result").get<std::string>()
+                          : optional_text(plan, "verification").value_or("")};
 }
 
 void add(ByteTotals& totals, const std::string& key, Bytes bytes) {
@@ -492,6 +496,13 @@ bool undoable(const PlanRow& plan) {
   }
   return plan.kind == "relocate" || plan.kind == "system_setting" || plan.kind == "archive" ||
          (plan.kind == "cleanup" && plan.tier == "ask");
+}
+
+std::string state_text(const PlanRow& plan) {
+  if (plan.state == "applied" && plan.verification == "pending") {
+    return "applied, verification pending";
+  }
+  return plan.state;
 }
 
 ByteTotals pending_bytes_by_tier(const std::vector<PlanRow>& plans) {

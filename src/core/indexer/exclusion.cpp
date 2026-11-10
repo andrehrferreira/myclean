@@ -1,6 +1,8 @@
 #include "core/indexer/exclusion.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <ranges>
@@ -15,6 +17,7 @@
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
 #include "core/model/text.hpp"
+#include "core/model/units.hpp"
 
 namespace myclean::indexer {
 namespace {
@@ -30,7 +33,25 @@ fs::path from_utf8(const std::string& text) {
 struct Change {
   fs::path folder;
   std::optional<bool> before;
+  std::optional<WallTime> applied;  // when apply excluded it; absent without a clock
 };
+
+WallTime from_seconds(std::int64_t seconds) {
+  return WallTime{std::chrono::seconds{seconds}};
+}
+
+std::int64_t seconds_of(WallTime time) {
+  return std::chrono::floor<std::chrono::seconds>(time).time_since_epoch().count();
+}
+
+// CPU seconds per hour of running; nullopt below load_min_running.
+std::optional<double> per_hour(const IndexerUse& use) {
+  if (use.running < load_min_running) {
+    return std::nullopt;
+  }
+  return use.cpu_seconds /
+         std::chrono::duration<double, std::chrono::hours::period>(use.running).count();
+}
 
 // Puts back the rule before of `change`.
 Result<void> restore(IIndexerScope& scope, const Change& change) {
@@ -44,9 +65,12 @@ Result<std::vector<Change>> parse_undo(const Undo& undo) {
     for (const UndoItem& item : undo.items) {
       const Json json = Json::parse(item.data);
       const Json& before = json.at("before");
-      changes.push_back(
-          Change{.folder = from_utf8(json.at("folder").get<std::string>()),
-                 .before = before.is_null() ? std::nullopt : std::optional{before.get<bool>()}});
+      changes.push_back(Change{
+          .folder = from_utf8(json.at("folder").get<std::string>()),
+          .before = before.is_null() ? std::nullopt : std::optional{before.get<bool>()},
+          .applied = json.contains("applied")
+                         ? std::optional(from_seconds(json.at("applied").get<std::int64_t>()))
+                         : std::nullopt});
     }
   } catch (const Json::exception& error) {
     return fail(Errc::invalid_data, std::string("indexer undo data: ") + error.what());
@@ -114,11 +138,12 @@ Result<Undo> IndexerExclusion::apply(const Preview& preview) {
       reverse();
       return tl::unexpected(set.error());
     }
-    undo.items.push_back(
-        UndoItem{.item = planned.id,
-                 .data = Json{{"folder", utf8_text(change.folder)},
-                              {"before", change.before ? Json(*change.before) : Json(nullptr)}}
-                             .dump()});
+    Json data{{"folder", utf8_text(change.folder)},
+              {"before", change.before ? Json(*change.before) : Json(nullptr)}};
+    if (clock_ != nullptr) {
+      data["applied"] = seconds_of(clock_->now());
+    }
+    undo.items.push_back(UndoItem{.item = planned.id, .data = data.dump()});
     done.push_back(std::move(change));
   }
   if (undo.items.empty()) {
@@ -140,10 +165,43 @@ Result<Verification> IndexerExclusion::verify(const Undo& undo) {
     }
     excluded += *included ? 0 : 1;
   }
-  return Verification{.metric = "folders_out_of_index",
-                      .before = 0.0,
-                      .after = static_cast<double>(excluded),
-                      .effect = excluded == std::ssize(*changes) ? Effect::better : Effect::worse};
+  Verification held{.metric = "folders_out_of_index",
+                    .before = 0.0,
+                    .after = static_cast<double>(excluded),
+                    .effect = excluded == std::ssize(*changes) ? Effect::better : Effect::worse};
+  if (held.effect == Effect::worse || !load_ || clock_ == nullptr || changes->empty() ||
+      !changes->front().applied) {
+    return held;
+  }
+  const WallTime hour = std::chrono::floor<std::chrono::hours>(*changes->front().applied);
+  Result<IndexerUse> before_use = load_(hour - load_span_before, hour);
+  if (!before_use) {
+    return tl::unexpected(before_use.error());
+  }
+  const std::optional<double> before = per_hour(*before_use);
+  if (!before) {
+    return held;  // the indexer hardly ran before the change: nothing to compare with
+  }
+  const WallTime first = hour + std::chrono::hours{1};
+  const WallTime last = first + load_span_after;
+  Result<IndexerUse> after_use = load_(first, last);
+  if (!after_use) {
+    return tl::unexpected(after_use.error());
+  }
+  // An hour is stored once it is over, so the span is complete once its last hour is over.
+  const bool over = clock_->now() >= last;
+  if (after_use->running < load_enough_running && !over) {
+    return Verification{
+        .metric = "indexer_cpu_seconds_per_hour", .before = *before, .pending = true};
+  }
+  const std::optional<double> after = per_hour(*after_use);
+  if (!after) {
+    return held;
+  }
+  return Verification{.metric = "indexer_cpu_seconds_per_hour",
+                      .before = *before,
+                      .after = *after,
+                      .effect = lower_is_better(*before, *after, load_tolerance)};
 }
 
 Result<void> IndexerExclusion::undo(const Undo& undo) {

@@ -237,4 +237,37 @@ ORDER BY SUM(cpu_seconds) DESC, key)sql");
   return list;
 }
 
+Result<Cost> cost_of(store::Store& store, std::string_view key, WallTime from, WallTime to) {
+  Cost cost{.key = std::string(key)};
+  Result<void> read = store.read([&](store::Database& db) -> Result<void> {
+    Result<store::Statement> statement = db.prepare(R"sql(
+SELECT COALESCE(SUM(minutes), 0), COALESCE(SUM(cpu_seconds), 0), COALESCE(SUM(ram_sum), 0),
+       COALESCE(MAX(ram_peak), 0), COALESCE(SUM(disk_bytes), 0), COALESCE(SUM(net_bytes), 0)
+FROM resident_hour WHERE key = ?1 AND time >= ?2 AND time < ?3)sql");
+    if (!statement) {
+      return tl::unexpected(statement.error());
+    }
+    statement->bind(1, key)
+        .bind(2, store::to_unix_seconds(from))
+        .bind(3, store::to_unix_seconds(to));
+    const Result<bool> row = statement->step();
+    if (!row) {
+      return tl::unexpected(row.error());
+    }
+    const std::int64_t minutes = statement->column_int(0);
+    cost.running = std::chrono::minutes{minutes};
+    cost.cpu_seconds = statement->column_double(1);
+    cost.ram_average =
+        Bytes{minutes > 0 ? static_cast<std::uint64_t>(statement->column_int(2) / minutes) : 0};
+    cost.ram_peak = Bytes{static_cast<std::uint64_t>(statement->column_int(3))};
+    cost.disk_bytes = static_cast<std::uint64_t>(statement->column_int(4));
+    cost.net_bytes = static_cast<std::uint64_t>(statement->column_int(5));
+    return {};
+  });
+  if (!read) {
+    return tl::unexpected(read.error());
+  }
+  return cost;
+}
+
 }  // namespace myclean::resident

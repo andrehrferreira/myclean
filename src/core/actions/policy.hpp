@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 #include "core/actions/audit_log.hpp"
@@ -45,6 +46,8 @@ struct RunReport {
   // The targeted metric got worse (or could not be measured) and the change was kept: the owner
   // must be told, and may undo it.
   bool alert = false;
+  // Why the metric could not be measured; empty when it was.
+  std::string unverified;
 };
 
 // The policy state machine over stored plans. Every transition, accepted or rejected, is written
@@ -77,9 +80,17 @@ class PolicyEngine {
   // stored item id, and items the owner rejected or the plan does not contain are dropped. Equal or
   // better -> verified. Worse -> undo and rolled_back when the change is reversible and `auto_undo`
   // allows it, otherwise the plan stays applied and the report raises an alert. A failed apply ->
-  // failed.
+  // failed. A pending verification (its metric is measured again later) is logged with outcome
+  // "pending" and the measurement before; the plan stays applied until verify_pending() settles it.
   [[nodiscard]] Result<RunReport> execute(PlanId id, Action& action, const Actor& actor,
                                           bool auto_undo);
+
+  // Measures again applied plan `id` whose latest verification is pending (also after a restart),
+  // with `action` built for it and its stored undo data. Still pending: nothing is logged and the
+  // plan stays applied. Otherwise the result is logged and settles the plan as execute() does.
+  // Fails with invalid_state when the plan is not applied or its verification is not pending.
+  [[nodiscard]] Result<RunReport> verify_pending(PlanId id, Action& action, const Actor& actor,
+                                                 bool auto_undo);
 
   // Reverses applied (or, for the owner, verified) plan `id` with its stored undo data (also
   // after a restart), then moves it to rolled_back. Fails, leaving the plan as it was, when the
@@ -100,6 +111,11 @@ class PolicyEngine {
   [[nodiscard]] Result<void> append(const LogEntry& entry);
   // transition() whose failure is reported in the log only: used where a step already failed.
   void settle(PlanId id, PlanState to, const Actor& actor, std::string_view reason);
+  // Logs `verification` of applied plan `id` and moves the plan on: verified, rolled_back (worse,
+  // reversible, `auto_undo`) or kept applied with an alert; a pending one is only logged.
+  [[nodiscard]] Result<RunReport> conclude(PlanId id, Action& action, const Actor& actor,
+                                           bool auto_undo, RunReport report,
+                                           const Result<Verification>& verification);
 
   store::Store* store_;
   const os::IClock* clock_;

@@ -231,7 +231,12 @@ A feature submits a plan with its automation level (`engine.submit`): `suggest` 
 never cause `approved`. `engine.execute(plan, action, actor, auto_undo)` then runs the action
 (`DeleteItems` or `QuarantineItems`, built for that plan): `applying`, apply through SafeRemove,
 `applied` with the undo data committed in the same transaction, verify, and `verified` or
-`rolled_back` (or an alert in the report when the result got worse and is kept). Item outcomes,
+`rolled_back` (or an alert in the report when the result got worse and is kept). A verify that
+reports `pending` (a metric measured later, such as the next logon) leaves the plan `applied`
+with a `verify` entry "pending"; `engine.verify_pending` measures it again with the stored undo
+data and settles it the same way (`actions::pending_verifications` lists such plans; the cleaning
+worker runs them every `CleaningService::verify_interval`, and `cleaning::verification_readings`
+are the alerts it raises). Item outcomes,
 refusals included, are written to `action_log`, whose triggers reject any UPDATE or DELETE.
 Quarantined items live in `<volume>\.myclean-quarantine\<plan id>\<item id>\<name>` (a rename on
 their own volume) for 7 days; `quarantine.restore` and `quarantine.purge` act through their own

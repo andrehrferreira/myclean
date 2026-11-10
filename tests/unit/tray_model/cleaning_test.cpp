@@ -243,6 +243,16 @@ TEST(CleaningRepliesTest, AnArchivedFolderCanBeUndoneAnUninstallCannot) {
   EXPECT_FALSE(undoable(plan));
 }
 
+TEST(CleaningRepliesTest, APendingVerificationIsShownAsPendingNotVerified) {
+  PlanRow plan{.id = 3, .kind = "system_setting", .state = "applied", .verification = "pending"};
+  EXPECT_EQ(state_text(plan), "applied, verification pending");
+  plan.state = "verified";
+  plan.verification = "better";
+  EXPECT_EQ(state_text(plan), "verified");
+  plan = PlanRow{.id = 4, .state = "applied"};
+  EXPECT_EQ(state_text(plan), "applied");
+}
+
 TEST(CleaningRepliesTest, QuarantineRunsWithPurgeDates) {
   const Result<std::vector<QuarantineRun>> runs = parse_quarantine_list(testing::quarantine_json());
   ASSERT_TRUE(runs.has_value()) << runs.error().message;
