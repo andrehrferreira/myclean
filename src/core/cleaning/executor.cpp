@@ -60,6 +60,7 @@
 #include "core/startup/toggle.hpp"
 #include "core/store/database.hpp"
 #include "core/store/plan_repository.hpp"
+#include "core/vhdx/compact.hpp"
 
 namespace myclean::cleaning {
 
@@ -600,6 +601,24 @@ Result<std::unique_ptr<Action>> index_exclusion(indexer::IIndexerScope* scope, c
 
 }  // namespace
 
+namespace {
+
+// The CompactVhdx of a stored plan's params {"disks"}.
+Result<std::unique_ptr<Action>> compaction(const os::IFileSystem& file_system, const Probes& probes,
+                                           const Json& params) {
+  if (probes.disks == nullptr || probes.wsl == nullptr) {
+    return fail(Errc::invalid_state, "CompactVhdx needs the virtual disk compactor and WSL");
+  }
+  std::vector<fs::path> disks;
+  for (const std::string& disk : params.at("disks").get<std::vector<std::string>>()) {
+    disks.push_back(from_utf8(disk));
+  }
+  return std::make_unique<vhdx::CompactVhdx>(file_system, *probes.wsl, *probes.disks,
+                                             std::move(disks));
+}
+
+}  // namespace
+
 Result<std::unique_ptr<Action>> Executor::action_for(const Plan& plan, const PlanSpec& spec,
                                                      const Actor& actor) const {
   const auto missing = [&](std::string_view what) {
@@ -643,6 +662,9 @@ Result<std::unique_ptr<Action>> Executor::action_for(const Plan& plan, const Pla
       return std::make_unique<startup::StartupToggle>(
           *probes_.startup, *environment_.clock, params.at("items").get<std::vector<std::string>>(),
           params.at("enable").get<bool>());
+    }
+    if (plan.action == vhdx::compact_action_name) {
+      return compaction(*environment_.file_system, probes_, params);
     }
     if (probes_.system == nullptr || probes_.tools == nullptr || probes_.drives == nullptr) {
       return missing("the system settings");
@@ -827,6 +849,11 @@ Result<std::vector<PlanItem>> Executor::items_of(std::span<const std::int64_t> i
   }
   std::vector<PlanItem> items;
   for (const Candidate& candidate : *candidates) {
+    if (candidate.strategy == "vhdx") {
+      return fail(Errc::invalid_argument,
+                  "candidate " + std::to_string(candidate.id) +
+                      " is a virtual disk: plans.propose_compact compacts it");
+    }
     if (candidate.path.empty() || candidate.strategy == "native" ||
         candidate.strategy == "handler") {
       return fail(Errc::invalid_argument,
@@ -1102,6 +1129,57 @@ Result<Plan> Executor::propose_index_exclusion(std::span<const std::int64_t> ids
                .undo = "removes each rule added, or puts back the rule it replaced: the "
                        "index scope is as before",
                .params = Json{{"folders", stored}}},
+      proposer);
+}
+
+Result<Plan> Executor::propose_compaction(std::span<const std::int64_t> ids,
+                                          const Actor& proposer) {
+  if (probes_.disks == nullptr || probes_.wsl == nullptr) {
+    return fail(Errc::invalid_state, "virtual disks cannot be compacted here");
+  }
+  if (ids.empty()) {
+    return fail(Errc::invalid_argument, "no virtual disk named");
+  }
+  Result<std::vector<Candidate>> candidates = fail(Errc::not_found, "not read");
+  if (Result<void> read = environment_.store->read([&](store::Database& db) -> Result<void> {
+        candidates = candidates_by_id(db, ids);
+        return {};
+      });
+      !read) {
+    return tl::unexpected(read.error());
+  }
+  if (!candidates) {
+    return tl::unexpected(candidates.error());
+  }
+  std::vector<fs::path> disks;
+  Json paths = Json::array();
+  std::vector<std::string> commands = {"wsl.exe --shutdown (as the owner)"};
+  for (const Candidate& candidate : *candidates) {
+    if (candidate.source != vhdx_source || candidate.strategy != "vhdx") {
+      return fail(Errc::invalid_argument,
+                  "candidate " + std::to_string(candidate.id) + " is not a disk of space.vhdx");
+    }
+    disks.push_back(candidate.path);
+    paths.push_back(utf8(candidate.path));
+    commands.push_back("CompactVirtualDisk " + utf8(candidate.path));
+  }
+  vhdx::CompactVhdx action(*environment_.file_system, *probes_.wsl, *probes_.disks, disks);
+  return submit_setting(
+      action, std::string(vhdx::compact_action_name),
+      PlanSpec{.kind = PlanKind::compact,
+               .tier = Tier::ask,
+               .scope = ExecutionContext::service,
+               .title = "Compact " + std::to_string(disks.size()) + " WSL/Docker virtual disk" +
+                        (disks.size() == 1 ? "" : "s"),
+               .commands = std::move(commands),
+               .undo = "not reversible: compaction only gives unused space back; the disks keep "
+                       "their data",
+               .warnings = {"Every running WSL distribution and Docker Desktop's containers stop "
+                            "first (wsl --shutdown): save your work in them and quit Docker "
+                            "Desktop before approving.",
+                            "A disk still in use when its turn comes (Docker Desktop started it "
+                            "again) is skipped. Compacting a large disk can take a long time."},
+               .params = Json{{"disks", std::move(paths)}}},
       proposer);
 }
 

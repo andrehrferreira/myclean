@@ -181,11 +181,13 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
                                              "find_owner_decisions",
                                              "find_indexed_build_folders",
                                              "dev_drive_advice",
+                                             "list_vhdx",
                                              "list_plans",
                                              "get_plan",
                                              "propose_cleanup",
                                              "propose_optimization",
                                              "propose_index_exclusion",
+                                             "propose_compact_vhdx",
                                              "list_startup",
                                              "boot_times",
                                              "propose_disable_startup"}));
@@ -273,6 +275,20 @@ TEST_F(ServerTest, StorageAndPlanToolsCallTheirMethods) {
   EXPECT_EQ(calls()[8].params, (Json{{"refresh", false}, {"mode", "photos"}}));
   EXPECT_EQ(calls()[9].method, "space.dev_drive");
   EXPECT_EQ(calls()[9].params, (Json{{"refresh", true}}));
+}
+
+TEST_F(ServerTest, VirtualDiskToolsCallTheirMethodsWithDiskIdsOnly) {
+  static_cast<void>(send(Json{{"jsonrpc", "2.0"},
+                              {"id", 1},
+                              {"method", "initialize"},
+                              {"params", {{"clientInfo", {{"name", "claude code"}}}}}}));
+  static_cast<void>(text(call_tool("list_vhdx"), false));
+  static_cast<void>(text(call_tool("propose_compact_vhdx", {{"disk_ids", {9}}}), false));
+  ASSERT_EQ(calls().size(), 2U);
+  EXPECT_EQ(calls()[0].method, "space.vhdx");
+  EXPECT_EQ(calls()[0].params, (Json{{"refresh", false}}));
+  EXPECT_EQ(calls()[1].method, "plans.propose_compact");
+  EXPECT_EQ(calls()[1].params, (Json{{"candidates", {{"ids", {9}}}}, {"client", "claude-code"}}));
 }
 
 TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
@@ -431,7 +447,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 26U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 28U);
 }
 
 }  // namespace

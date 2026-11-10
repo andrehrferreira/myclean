@@ -317,14 +317,15 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   methods: `health_snapshot` (qualifying trees with trust and the
   unrecognized ones, system signals), `metrics_latest`, `metrics_history`,
   `top_processes`, `list_volumes`, `explain_process`, `disk_health`,
-  `list_alerts`, `freeze_summary`, the storage tools, `dev_drive_advice`, `list_plans`,
+  `list_alerts`, `freeze_summary`, the storage tools, `dev_drive_advice`, `list_vhdx`, `list_plans`,
   `get_plan`, `list_startup`, `boot_times`, `background_costs`,
   `memory_trend` and `find_indexed_build_folders`. Proposal tools (`propose_cleanup`,
-  `propose_optimization`, `propose_disable_startup`, `propose_index_exclusion`;
+  `propose_optimization`, `propose_disable_startup`, `propose_index_exclusion`,
+  `propose_compact_vhdx`;
   `propose_uninstall`
   arrives later) create plans in the `awaiting_approval` state, which
   triggers a tray notification. They name what they propose only by the
-  numbers a read tool returned (candidate ids, startup item ids, folder ids), never by
+  numbers a read tool returned (candidate ids, startup item ids, folder ids, disk ids), never by
   a path or registry name, so no client string reaches an OS API.
 
 ## 9. Security

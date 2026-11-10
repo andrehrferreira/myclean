@@ -59,6 +59,7 @@
 #include "platform/settings/system_space.hpp"
 #include "platform/startup/win32_startup.hpp"
 #include "platform/trust/win_image_inspector.hpp"
+#include "platform/vhdx/win32_vhdx.hpp"
 #include "svc/alerts_component.hpp"
 #include "svc/cleaning_component.hpp"
 #include "svc/component.hpp"
@@ -173,6 +174,7 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
       .installers = std::make_unique<platform::Win32InstallerInspector>(),
       .images = std::make_unique<platform::WicImageDecoder>(),
       .dev_drive = std::make_unique<platform::Win32DevDriveProbe>(),
+      .disks = std::make_unique<platform::Win32VirtualDisks>(),
       .owner = [](std::string_view owner) { return svc::owner_context(owner); },
       // NOLINTNEXTLINE(bugprone-exception-escape): only std::bad_alloc, as anywhere in the service
       .busy = [&telemetry, drive] { return system_volume_busy(telemetry, drive); },

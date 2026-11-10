@@ -259,9 +259,16 @@ const Json& tool_list() {
                        "Advice only: MyClean never creates, formats or resizes a volume.") +
                std::string(space_note),
            object_schema({{"refresh", refresh_property()}})),
+      tool("list_vhdx",
+           std::string("Every WSL and Docker Desktop virtual disk (.vhdx) with its path, size, "
+                       "the WSL distribution it belongs to and whether it is in use, largest "
+                       "first. The 'id' values are what propose_compact_vhdx takes.") +
+               std::string(space_note),
+           object_schema({{"refresh", refresh_property()}})),
       tool("list_plans",
            "MyClean's plans, newest first: id, title, kind (cleanup, handler, native, relocate, "
-           "system_setting, quarantine_restore, recycle_bin, archive, uninstall), tier, scope, "
+           "system_setting, quarantine_restore, recycle_bin, archive, uninstall, compact), tier, "
+           "scope, "
            "state, proposer, "
            "items, bytes and whether a restart is needed. Plans in 'awaiting_approval' wait for "
            "the owner in the MyClean tray. Reads only.",
@@ -355,6 +362,22 @@ const Json& tool_list() {
                  {"maxItems", 64},
                  {"description", "Up to 64 'id' values from find_indexed_build_folders"}}}},
               Json::array({"folder_ids"}))),
+      proposal_tool(
+          "propose_compact_vhdx",
+          "Proposes compacting WSL and Docker virtual disks, which never shrink by themselves, "
+          "so the space freed inside them goes back to the drive. When run it stops every WSL "
+          "distribution and Docker container first (wsl --shutdown), then compacts each disk and "
+          "records its size before and after; it cannot be undone and loses no data. It only "
+          "creates a plan in state 'awaiting_approval' with that warning and notifies the owner: "
+          "nothing stops or changes until the owner approves it in the MyClean tray. Takes only "
+          "the 'id' values of list_vhdx.",
+          object_schema({{"disk_ids",
+                          {{"type", "array"},
+                           {"items", {{"type", "integer"}}},
+                           {"minItems", 1},
+                           {"maxItems", 64},
+                           {"description", "Up to 64 'id' values from list_vhdx"}}}},
+                        Json::array({"disk_ids"}))),
       tool("list_startup",
            "Every program that starts automatically: Run and RunOnce registry values (both "
            "registry views), Startup-folder files, scheduled tasks with a logon or boot trigger "
@@ -491,6 +514,14 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
   }
   if (tool == "find_used_installers") {
     return ServiceCall{.method = ipc::space_used_installers_method, .params = refresh};
+  }
+  if (tool == "list_vhdx") {
+    return ServiceCall{.method = ipc::space_vhdx_method, .params = refresh};
+  }
+  if (tool == "propose_compact_vhdx") {
+    return ServiceCall{
+        .method = ipc::plans_propose_compact_method,
+        .params = Json{{"candidates", {{"ids", arguments.at("disk_ids")}}}, {"client", client}}};
   }
   if (tool == "dev_drive_advice") {
     return ServiceCall{.method = ipc::space_dev_drive_method, .params = refresh};

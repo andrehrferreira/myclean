@@ -598,6 +598,73 @@ reclaim  = { kind = "relocate", ref = "npm" }
   EXPECT_TRUE(fs().exists(L"F:\\caches\\npm\\_cacache\\blob"));
 }
 
+// Optimizer spec "VHDX Size Report and Compaction": the report lists each disk with its size; a
+// compaction waits for the owner with the warning, and only then stops WSL and compacts.
+TEST_F(CleaningServiceTest, VirtualDisksAreCompactedOnlyAfterApprovalAndAfterWslStops) {
+  pack_files().put(testing::data_dir / "packs" / "vm" / "pack.toml", R"toml(id = "vm"
+version = "1.0.0"
+title = "VM disks"
+description = "A Docker Desktop disk."
+sources = ["observed on reference machine"]
+min_myclean = "0.1.0"
+)toml");
+  pack_files().put(testing::data_dir / "packs" / "vm" / "attribution.toml", R"toml(
+[[area]]
+id       = "docker-data"
+paths    = ['D:\Docker\wsl']
+category = "vm-disks"
+label    = "Docker Desktop disk"
+reclaim  = { kind = "manual-review", note = "Docker Desktop moves it." }
+)toml");
+  const path docker = L"D:\\Docker\\wsl\\disk\\docker_data.vhdx";
+  fs().add_file(docker, 100_GiB);
+  fs().add_file(L"D:\\Docker\\wsl\\main\\ext4.vhdx", 1_GiB);
+  start();
+  work();
+
+  EXPECT_EQ(call("space.vhdx", Json{{"refresh", true}}, false).at("state"), "scanning");
+  work_space();
+  const Json report = call("space.vhdx", Json::object(), false);
+  ASSERT_EQ(report.at("state"), "ready") << report.dump();
+  ASSERT_EQ(report.at("disks").size(), 2U);
+  EXPECT_EQ(report.at("disks")[0].at("path"), "D:\\Docker\\wsl\\disk\\docker_data.vhdx");
+  EXPECT_EQ(report.at("disks")[0].at("size"), 100ULL << 30U);
+  EXPECT_EQ(report.at("disks")[0].at("label"), "Docker Desktop disk");
+  EXPECT_EQ(report.at("total"), 101ULL << 30U);
+  const std::int64_t disk = report.at("disks")[0].at("id").get<std::int64_t>();
+
+  // A disk is no file to quarantine.
+  EXPECT_EQ(error_of("plans.propose_cleanup", Json{{"candidates", {{"ids", {disk}}}}}, false)
+                .at("data")
+                .at("errc"),
+            "invalid_argument");
+  const Json proposed = call("plans.propose_compact",
+                             Json{{"candidates", {{"ids", {disk}}}}, {"client", "claude"}}, false);
+  EXPECT_EQ(proposed.at("state"), "awaiting_approval");
+  const std::int64_t id = proposed.at("plan").get<std::int64_t>();
+  const Json plan = get(id);
+  EXPECT_EQ(plan.at("kind"), "compact");
+  EXPECT_EQ(plan.at("proposer"), "mcp:claude");
+  ASSERT_FALSE(plan.at("warnings").empty());
+  EXPECT_NE(plan.at("warnings")[0].get<std::string>().find("wsl --shutdown"), std::string::npos);
+  work();
+  EXPECT_EQ(wsl().shutdowns, 0);  // nothing runs before the owner approves
+  EXPECT_TRUE(disks().compacted.empty());
+
+  disks().after[docker] = 60_GiB;
+  approve_all(id);
+  work();
+  EXPECT_EQ(get(id).at("state"), "verified");
+  EXPECT_EQ(wsl().shutdowns, 1);
+  EXPECT_EQ(disks().compacted, (std::vector<path>{docker}));
+  const std::vector<actions::LogEntry> entries = log(id);
+  const auto verify = std::ranges::find(entries, std::string("verify"), &actions::LogEntry::event);
+  ASSERT_NE(verify, entries.end());
+  EXPECT_EQ(verify->outcome, "better");
+  EXPECT_NE(verify->metrics.find("vhdx_bytes before="), std::string::npos);
+  EXPECT_EQ(error_of("plans.undo", Json{{"id", id}}, true).at("data").at("errc"), "not_reversible");
+}
+
 TEST_F(CleaningServiceTest, TheHourlyPurgeDeletesAQuarantineOnAVolumeShortOfSpaceAtOnce) {
   add_targets();
   start();

@@ -36,6 +36,7 @@
 #include "core/rules/schema.hpp"
 #include "core/safety/deny_list.hpp"
 #include "core/startup/startup.hpp"
+#include "core/vhdx/compact.hpp"
 
 // The cleaning executor (cleaning spec C4): turns what the rules select into plans by tier and
 // scope, and runs the approved service-scope plans through the action framework.
@@ -60,6 +61,8 @@ struct Probes {
   // The owner's environment, registry and running programs: where automatic recipes are now.
   const placement::Tools* owner_tools = nullptr;
   startup::IStartupSystem* startup = nullptr;  // the owner's startup items and the machine's
+  vhdx::IVirtualDisks* disks = nullptr;        // compacts virtual disks, run by the service
+  vhdx::IWsl* wsl = nullptr;                   // stops WSL as the owner
   indexer::IIndexerScope* indexer = nullptr;   // the Windows Search crawl scope
 };
 
@@ -75,6 +78,9 @@ struct ExecutorOptions {
 // The candidate source of the owner decisions (space.owner_decisions): cold folders (strategy
 // "archive") and installed programs to review (strategy "uninstall").
 inline constexpr std::string_view owner_decisions_source = "space.owner_decisions";
+
+// The candidate source of the virtual disk report (space.vhdx): strategy "vhdx".
+inline constexpr std::string_view vhdx_source = "space.vhdx";
 
 // The candidate source of the build-output and cache folders Windows Search indexes
 // (space.indexed_folders), strategy "index_exclude".
@@ -165,6 +171,13 @@ class Executor {
   // StartupToggle::preview does for an id it cannot change.
   [[nodiscard]] Result<Plan> propose_startup(std::span<const std::string> ids, bool enable,
                                              const Actor& proposer);
+  // An approval-only plan that compacts the virtual disks of candidates `ids` (vhdx_source):
+  // action "CompactVhdx", kind compact, one item per disk, params {"disks": [path]}, with the
+  // warning that every running WSL distribution and Docker container stops. Fails with
+  // invalid_state without the compactor or WSL, invalid_argument for a candidate of another
+  // source, and as CompactVhdx::preview does for a disk it cannot take.
+  [[nodiscard]] Result<Plan> propose_compaction(std::span<const std::int64_t> ids,
+                                                const Actor& proposer);
   // An approval-only plan that keeps the folders of indexed-folder candidates `ids`
   // (indexed_folders_source) out of the Windows Search index: action "SetIndexerScope", kind
   // system_setting, one item per folder, params {"folders"}. Fails with invalid_state without

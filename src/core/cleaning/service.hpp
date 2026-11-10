@@ -52,6 +52,8 @@
 #include "core/startup/diagnostics.hpp"
 #include "core/startup/startup.hpp"
 #include "core/store/store.hpp"
+#include "core/vhdx/compact.hpp"
+#include "core/vhdx/report.hpp"
 
 // Cleaning in the service (cleaning spec C4, C5; approvals spec; space spec, prompt 3): the
 // recurring auto run and the quarantine purge on MyClean's own scheduler, on-demand scans,
@@ -72,6 +74,9 @@ struct OwnerContext {
   // The owner's user variables, registry hive and running programs: where automatic relocation
   // recipes are now (Probes::owner_tools). Null: none is moved automatically.
   std::shared_ptr<const placement::Tools> tools;
+  // WSL stopped as the owner (WSL keeps a virtual machine per user), before a virtual disk is
+  // compacted; null: no compaction.
+  std::unique_ptr<vhdx::IWsl> wsl;
 };
 // Fails while the owner's session is unavailable (not logged on); retried every minute.
 using OwnerSource = std::function<Result<OwnerContext>()>;
@@ -214,6 +219,11 @@ class CleaningService {
   // space.owner_decisions: the cold folders of the owner's profile and the installed programs
   // in uninstall areas, stored as owner-decision candidates.
   [[nodiscard]] Result<nlohmann::json> analyze_decisions(const std::stop_token& stop);
+  // space.vhdx: the WSL and Docker virtual disks, stored as candidates of vhdx_source.
+  [[nodiscard]] Result<nlohmann::json> analyze_vhdx();
+  // plans.propose_compact: the disks of the latest space.vhdx answer named by candidate id.
+  [[nodiscard]] Result<nlohmann::json> propose_compaction(const nlohmann::json& params,
+                                                          const Actor& proposer);
   // space.dev_drive: the Dev Drive advice (read-only).
   [[nodiscard]] Result<nlohmann::json> analyze_dev_drive(const std::stop_token& stop);
   // space.indexed_folders: the build-output and cache folders Windows Search indexes, stored
@@ -260,6 +270,7 @@ class CleaningService {
   std::optional<std::string> owner_problem_;
   std::vector<std::string> problems_;
   std::vector<packs::RelocationRecipe> recipes_;    // of registry_
+  std::vector<map::Area> vm_disk_areas_;            // of registry_: category vm-disks
   std::vector<map::Area> dev_cache_areas_;          // of registry_: category dev-caches
   std::vector<map::Area> uninstall_areas_;          // of registry_: reclaim kind uninstall
   std::vector<map::Area> index_areas_;              // of registry_: indexer::kept_out categories

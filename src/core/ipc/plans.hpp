@@ -19,7 +19,7 @@ namespace myclean::ipc {
 // PlanSummary:
 //   {"id": int, "title": string,
 //    "kind": "cleanup"|"handler"|"native"|"relocate"|"system_setting"|"quarantine_restore"|
-//            "recycle_bin"|"archive"|"uninstall",
+//            "recycle_bin"|"archive"|"uninstall"|"compact",
 //    "tier": "auto"|"ask"|"report", "scope": "user"|"service",
 //    "state": "proposed"|"auto"|"awaiting_approval"|"approved"|"applying"|"applied"|"verified"|
 //             "rolled_back"|"failed"|"rejected",
@@ -31,7 +31,8 @@ namespace myclean::ipc {
 //   quarantine_restore = quarantined items moved back; recycle_bin = the Recycle Bin items the
 //   owner deleted long ago, deleted permanently; archive = a cold folder moved to the HDD archive;
 //   uninstall = an installed program's own uninstaller started (the last two: the owner's
-//   one-click decisions, plans.owner_action).
+//   one-click decisions, plans.owner_action); compact = WSL and Docker virtual disks compacted
+//   (plans.propose_compact; not reversible).
 //   scope: "service" plans run in the service; "user" plans run in the tray with the owner's
 //   token (user_tasks.*).
 //
@@ -175,6 +176,15 @@ inline constexpr std::string_view plans_propose_startup_method = "plans.propose_
 // folder the index no longer holds or when Windows Search cannot be reached.
 inline constexpr std::string_view plans_propose_index_exclusion_method =
     "plans.propose_index_exclusion";
+
+// Parameters: candidates (record, required): {"ids": [int]}, "id" values of the latest
+// space.vhdx answer; client (token, optional). Creates an awaiting_approval plan (kind compact,
+// action CompactVhdx, run by the service) that, once the owner approves it in the tray, runs
+// `wsl --shutdown` as the owner (every running WSL distribution and Docker container stops: the
+// plan's warnings say so) and then compacts each disk, recording its size before and after:
+// {"plan": int, "state": "awaiting_approval"}. Fails with not_found for an unknown candidate id
+// and invalid_argument for a candidate that is not a disk of space.vhdx.
+inline constexpr std::string_view plans_propose_compact_method = "plans.propose_compact";
 
 // TRAY ONLY. Parameters: candidates (record, required): {"ids": [int]}. The owner deletes
 // report-view items (a duplicate, an old download) to the Recycle Bin: an approved user-scope
@@ -344,6 +354,15 @@ inline constexpr std::size_t max_owner_programs = 100;
 //    healthy NVMe or SATA SSD with the most room that keeps 10 % free), "steps": [string] (what
 //    the owner does, in order), "notes": [string] (what could not be judged), "sources": [string]}
 inline constexpr std::string_view space_dev_drive_method = "space.dev_drive";
+
+// Parameters: refresh (boolean, optional). Every WSL and Docker virtual disk (.vhdx) where the
+// knowledge packs say they are (the registered folder of each WSL distribution, the vm-disks
+// areas), largest first:
+//   {..., "disks": [{"id", "path", "area", "label", "distribution": string|null, "size",
+//    "size_on_disk", "in_use"}], "total": int, "notes": [string]}
+// "id" is what plans.propose_compact takes; "in_use": a process holds it open (its
+// distribution or Docker Desktop runs).
+inline constexpr std::string_view space_vhdx_method = "space.vhdx";
 
 // Parameters: refresh (boolean, optional). The build-output and cache folders Windows Search
 // indexes (core/indexer): the existing folders of the knowledge packs' attribution areas of

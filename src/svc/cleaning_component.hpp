@@ -33,6 +33,7 @@
 #include "core/startup/diagnostics.hpp"
 #include "core/startup/startup.hpp"
 #include "core/store/migrations.hpp"
+#include "core/vhdx/compact.hpp"
 #include "svc/component.hpp"
 
 namespace myclean::svc {
@@ -56,6 +57,7 @@ struct CleaningSources {
   std::unique_ptr<space::IInstallerInspector> installers;
   std::unique_ptr<space::IImageDecoder> images;
   std::unique_ptr<devdrive::IDevDriveProbe> dev_drive;
+  std::unique_ptr<vhdx::IVirtualDisks> disks;  // compacts virtual disks
   // The owner's session context for the owner with this SID (see svc::owner_context).
   std::function<Result<cleaning::OwnerContext>(std::string_view owner_sid)> owner;
   std::function<bool()> busy;  // the system volume is critically busy

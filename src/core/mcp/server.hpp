@@ -31,14 +31,15 @@ inline constexpr std::array<std::string_view, 4> protocol_versions{"2025-11-25",
 //   list_alerts       alerts.list
 //   freeze_summary    input.summary
 //   storage_top, find_old_downloads, find_duplicates, find_used_installers,
-//   find_owner_decisions, dev_drive_advice
+//   find_owner_decisions, dev_drive_advice, list_vhdx
 //                     space.top, space.old_downloads, space.duplicates, space.used_installers,
-//                     space.owner_decisions, space.dev_drive (listed only: the owner acts on
-//                     them in the tray)
+//                     space.owner_decisions, space.dev_drive, space.vhdx (listed only: the owner
+//                     acts on them in the tray)
 //   list_plans, get_plan
 //                     plans.list, plans.get
-//   propose_cleanup, propose_optimization
-//                     plans.propose_cleanup, plans.propose_optimization, as "mcp:<client>"
+//   propose_cleanup, propose_optimization, propose_compact_vhdx
+//                     plans.propose_cleanup, plans.propose_optimization,
+//                     plans.propose_compact, as "mcp:<client>"
 //                     (the clientInfo name of initialize): plans awaiting the owner's approval
 // No tool can change anything: there is no tool that closes, suspends or reprioritizes a
 // process, and none that approves, executes or undoes a plan (the service accepts those only

@@ -39,6 +39,7 @@
 #include "platform/scan/file_content.hpp"
 #include "platform/settings/registry.hpp"
 #include "platform/settings/user_settings.hpp"
+#include "platform/vhdx/win32_vhdx.hpp"
 
 namespace myclean::svc {
 
@@ -307,7 +308,8 @@ Result<cleaning::OwnerContext> owner_context(std::string_view owner_sid) {
         .environment = std::make_unique<platform::Win32Environment>(),
         .locations = *std::move(locations),
         .downloads = downloads ? std::optional<fs::path>(*downloads) : std::nullopt,
-        .git = nullptr};
+        .git = nullptr,
+        .wsl = std::make_unique<platform::Win32Wsl>()};
   }
   Result<wil::unique_handle> token = session_token(owner_sid);
   if (!token) {
@@ -330,7 +332,8 @@ Result<cleaning::OwnerContext> owner_context(std::string_view owner_sid) {
       .downloads = downloads_of(token->get()),
       .git = git ? std::make_unique<platform::GitCli>(*git, owner_identity(std::string(owner_sid)))
                  : nullptr,
-      .tools = owner_tools(std::move(variables), std::string(owner_sid))};
+      .tools = owner_tools(std::move(variables), std::string(owner_sid)),
+      .wsl = std::make_unique<platform::Win32Wsl>(owner_identity(std::string(owner_sid)))};
 }
 
 Result<WallTime> owner_logon_time(std::string_view owner_sid) {

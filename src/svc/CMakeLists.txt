@@ -50,6 +50,7 @@ myclean_add_library(svc
     myclean::platform_service
     myclean::platform_settings
     myclean::platform_startup
+    myclean::platform_vhdx
     myclean::resident
     myclean::rules
     myclean::startup

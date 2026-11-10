@@ -72,6 +72,8 @@ src/core/placement/     drive classes and targets, relocation and recipes, hiber
 src/core/compress/      compression estimates, CompressFolder (WOF) and CompactOS actions
 src/core/devdrive/      Dev Drive advisor: support and Dev Drives present, active repositories
                         and package caches that would move, the owner's steps (advice only)
+src/core/vhdx/          WSL and Docker virtual disks: the size report from the packs' locations and
+                        the ask-tier CompactVhdx action (wsl --shutdown as the owner, then compact)
 src/core/drives/        drive maintenance: TRIM/defrag history, HDD fragmentation, retrim/defrag
 src/core/scanall/       `myclean scan-all`: per-drive findings grouped by action, one report
 src/core/telemetry/     collectors (processes, CPU, memory, disks, volumes, GPU), the pipeline
@@ -107,7 +109,7 @@ src/core/user_tasks/    the user-scope plans the tray runs under the owner's tok
 src/platform/<module>/  Win32 implementations of src/core interfaces (proc, perf, disk,
                         disk_health, etw, trust, input, ipc, fs, service, scan, clean, git,
                         cleanup, settings, ntfs, compress, defrag, packs, jobs, games, image,
-                        indexer, devdrive)
+                        indexer, devdrive, vhdx)
 src/svc/                myclean-svc: host, Service and its components (see below)
 src/tray/               myclean-tray: tray icon, toasts, dashboard (approval inbox, Space),
                         input watchdog, the worker that runs user tasks

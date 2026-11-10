@@ -30,4 +30,5 @@ myclean_add_library(cleaning
     myclean::space
     myclean::startup
     myclean::store
+    myclean::vhdx
     nlohmann_json::nlohmann_json)

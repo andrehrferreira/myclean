@@ -40,6 +40,7 @@
 #include "placement/placement_fakes.hpp"
 #include "space/space_fakes.hpp"
 #include "startup/startup_fakes.hpp"
+#include "vhdx/vhdx_fakes.hpp"
 
 namespace myclean::cleaning::testing {
 
@@ -94,6 +95,16 @@ class FsTree final : public clean::IFileTree {
 };
 
 // An owner context's git: answers from a FakeGit the fixture keeps.
+// The owner context's WSL, forwarding to the fixture's, which outlives every owner context.
+class ForwardingWsl final : public vhdx::IWsl {
+ public:
+  explicit ForwardingWsl(vhdx::IWsl& wsl) : wsl_(&wsl) {}
+  [[nodiscard]] Result<void> shutdown() override { return wsl_->shutdown(); }
+
+ private:
+  vhdx::IWsl* wsl_;
+};
+
 class ForwardingGit final : public clean::IGit {
  public:
   explicit ForwardingGit(const clean::IGit& git) : git_(&git) {}
@@ -272,6 +283,7 @@ class CleaningFixture : public ::testing::Test {
                    .tools = &tools_,
                    .drives = &drives_,
                    .startup = &startup_,
+                   .disks = &disks_,
                    .indexer = &indexer_},
         .owner = [this]() -> Result<OwnerContext> {
           if (!owner_available_) {
@@ -284,7 +296,8 @@ class CleaningFixture : public ::testing::Test {
                               .tools = owner_registry_
                                            ? std::shared_ptr<const placement::Tools>(
                                                  &owner_tools_, [](const placement::Tools*) {})
-                                           : nullptr};
+                                           : nullptr,
+                              .wsl = std::make_unique<ForwardingWsl>(wsl_)};
         },
         .files = &files_,
         .data_dir = data_dir,
@@ -372,6 +385,8 @@ class CleaningFixture : public ::testing::Test {
   placement::testing::FakeProcessRunner& tools() { return tools_; }
   placement::testing::FakeDriveFacts& drives() { return drives_; }
   startup::testing::FakeStartupSystem& startup() { return startup_; }
+  vhdx::testing::FakeWsl& wsl() { return wsl_; }
+  vhdx::testing::FakeVirtualDisks& disks() { return disks_; }
   startup::testing::FakeDiagnosticsLog& diagnostics() { return diagnostics_; }
   indexer::testing::FakeScope& indexer() { return indexer_; }
   space::testing::FakeDirectoryReader& reader() { return reader_; }
@@ -403,6 +418,8 @@ class CleaningFixture : public ::testing::Test {
   actions::testing::TempFolder folder_;
   fakes::FakeClock clock_{noon};
   fakes::FakeFileSystem fs_;
+  vhdx::testing::FakeWsl wsl_;
+  vhdx::testing::FakeVirtualDisks disks_{fs_};
   FsTree tree_{fs_, noon - std::chrono::days{30}};
   clean::testing::FakeUsage usage_;
   cleanup::testing::FakeHost handlers_;

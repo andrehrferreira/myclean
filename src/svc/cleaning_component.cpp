@@ -67,6 +67,7 @@ Result<void> CleaningComponent::start(const Context& context) {
                  .tools = sources_.tools.get(),
                  .drives = sources_.drives.get(),
                  .startup = startup_.get(),
+                 .disks = sources_.disks.get(),
                  .indexer = sources_.indexer.get()},
       .owner = [owner = sources_.owner,
                 sid = context.owner_sid()]() -> Result<cleaning::OwnerContext> {

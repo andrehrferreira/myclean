@@ -44,6 +44,7 @@
 #include "core/packs/registry.hpp"
 #include "core/packs/schema.hpp"
 #include "core/placement/drives.hpp"
+#include "core/placement/recipe.hpp"
 #include "core/placement/relocation.hpp"
 #include "core/placement/settings.hpp"
 #include "core/safety/deny_list.hpp"
@@ -65,6 +66,7 @@
 #include "core/startup/startup.hpp"
 #include "core/store/database.hpp"
 #include "core/store/plan_repository.hpp"
+#include "core/vhdx/report.hpp"
 
 namespace myclean::cleaning {
 
@@ -283,6 +285,7 @@ void CleaningService::resolve_owner() {
     probes.git = owner_->git.get();
   }
   probes.owner_tools = owner_->tools.get();
+  probes.wsl = owner_->wsl.get();
   executor_ = std::make_unique<Executor>(environment, engine_, *quarantine_, probes,
                                          owner_->locations, settings_.executor);
   {
@@ -329,6 +332,10 @@ void CleaningService::reload_packs() {
   std::ranges::copy_if(
       registry_.attribution, std::back_inserter(dev_cache_areas),
       [](const map::Area& area) { return area.category == map::Category::dev_caches; });
+  std::vector<map::Area> vm_disk_areas;
+  std::ranges::copy_if(
+      registry_.attribution, std::back_inserter(vm_disk_areas),
+      [](const map::Area& area) { return area.category == map::Category::vm_disks; });
   std::vector<map::Area> index_areas;
   std::ranges::copy_if(registry_.attribution, std::back_inserter(index_areas),
                        [](const map::Area& area) { return indexer::kept_out(area.category); });
@@ -340,6 +347,7 @@ void CleaningService::reload_packs() {
   recipes_ = registry_.relocate;
   uninstall_areas_ = std::move(uninstall_areas);
   dev_cache_areas_ = std::move(dev_cache_areas);
+  vm_disk_areas_ = std::move(vm_disk_areas);
   index_areas_ = std::move(index_areas);
   project_rules_ = std::move(project_rules);
   pack_status_ = std::move(status);
@@ -1004,6 +1012,9 @@ Result<Json> CleaningService::analyze(const std::string& key, const std::stop_to
   if (key == "dev_drive") {
     return analyze_dev_drive(stop);
   }
+  if (key == "vhdx") {
+    return analyze_vhdx();
+  }
   if (key == "indexed_folders") {
     return analyze_indexed_folders(stop);
   }
@@ -1208,6 +1219,82 @@ Result<Json> CleaningService::analyze_photo_duplicates(const std::stop_token& st
   json["mode"] = "photos";
   fit_groups(json);  // the most reclaimable groups first
   return json;
+}
+
+Result<Json> CleaningService::analyze_vhdx() {
+  if (sources_.probes.tree == nullptr) {
+    return fail(Errc::invalid_state, "the file system cannot be read here");
+  }
+  Json notes = Json::array();
+  std::vector<vhdx::DiskSource> sources;
+  std::vector<packs::RelocationRecipe> recipes;
+  std::vector<map::Area> areas;
+  {
+    const std::scoped_lock lock(mutex_);
+    recipes = recipes_;
+    areas = vm_disk_areas_;
+  }
+  // The WSL distributions first: their registered folders name the distribution.
+  for (const packs::RelocationRecipe& recipe : recipes) {
+    if (!std::ranges::any_of(recipe.locations, [](const std::string& location) {
+          return vhdx::is_vhdx(fs::path(std::u8string(location.begin(), location.end())));
+        })) {
+      continue;
+    }
+    if (owner_->tools == nullptr || sources_.probes.commands == nullptr) {
+      notes.push_back("the owner's registry cannot be read here, so " + recipe.label +
+                      " is found only in its usual folders");
+      continue;
+    }
+    const Result<std::vector<placement::RecipeLocation>> located =
+        placement::recipe_locations(*owner_->tools, *sources_.probes.commands, recipe);
+    if (!located) {
+      notes.push_back(recipe.label + ": " + located.error().message);
+      continue;
+    }
+    for (const placement::RecipeLocation& location : *located) {
+      sources.push_back(vhdx::DiskSource{.location = location.path,
+                                         .area = recipe.id,
+                                         .label = recipe.label,
+                                         .distribution = location.instance});
+    }
+  }
+  std::ranges::move(vhdx::area_sources(*sources_.probes.tree, areas, *owner_->environment),
+                    std::back_inserter(sources));
+  const std::vector<vhdx::VirtualDisk> disks =
+      vhdx::find_disks(*sources_.probes.tree, sources, sources_.probes.usage);
+  const WallTime now = sources_.clock->now();
+  std::vector<Candidate> found;
+  std::uint64_t total = 0;
+  for (const vhdx::VirtualDisk& disk : disks) {
+    found.push_back(Candidate{.source = std::string(vhdx_source),
+                              .category = "vm-disks",
+                              .tier = Tier::ask,
+                              .scope = ExecutionContext::service,
+                              .strategy = "vhdx",
+                              .path = disk.path,
+                              .size = disk.size,
+                              .reason = disk.label,
+                              .found_at = now});
+    total += disk.size.count();
+  }
+  if (Result<void> stored = store_candidates(*sources_.store, std::string(vhdx_source), found);
+      !stored) {
+    return tl::unexpected(stored.error());
+  }
+  Json listed = Json::array();
+  for (std::size_t index = 0; index < disks.size(); ++index) {
+    Json entry = disks[index];
+    entry["id"] = found[index].id;
+    listed.push_back(std::move(entry));
+  }
+  return Json{{"disks", std::move(listed)}, {"total", total}, {"notes", std::move(notes)}};
+}
+
+Result<Json> CleaningService::propose_compaction(const Json& params, const Actor& proposer) {
+  const std::vector<std::int64_t> ids = ids_of(params.at("candidates"), "ids");
+  return on_executor(
+      [&](Executor& executor) { return plan_answer(executor.propose_compaction(ids, proposer)); });
 }
 
 Result<Json> CleaningService::analyze_dev_drive(const std::stop_token& stop) {
@@ -1579,6 +1666,11 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
               ids_of(params.at("candidates"), "ids"), proposer_of(params, caller)));
         });
       }));
+  added.push_back(
+      methods.add_for_caller(std::string(ipc::plans_propose_compact_method), {candidates, client},
+                             [this](const Json& params, const ipc::Caller& caller) {
+                               return propose_compaction(params, proposer_of(params, caller));
+                             }));
   added.push_back(add(
       ipc::plans_recycle_method, {candidates},
       [this](const Json& params) {
@@ -1653,6 +1745,7 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
         std::pair{ipc::space_used_installers_method, "used_installers"},
         std::pair{ipc::space_owner_decisions_method, "owner_decisions"},
         std::pair{ipc::space_dev_drive_method, "dev_drive"},
+        std::pair{ipc::space_vhdx_method, "vhdx"},
         std::pair{ipc::space_indexed_folders_method, "indexed_folders"}}) {
     added.push_back(add(method, {refresh}, [this, key](const Json& params) {
       return space_answer(key, params.value("refresh", false));
