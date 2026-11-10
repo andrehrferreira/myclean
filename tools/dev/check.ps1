@@ -57,11 +57,12 @@ function Initialize-DevShell {
     Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64' | Out-Null
 }
 
-# A tree whose rules.ninja does not hold the UTF-8 prefix cl.exe prints here (configured, or
-# regenerated, under another code page) is cleaned and configured again, once.
-function Reset-MismatchedBuildTree([string]$BuildDir) {
+# CMake decodes cl.exe's note in another code page than the console's and writes a garbled
+# prefix (UTF-8 of "Observa├º├úo" instead of "Observação"), so the line is rewritten
+# with what cl.exe prints in this console, every other byte of rules.ninja kept, and the objects
+# compiled while it did not match (no header dependency recorded) are rebuilt.
+function Repair-DepsPrefix([string]$BuildDir) {
     $rules = Join-Path $BuildDir 'CMakeFiles\rules.ninja'
-    if (-not (Test-Path -LiteralPath $rules)) { return }
     $dir = Join-Path ([IO.Path]::GetTempPath()) "myclean-showincludes-$PID"
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     try {
@@ -75,12 +76,15 @@ function Reset-MismatchedBuildTree([string]$BuildDir) {
     $note = $notes | Where-Object { "$_" -like '*probe.h' } | Select-Object -First 1
     if (-not $note) { throw 'cl.exe printed no /showIncludes note.' }
     $prefix = ("$note" -replace '\s*[A-Za-z]:\\.*$', '')
-    $recorded = [regex]::Match([IO.File]::ReadAllText($rules), '(?m)^\s*msvc_deps_prefix = ([^\r\n]*?)\s*$')
-    if ($recorded.Success -and $recorded.Groups[1].Value -eq $prefix) { return }
-    Write-Host "== $BuildDir expects another showIncludes prefix than cl.exe prints; cleaning and configuring it again." -ForegroundColor Yellow
-    & ninja -C $BuildDir -t clean | Out-Null
-    Remove-Item -LiteralPath (Join-Path $BuildDir 'CMakeCache.txt') -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath (Join-Path $BuildDir 'CMakeFiles') -Recurse -Force
+    $text = [IO.File]::ReadAllText($rules)
+    $fixed = [regex]::Replace($text, '(?m)^(\s*msvc_deps_prefix = )[^\r\n]*', { param($m) $m.Groups[1].Value + $prefix + ' ' })
+    if ($fixed -ne $text) { [IO.File]::WriteAllText($rules, $fixed, [Text.UTF8Encoding]::new($false)) }
+    $stale = & ninja -C $BuildDir -t deps 2>$null | Where-Object { $_ -match '^(\S+\.cpp\.obj): #deps 0,' } | ForEach-Object { $Matches[1] }
+    $stale = @($stale)
+    for ($first = 0; $first -lt $stale.Count; $first += 200) {
+        $batch = $stale[$first..([Math]::Min($first + 199, $stale.Count - 1))]
+        & ninja -C $BuildDir -t clean @batch | Out-Null
+    }
 }
 
 function Invoke-Step([string]$Name, [string]$FilePath, [string[]]$ArgumentList) {
@@ -96,10 +100,12 @@ Push-Location $RepoRoot
 try {
     Initialize-DevShell
     $tree = Join-Path $RepoRoot "build\$Preset"
-    Reset-MismatchedBuildTree $tree
     if (-not (Test-Path -LiteralPath (Join-Path $tree 'CMakeCache.txt'))) {
         Invoke-Step 'Configure' cmake @('--preset', $Preset)
     }
+    # Regenerates now if a CMakeLists.txt changed, so ninja does not rewrite rules.ninja mid-build.
+    Invoke-Step 'Regenerate' cmake @('--build', '--preset', $Preset, '--target', 'build.ninja')
+    Repair-DepsPrefix $tree
     Invoke-Step 'Build' cmake @('--build', '--preset', $Preset)
     Invoke-Step 'Format check' cmake @('--build', '--preset', $Preset, '--target', 'format-check')
     Invoke-Step 'Lint' cmake @('--build', '--preset', $Preset, '--target', 'lint')
