@@ -21,12 +21,12 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 
 function Initialize-DevShell {
-    # MSVC writes its /showIncludes notes in the console's output code page, and ninja records a
-    # header dependency only when the note starts with the prefix CMake detected in the OEM code
-    # page ("Observação: incluindo arquivo:" on a Portuguese MSVC). Under a UTF-8 console every object
-    # was left with no dependencies, so header changes did not rebuild it.
-    [Console]::OutputEncoding = [Text.Encoding]::GetEncoding(
-        [Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage)
+    # cl.exe prints its /showIncludes notes ("Observação: incluindo arquivo:" on a Portuguese
+    # MSVC) in the code page of the console ninja runs in, and ninja records a header dependency
+    # only when those bytes match the prefix CMake wrote into rules.ninja. CMake 4.1 writes it in
+    # UTF-8 and cannot configure under an OEM console at all, so configure and build both run
+    # under UTF-8. (VSLANG=1033 is no way out: this MSVC has only its 1046 resources.)
+    [Console]::OutputEncoding = [Text.Encoding]::UTF8
     if (Get-Command cl.exe -ErrorAction SilentlyContinue) { return }
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) {
@@ -36,6 +36,25 @@ function Initialize-DevShell {
     if (-not $vs) { throw 'No Visual Studio installation with the x64 C++ tools was found.' }
     Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
     Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64' | Out-Null
+}
+
+# A tree configured or built under an OEM console (this script did that until 2026-11-10) holds a
+# prefix that is not UTF-8, or objects compiled with no recorded header dependency, so a header
+# change left stale objects behind (seen as ASan layout aborts in tests). Such a tree is cleaned
+# and configured again once.
+function Reset-StaleBuildTree([string]$BuildDir) {
+    $rules = Join-Path $BuildDir 'CMakeFiles\rules.ninja'
+    if (-not (Test-Path -LiteralPath $rules)) { return }
+    $strict = [Text.UTF8Encoding]::new($false, $true)
+    try {
+        $null = $strict.GetString([IO.File]::ReadAllBytes($rules))
+        return
+    } catch [Text.DecoderFallbackException] {
+        Write-Host "== $BuildDir was configured under another code page; cleaning and configuring it again." -ForegroundColor Yellow
+    }
+    & ninja -C $BuildDir -t clean | Out-Null
+    Remove-Item -LiteralPath (Join-Path $BuildDir 'CMakeCache.txt') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $BuildDir 'CMakeFiles') -Recurse -Force
 }
 
 function Invoke-Step([string]$Name, [string]$FilePath, [string[]]$ArgumentList) {
@@ -50,7 +69,10 @@ function Invoke-Step([string]$Name, [string]$FilePath, [string[]]$ArgumentList) 
 Push-Location $RepoRoot
 try {
     Initialize-DevShell
-    if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot "build\$Preset\CMakeCache.txt"))) {
+    $tree = Join-Path $RepoRoot "build\$Preset"
+    Reset-StaleBuildTree $tree
+    if (-not (Test-Path -LiteralPath (Join-Path $tree 'CMakeCache.txt')) -or
+        -not (Test-Path -LiteralPath (Join-Path $tree 'CMakeFiles\rules.ninja'))) {
         Invoke-Step 'Configure' cmake @('--preset', $Preset)
     }
     Invoke-Step 'Build' cmake @('--build', '--preset', $Preset)
