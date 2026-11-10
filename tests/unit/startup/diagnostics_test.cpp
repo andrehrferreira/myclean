@@ -27,6 +27,10 @@ const std::string delay_event =
 const std::string unnamed_delay_event =
     R"(<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><EventID Qualifiers="0">101</EventID><TimeCreated SystemTime="2026-11-01T07:00:00Z"/></System><EventData><Data Name="StartTime">2026-11-01T06:59:00.0000000Z</Data><Data Name="Name"/><Data Name="FriendlyName">Tom &amp; Jerry&#x2019;s &lt;Sync&gt;</Data><Data Name="TotalTime">3000</Data><Data Name="DegradationTime">1250</Data><Data Name="Path">C:\Program Files\T&amp;J\TJSync.EXE</Data></EventData></Event>)";
 
+// An event 100 (template version 2, every field in order) as EvtRender renders it.
+const std::string boot_event =
+    R"(<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='Microsoft-Windows-Diagnostics-Performance' Guid='{cfc18ec0-96b1-4eba-961b-622caee05b0a}'/><EventID>100</EventID><Version>2</Version><Level>4</Level><Task>4002</Task><Opcode>34</Opcode><Keywords>0x8000000000010000</Keywords><TimeCreated SystemTime='2026-11-09T08:05:44.0187211Z'/><EventRecordID>4210</EventRecordID><Correlation ActivityID='{a1b2c3d4-0000-0000-0000-000000000001}'/><Execution ProcessID='3120' ThreadID='4388'/><Channel>Microsoft-Windows-Diagnostics-Performance/Operational</Channel><Computer>PC</Computer><Security UserID='S-1-5-19'/></System><EventData><Data Name='BootTsVersion'>2</Data><Data Name='BootStartTime'>2026-11-09T07:58:51.296354700Z</Data><Data Name='BootEndTime'>2026-11-09T08:00:43.701262200Z</Data><Data Name='SystemBootInstance'>212</Data><Data Name='UserBootInstance'>187</Data><Data Name='BootTime'>52406</Data><Data Name='MainPathBootTime'>21406</Data><Data Name='BootKernelInitTime'>18</Data><Data Name='BootDriverInitTime'>1243</Data><Data Name='BootDevicesInitTime'>52</Data><Data Name='BootPrefetchInitTime'>0</Data><Data Name='BootPrefetchBytes'>0</Data><Data Name='BootAutoChkTime'>0</Data><Data Name='BootSmssInitTime'>3011</Data><Data Name='BootCriticalServicesInitTime'>507</Data><Data Name='BootUserProfileProcessingTime'>2103</Data><Data Name='BootMachineProfileProcessingTime'>12</Data><Data Name='BootExplorerInitTime'>4688</Data><Data Name='BootNumStartupApps'>19</Data><Data Name='BootPostBootTime'>31000</Data><Data Name='BootIsRebootAfterInstall'>false</Data><Data Name='BootRootCauseStepImprovementBits'>0</Data><Data Name='BootRootCauseGradualImprovementBits'>0</Data><Data Name='BootRootCauseStepDegradationBits'>0</Data><Data Name='BootRootCauseGradualDegradationBits'>0</Data><Data Name='BootIsDegradation'>false</Data><Data Name='BootIsStepDegradation'>false</Data><Data Name='BootIsGradualDegradation'>false</Data><Data Name='BootImprovementDelta'>0</Data><Data Name='BootDegradationDelta'>0</Data><Data Name='BootIsRootCauseIdentified'>false</Data><Data Name='OSLoaderDuration'>671</Data><Data Name='BootPNPInitStartTimeMS'>18</Data><Data Name='BootPNPInitDuration'>1101</Data><Data Name='OtherKernelInitDuration'>288</Data><Data Name='SystemPNPInitStartTimeMS'>1622</Data><Data Name='SystemPNPInitDuration'>142</Data><Data Name='SessionInitStartTimeMS'>1790</Data><Data Name='Session0InitDuration'>1408</Data><Data Name='Session1InitDuration'>201</Data><Data Name='SessionInitOtherDuration'>1402</Data><Data Name='WinLogonStartTimeMS'>4801</Data><Data Name='OtherLogonInitActivityDuration'>612</Data><Data Name='UserLogonWaitDuration'>5323</Data></EventData></Event>)";
+
 TEST(ParseUtcTest, ReadsTheTimesTheEventLogRenders) {
   const WallTime day = std::chrono::sys_days{std::chrono::November / 9 / 2026};
   EXPECT_EQ(parse_utc("2026-11-09T08:00:31Z"), day + 8h + 31s);
@@ -87,6 +91,36 @@ TEST(BootDelayTest, TakesTheProgramAndTheDegradationTimeOfEvent101) {
   DiagnosticsEvent no_delay = parse_event(delay_event).value();
   std::erase_if(no_delay.data, [](const auto& field) { return field.first == "DegradationTime"; });
   EXPECT_EQ(boot_delay(no_delay), std::nullopt);
+}
+
+// Startup spec "Boot and Logon Time Tracking": the boot and the logon Windows measured.
+TEST(BootRecordTest, TakesTheBootAndTheLogonOfEvent100) {
+  const std::optional<BootRecord> boot = boot_record(parse_event(boot_event).value());
+  const WallTime start = std::chrono::sys_days{std::chrono::November / 9 / 2026} + 7h + 58min +
+                         51s + std::chrono::duration_cast<WallTime::duration>(296354700ns);
+  EXPECT_EQ(boot, (BootRecord{.start = start,
+                              .boot = 52406ms,
+                              .main_path = 21406ms,
+                              .post_boot = 31000ms,
+                              .logon = 2103ms + 4688ms + 31000ms}));
+  EXPECT_EQ(boot_record(parse_event(delay_event).value()), std::nullopt);
+
+  DiagnosticsEvent unmeasured = parse_event(boot_event).value();
+  for (auto& [name, text] : unmeasured.data) {
+    if (name == "BootTime") {
+      text = "0";  // Windows did not measure this boot
+    }
+  }
+  EXPECT_EQ(boot_record(unmeasured), std::nullopt);
+  DiagnosticsEvent partial = parse_event(boot_event).value();
+  std::erase_if(partial.data, [](const auto& field) { return field.first == "BootPostBootTime"; });
+  EXPECT_EQ(boot_record(partial), std::nullopt);
+
+  const std::vector<std::string> events = {delay_event, boot_event, "<nothing/>",
+                                           unnamed_delay_event};
+  const std::vector<BootRecord> boots = boot_records(events);
+  ASSERT_EQ(boots.size(), 1U);
+  EXPECT_EQ(boots[0].start, start);
 }
 
 TEST(BootDelayTest, KeepsOnlyRecentDelayEvents) {

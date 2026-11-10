@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,6 +23,8 @@
 #include "core/ipc/json_rpc.hpp"
 #include "core/model/units.hpp"
 #include "core/placement/settings.hpp"
+#include "core/startup/impact.hpp"
+#include "core/store/database.hpp"
 #include "scanall/scanall_fakes.hpp"
 
 namespace myclean::cleaning {
@@ -895,6 +898,79 @@ TEST_F(CleaningServiceTest, StartupImpactFallsBackToWindowsBootDelaysBeforeAnyLo
   // A log the service may not read: no impact, and the list still answers.
   diagnostics().error = Error{.code = Errc::access_denied, .message = "denied"};
   EXPECT_TRUE(call("startup.list").at("items")[0].at("impact").is_null());
+}
+
+// Startup spec "Slow logon attributed" and "Effect of disabling measured": the latest logon
+// with its difference from the 30-day median and the programs that used the most disk in its
+// first 2 minutes, and the logons before and after a startup item disabled through a plan.
+TEST_F(CleaningServiceTest, BootTimesAttributeTheLatestLogonAndMeasureADisabledItem) {
+  using startup::testing::boot_event_xml;
+  startup().snapshot.run = {
+      {.scope = startup::Scope::user, .name = "Discord", .command = "Update.exe"},
+      {.scope = startup::Scope::user, .name = "Steam", .command = "steam.exe -silent"}};
+  // Five boots before the change (2026-10-25..29), each logon 30 s.
+  for (int day = 29; day >= 25; --day) {
+    diagnostics().xml.push_back(boot_event_xml(std::format("2026-10-{}T08:00:00Z", day), 60'000,
+                                               30'000, 25'000, 2'000, 3'000));
+  }
+  start();
+  work();
+  EXPECT_TRUE(call("startup.boot_times").at("changes").empty());
+  static_cast<void>(call("startup.list"));
+  const std::int64_t id = call("plans.propose_startup", Json{{"candidates", {{"ids", {1}}}}}, false)
+                              .at("plan")
+                              .get<std::int64_t>();
+  approve_all(id);
+  work();  // Discord is disabled at noon on 2026-10-31
+  ASSERT_EQ(get(id).at("state"), "verified");
+
+  // Two boots after it: 20 s, then a slow 70 s logon that MyClean measured.
+  diagnostics().xml.insert(
+      diagnostics().xml.begin(),
+      {boot_event_xml("2026-11-02T08:00:00Z", 100'000, 30'000, 65'000, 2'000, 3'000),
+       boot_event_xml("2026-11-01T08:00:00Z", 50'000, 30'000, 15'000, 2'000, 3'000)});
+  const WallTime logon = std::chrono::sys_days{std::chrono::November / 2 / 2026} + 8h + 40s;
+  ASSERT_TRUE(startup::record_logon(
+      store(), logon,
+      std::vector<startup::ImageImpact>{
+          {.image = "svchost.exe", .cpu_seconds = 9.0, .io_bytes = 100'000},
+          {.image = "steam.exe", .cpu_seconds = 3.0, .io_bytes = 900'000'000},
+          {.image = "explorer.exe", .cpu_seconds = 4.0, .io_bytes = 100'000}}));
+  clock().set_wall(std::chrono::sys_days{std::chrono::November / 2 / 2026} + 12h);
+
+  const Json times = call("startup.boot_times");
+  EXPECT_EQ(times.at("source"), "diagnostics");
+  EXPECT_TRUE(times.at("log_error").is_null());
+  const Json& latest = times.at("latest");
+  EXPECT_EQ(latest.at("start"), store::to_unix_seconds(logon - 40s));
+  EXPECT_DOUBLE_EQ(latest.at("logon_seconds").get<double>(), 70.0);
+  EXPECT_DOUBLE_EQ(latest.at("boot_seconds").get<double>(), 100.0);
+  EXPECT_DOUBLE_EQ(latest.at("logon_difference_seconds").get<double>(), 40.0);
+  EXPECT_EQ(times.at("median").at("boots"), 7);
+  EXPECT_DOUBLE_EQ(times.at("median").at("logon_seconds").get<double>(), 30.0);
+  EXPECT_EQ(latest.at("logon"), store::to_unix_seconds(logon));
+  const Json& contributors = latest.at("contributors");
+  ASSERT_EQ(contributors.size(), 3U);
+  EXPECT_EQ(contributors[0].at("image"), "steam.exe");
+  EXPECT_EQ(contributors[0].at("item"),
+            (Json{{"name", "Steam"}, {"source", "run"}, {"scope", "user"}}));
+  EXPECT_EQ(contributors[1].at("image"), "svchost.exe");  // more CPU than explorer.exe
+  EXPECT_TRUE(contributors[1].at("item").is_null());
+
+  const Json& changes = times.at("changes");
+  ASSERT_EQ(changes.size(), 1U);
+  EXPECT_EQ(changes[0].at("plan"), id);
+  EXPECT_EQ(changes[0].at("applied"), store::to_unix_seconds(testing::noon));
+  EXPECT_EQ(changes[0].at("items"),
+            Json::array({Json{{"name", "Discord"}, {"source", "run"}, {"scope", "user"}}}));
+  EXPECT_EQ(changes[0].at("before"), (Json{{"logon_seconds", 30.0}, {"boots", 5}}));
+  EXPECT_EQ(changes[0].at("after"), (Json{{"logon_seconds", 45.0}, {"boots", 2}}));
+
+  // The log can no longer be read: the boots recorded are still shown.
+  diagnostics().error = Error{.code = Errc::access_denied, .message = "denied"};
+  const Json unreadable = call("startup.boot_times");
+  EXPECT_EQ(unreadable.at("log_error"), "denied");
+  EXPECT_EQ(unreadable.at("latest").at("start"), latest.at("start"));
 }
 
 TEST_F(CleaningServiceTest, AConsoleRunNeverAppliesHandlersOrSystemSettings) {

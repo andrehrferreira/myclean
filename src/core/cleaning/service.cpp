@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -55,6 +56,7 @@
 #include "core/space/json.hpp"
 #include "core/space/scanner.hpp"
 #include "core/space/top.hpp"
+#include "core/startup/boot_times.hpp"
 #include "core/startup/diagnostics.hpp"
 #include "core/startup/impact.hpp"
 #include "core/startup/startup.hpp"
@@ -698,6 +700,162 @@ Result<Json> CleaningService::startup_list() {
   return Json{{"items", std::move(listed)}};
 }
 
+// How many contributors startup.boot_times lists.
+constexpr std::size_t boot_contributors = 10;
+
+namespace {
+
+double seconds_of(std::chrono::milliseconds duration) {
+  return std::chrono::duration<double>(duration).count();
+}
+
+Json item_json(startup::Source source, startup::Scope scope, std::string_view name) {
+  return Json{
+      {"name", name}, {"source", startup::to_string(source)}, {"scope", startup::to_string(scope)}};
+}
+
+// {"logon_seconds", "boots"} of the median logon of `boots`, or null when there is none.
+Json logon_median(std::span<const startup::BootRecord> boots) {
+  const std::optional<startup::DurationMedian> median = startup::median_of(boots);
+  return median ? Json{{"logon_seconds", seconds_of(median->logon)}, {"boots", median->boots}}
+                : Json(nullptr);
+}
+
+// The contributors of a logon: the programs of `impact` that used the most, each with the item
+// of `items` that runs it.
+Json contributors_json(std::vector<startup::ImageImpact> impact,
+                       std::span<const startup::Item> items) {
+  std::vector<startup::ImageImpact> ordered = startup::by_impact(std::move(impact));
+  ordered.resize(std::min(ordered.size(), boot_contributors));
+  Json contributors = Json::array();
+  for (const startup::ImageImpact& image : ordered) {
+    const auto item = std::ranges::find_if(items, [&](const startup::Item& candidate) {
+      return startup::command_image(candidate.command) == image.image;
+    });
+    contributors.push_back(
+        Json{{"image", image.image},
+             {"cpu_seconds", image.cpu_seconds},
+             {"io_bytes", image.io_bytes},
+             {"item", item == items.end() ? Json(nullptr)
+                                          : item_json(item->source, item->scope, item->name)}});
+  }
+  return contributors;
+}
+
+// The startup changes of `changes` that disabled items, with the median logon of the boots
+// (oldest first) before and after each.
+Json changes_json(std::span<const StartupChange> changes,
+                  std::span<const startup::BootRecord> boots) {
+  Json listed = Json::array();
+  for (const StartupChange& change : changes) {
+    if (change.enable) {
+      continue;
+    }
+    Json items = Json::array();
+    for (const std::string& id : change.items) {
+      if (const Result<startup::ItemKey> key = startup::parse_item_id(id); key) {
+        items.push_back(item_json(key->source, key->scope, key->name));
+      }
+    }
+    listed.push_back(
+        Json{{"plan", change.plan.value()},
+             {"applied", store::to_unix_seconds(change.applied)},
+             {"items", std::move(items)},
+             {"before",
+              logon_median(startup::boots_before(boots, change.applied, startup::change_boots))},
+             {"after",
+              logon_median(startup::boots_after(boots, change.applied, startup::change_boots))}});
+  }
+  return listed;
+}
+
+}  // namespace
+
+std::vector<startup::Item> CleaningService::startup_items() const {
+  if (sources_.probes.startup == nullptr) {
+    return {};
+  }
+  const Result<startup::Snapshot> snapshot = sources_.probes.startup->read();
+  return snapshot ? startup::inventory(*snapshot) : std::vector<startup::Item>{};
+}
+
+Result<Json> CleaningService::latest_boot(
+    std::span<const startup::BootRecord> boots,
+    const std::optional<startup::DurationMedian>& median) const {
+  const startup::BootRecord& latest = boots.back();
+  Json entry{{"start", store::to_unix_seconds(latest.start)},
+             {"boot_seconds", seconds_of(latest.boot)},
+             {"main_path_seconds", seconds_of(latest.main_path)},
+             {"post_boot_seconds", seconds_of(latest.post_boot)},
+             {"logon_seconds", seconds_of(latest.logon)},
+             {"boot_difference_seconds", nullptr},
+             {"logon_difference_seconds", nullptr},
+             {"logon", nullptr},
+             {"contributors", Json::array()}};
+  if (median) {
+    entry["boot_difference_seconds"] = seconds_of(latest.boot - median->boot);
+    entry["logon_difference_seconds"] = seconds_of(latest.logon - median->logon);
+  }
+  const Result<std::vector<WallTime>> logons = startup::stored_logons(*sources_.store);
+  if (!logons) {
+    return tl::unexpected(logons.error());
+  }
+  // What each program used in the first 2 minutes of that logon, if MyClean measured it.
+  if (const std::optional<WallTime> logon = startup::boot_logon(boots, boots.size() - 1, *logons)) {
+    entry["logon"] = store::to_unix_seconds(*logon);
+    Result<std::vector<startup::ImageImpact>> impact =
+        startup::stored_logon_impact(*sources_.store, *logon);
+    if (!impact) {
+      return tl::unexpected(impact.error());
+    }
+    entry["contributors"] = contributors_json(*std::move(impact), startup_items());
+  }
+  return entry;
+}
+
+Result<Json> CleaningService::boot_times() const {
+  Json answer{{"source", "diagnostics"},
+              {"log_error", nullptr},
+              {"latest", nullptr},
+              {"median", nullptr},
+              {"changes", Json::array()}};
+  // The boots Windows measured since the startup component last recorded them.
+  if (sources_.diagnostics != nullptr) {
+    if (const Result<void> recorded =
+            startup::record_boot_events(*sources_.store, *sources_.diagnostics);
+        !recorded) {
+      answer["log_error"] = recorded.error().message;
+    }
+  }
+  const Result<std::vector<startup::BootRecord>> boots = startup::stored_boots(*sources_.store);
+  if (!boots) {
+    return tl::unexpected(boots.error());
+  }
+  const auto recent = std::ranges::lower_bound(*boots, sources_.clock->now() - startup::median_span,
+                                               {}, &startup::BootRecord::start);
+  const std::optional<startup::DurationMedian> median =
+      startup::median_of(std::span<const startup::BootRecord>(recent, boots->end()));
+  if (median) {
+    answer["median"] = Json{{"boot_seconds", seconds_of(median->boot)},
+                            {"logon_seconds", seconds_of(median->logon)},
+                            {"boots", median->boots}};
+  }
+  if (!boots->empty()) {
+    Result<Json> latest = latest_boot(*boots, median);
+    if (!latest) {
+      return tl::unexpected(latest.error());
+    }
+    answer["latest"] = *std::move(latest);
+  }
+  // The logons before and after each startup item disabled through an approved plan.
+  const Result<std::vector<StartupChange>> changes = startup_changes(*sources_.store);
+  if (!changes) {
+    return tl::unexpected(changes.error());
+  }
+  answer["changes"] = changes_json(*changes, *boots);
+  return answer;
+}
+
 Result<Json> CleaningService::propose_startup(const Json& params, const Actor& proposer) {
   std::vector<std::string> chosen;
   {
@@ -1217,6 +1375,8 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
                              }));
   added.push_back(
       add(ipc::startup_list_method, {}, [this](const Json& /*params*/) { return startup_list(); }));
+  added.push_back(add(ipc::startup_boot_times_method, {},
+                      [this](const Json& /*params*/) { return boot_times(); }));
   added.push_back(methods.add_for_caller(
       std::string(ipc::plans_propose_startup_method),
       {candidates, client, Param{.name = "enable", .type = ParamType::boolean}},

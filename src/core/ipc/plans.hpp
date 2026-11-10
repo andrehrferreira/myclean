@@ -142,6 +142,23 @@ inline constexpr std::string_view plans_propose_optimization_method = "plans.pro
 // 30 days (Diagnostics-Performance event 101, DegradationTime; the others 0).
 inline constexpr std::string_view startup_list_method = "startup.list";
 
+// No parameters. The duration of each boot and of the logon it led to, as Windows measured them
+// (Diagnostics-Performance event 100, recorded in table boot_time; durations leave out the time
+// the logon screen waited): {"source": "diagnostics", "log_error": string|null (the log could
+// not be read now; recorded boots are still shown), "latest": null | {"start": int (unix
+// seconds), "boot_seconds", "main_path_seconds", "post_boot_seconds", "logon_seconds" (profile
+// load + Explorer start + post-boot), "boot_difference_seconds", "logon_difference_seconds"
+// (from the median; null without one), "logon": int|null (the logon MyClean measured for that
+// boot), "contributors": [{"image", "cpu_seconds", "io_bytes", "item": null | {"name", "source",
+// "scope"}}] (what each program used in the first 2 minutes of that logon, most disk bytes
+// first, then most CPU; at most 10; "item" is the startup item that runs it)}, "median": null |
+// {"boot_seconds", "logon_seconds", "boots"} (over the boots of the last 30 days), "changes":
+// [{"plan": int, "applied": int, "items": [{"name", "source", "scope"}], "before", "after"}]}
+// (each startup change in effect that disabled items, newest first; "before" and "after" are
+// null or {"logon_seconds", "boots"}: the median logon of the latest 5 boots before it and of
+// the first 5 boots after it).
+inline constexpr std::string_view startup_boot_times_method = "startup.boot_times";
+
 // Parameters: candidates (record, required): {"ids": [int]}, "id" values of the latest
 // startup.list answer; enable (boolean, optional, default false); client (token, optional).
 // Creates an awaiting_approval plan that disables (or enables) those items the way Windows does:

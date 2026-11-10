@@ -194,6 +194,15 @@ CREATE TABLE logon_recorded(
   logon INTEGER PRIMARY KEY
 );
 )sql"},
+                                           {.version = 2, .name = "boot_time", .sql = R"sql(
+CREATE TABLE boot_time(
+  start INTEGER PRIMARY KEY,
+  boot_ms INTEGER NOT NULL,
+  main_path_ms INTEGER NOT NULL,
+  post_boot_ms INTEGER NOT NULL,
+  logon_ms INTEGER NOT NULL
+);
+)sql"},
                                        }};
   return set;
 }

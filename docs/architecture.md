@@ -118,8 +118,20 @@ they are tested by replaying recorded fixtures.
 | NTFS index | `$MFT` read + `FSCTL_READ_USN_JOURNAL` per NTFS volume | continuous | svc |
 | Sensor bridge | HWiNFO shared memory / LibreHardwareMonitor (optional) | 2 s | tray |
 | Inventories | registry, Task Scheduler (read via `ITaskService`), SCM, Appx, Uninstall keys, browser profiles, backup sources | on demand + daily | svc / tray |
-| Boot diagnostics | `Microsoft-Windows-Diagnostics-Performance/Operational` via `EvtQuery` (readable only by SYSTEM, elevated administrators and service logons): event 101, the boot delay Windows attributed to a program, is the impact `startup.list` shows for a startup item until MyClean has measured a logon running it (last 30 days, `DegradationTime`) | on demand | svc |
+| Boot diagnostics | `Microsoft-Windows-Diagnostics-Performance/Operational` via `EvtQuery` (readable only by SYSTEM, elevated administrators and service logons): event 101, the boot delay Windows attributed to a program, is the impact `startup.list` shows for a startup item until MyClean has measured a logon running it (last 30 days, `DegradationTime`); event 100 gives the duration of each boot and logon (table `boot_time`) | 10 min + on demand | svc |
 | Input watchdog | raw input (`RIDEV_INPUTSINK`), clipboard listener, `SendMessageTimeout` probes | events | tray |
+
+**Boot and logon durations** come from event 100, Windows' own phase-by-phase measurement of
+each boot: the boot is `BootTime` (until the system is idle after the desktop appears; split
+into `MainPathBootTime` and `BootPostBootTime`), the logon is `BootUserProfileProcessingTime +
+BootExplorerInitTime + BootPostBootTime`, from the owner's credentials being accepted until the
+system is idle, which is where startup items run. Windows already leaves out the time the logon
+screen waited for the owner, so the numbers compare from day to day. The logon time the service
+reads through `WTSQuerySessionInformationW` (`svc/owner_session`) says only when a logon began,
+not when it was over, and ending it would need a threshold of MyClean's own; it is used to tie
+the boot to the logon MyClean measured (the first one at or after the boot's start and before
+the next boot), whose first 2 minutes in `logon_impact` are the contributors. A logon that
+follows no boot (signing out and in again) has no duration.
 
 The **sample bus** is an in-process, lock-free single-producer ring per
 collector. Subscribers (UI stream, analyzers, the downsampler) read from it
@@ -302,7 +314,7 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   unrecognized ones, system signals), `metrics_latest`, `metrics_history`,
   `top_processes`, `list_volumes`, `explain_process`, `disk_health`,
   `list_alerts`, `freeze_summary`, the storage tools, `list_plans`,
-  `get_plan` and `list_startup`. Proposal tools (`propose_cleanup`,
+  `get_plan`, `list_startup` and `boot_times`. Proposal tools (`propose_cleanup`,
   `propose_optimization`, `propose_disable_startup`; `propose_uninstall`
   arrives later) create plans in the `awaiting_approval` state, which
   triggers a tray notification. They name what they propose only by the

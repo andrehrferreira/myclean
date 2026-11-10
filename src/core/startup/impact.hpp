@@ -96,7 +96,8 @@ struct BootDelay {
     std::span<const Item> items, std::span<const std::vector<ImageImpact>> history,
     std::span<const BootDelay> delays);
 
-// Table logon_impact: one row per logon and image.
+// Table logon_impact: one row per logon and image, logon_recorded: one row per logon measured;
+// boot_time: one row per boot Windows measured (boot_times.hpp).
 [[nodiscard]] const store::MigrationSet& impact_migrations();
 
 // Stores the impact of the logon at `logon`; a logon stored before is replaced.

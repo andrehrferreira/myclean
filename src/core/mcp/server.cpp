@@ -302,6 +302,13 @@ const Json& tool_list() {
            "command, signer and whether it is enabled (null for RunOnce, which cannot be "
            "disabled). The 'id' values are what propose_disable_startup takes. Reads only.",
            object_schema()),
+      tool("boot_times",
+           "How long the latest boot and logon took as Windows measured them (Diagnostics-"
+           "Performance), the difference from the 30-day median, the programs that used the most "
+           "disk and CPU in the first 2 minutes of that logon (with the startup item that runs "
+           "each), and the logon duration before and after each startup item disabled through "
+           "an approved plan. Reads only.",
+           object_schema()),
       proposal_tool(
           "propose_disable_startup",
           "Proposes disabling startup items the way Windows does (StartupApproved for Run and "
@@ -439,6 +446,9 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
   }
   if (tool == "list_startup") {
     return ServiceCall{.method = ipc::startup_list_method, .params = Json::object()};
+  }
+  if (tool == "boot_times") {
+    return ServiceCall{.method = ipc::startup_boot_times_method, .params = Json::object()};
   }
   if (tool == "propose_disable_startup") {
     return ServiceCall{

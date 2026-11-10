@@ -23,6 +23,7 @@
 #include "core/model/result.hpp"
 #include "core/model/text.hpp"
 #include "core/model/units.hpp"
+#include "core/startup/toggle.hpp"
 #include "core/store/database.hpp"
 #include "core/store/plan_repository.hpp"
 
@@ -186,6 +187,46 @@ Result<Json> get_plan(store::Store& store, PlanId id) {
     return tl::unexpected(read.error());
   }
   return answer;
+}
+
+Result<std::vector<StartupChange>> startup_changes(store::Store& store) {
+  std::vector<StartupChange> changes;
+  const Result<void> read = store.read([&](store::Database& db) -> Result<void> {
+    Result<store::Statement> query = db.prepare(
+        "SELECT p.id, pp.params, (SELECT MIN(a.time) FROM action_log a WHERE a.plan_id = p.id "
+        "AND a.to_state = 'applied') FROM plan p JOIN plan_params pp ON pp.plan_id = p.id "
+        "WHERE p.action = ?1 AND p.state IN ('applied', 'verified') ORDER BY p.id DESC LIMIT ?2");
+    if (!query) {
+      return tl::unexpected(query.error());
+    }
+    query->bind(1, startup::toggle_action_name)
+        .bind(2, static_cast<std::int64_t>(ipc::max_listed_plans));
+    Result<bool> row = query->step();
+    for (; row && *row; row = query->step()) {
+      const Result<PlanSpec> spec = parse_spec(query->column_text(1));
+      if (!spec || query->is_null(2)) {
+        continue;
+      }
+      const Json& items = spec->params.contains("items") ? spec->params.at("items") : Json();
+      if (!items.is_array()) {
+        continue;
+      }
+      StartupChange change{.plan = PlanId{query->column_int(0)},
+                           .applied = store::from_unix_seconds(query->column_int(2)),
+                           .enable = spec->params.value("enable", false)};
+      for (const Json& item : items) {
+        if (item.is_string()) {
+          change.items.push_back(item.get<std::string>());
+        }
+      }
+      changes.push_back(std::move(change));
+    }
+    return row ? Result<void>{} : tl::unexpected(row.error());
+  });
+  if (!read) {
+    return tl::unexpected(read.error());
+  }
+  return changes;
 }
 
 Result<Json> list_quarantine(store::Store& store) {

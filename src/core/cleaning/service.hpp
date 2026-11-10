@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -45,7 +46,9 @@
 #include "core/space/duplicates.hpp"
 #include "core/space/installers.hpp"
 #include "core/space/scanner.hpp"
+#include "core/startup/boot_times.hpp"
 #include "core/startup/diagnostics.hpp"
+#include "core/startup/startup.hpp"
 #include "core/store/store.hpp"
 
 // Cleaning in the service (cleaning spec C4, C5; approvals spec; space spec, prompt 3): the
@@ -96,8 +99,8 @@ struct ServiceSources {
   SpaceProbes space;
   // True while the system volume is critically busy: the auto run waits. Empty: never busy.
   std::function<bool()> busy;
-  // Windows' boot measurements: the startup impact shown before MyClean has measured a logon.
-  // Null: none.
+  // Windows' boot measurements: the startup impact shown before MyClean has measured a logon,
+  // and the boot and logon durations. Null: none.
   const startup::IDiagnosticsLog* diagnostics = nullptr;
 };
 
@@ -175,6 +178,14 @@ class CleaningService {
                                                             const Actor& proposer);
   // startup.list: the inventory read now; remembers the item of each "id".
   [[nodiscard]] Result<nlohmann::json> startup_list();
+  // startup.boot_times: the boots and logons Windows measured, with what MyClean knows of them.
+  [[nodiscard]] Result<nlohmann::json> boot_times() const;
+  // The "latest" member of startup.boot_times: the last of `boots` (oldest first, not empty).
+  [[nodiscard]] Result<nlohmann::json> latest_boot(
+      std::span<const startup::BootRecord> boots,
+      const std::optional<startup::DurationMedian>& median) const;
+  // The startup inventory read now; empty without the probe or when it cannot be read.
+  [[nodiscard]] std::vector<startup::Item> startup_items() const;
   // plans.propose_startup: the items of the latest startup.list answer named by "id".
   [[nodiscard]] Result<nlohmann::json> propose_startup(const nlohmann::json& params,
                                                        const Actor& proposer);

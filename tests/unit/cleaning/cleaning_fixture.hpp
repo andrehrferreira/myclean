@@ -27,6 +27,7 @@
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/space/duplicates.hpp"
+#include "core/startup/impact.hpp"
 #include "core/store/database.hpp"
 #include "core/store/migrations.hpp"
 #include "core/store/store.hpp"
@@ -327,6 +328,7 @@ class CleaningFixture : public ::testing::Test {
   startup::testing::FakeDiagnosticsLog& diagnostics() { return diagnostics_; }
   space::testing::FakeDirectoryReader& reader() { return reader_; }
   CleaningService& service() { return *service_; }
+  store::Store& store() { return *store_; }
   packs::testing::FakePackFiles& pack_files() { return files_; }
 
   // The system volume is critically busy / the owner is logged on.
@@ -345,8 +347,8 @@ class CleaningFixture : public ::testing::Test {
 
  private:
   void open_store() {
-    const std::vector<store::MigrationSet> sets = {actions::action_migrations(),
-                                                   cleaning_migrations()};
+    const std::vector<store::MigrationSet> sets = {
+        actions::action_migrations(), cleaning_migrations(), startup::impact_migrations()};
     store_ = store::Store::open(folder_.path() / "myclean.db", clock_, sets).value();
   }
 

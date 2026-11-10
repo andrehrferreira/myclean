@@ -1,5 +1,6 @@
 myclean_add_test(startup
   SOURCES
+    boot_times_test.cpp
     diagnostics_test.cpp
     impact_test.cpp
     startup_fakes.hpp

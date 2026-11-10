@@ -102,6 +102,27 @@ inline std::string delay_event_xml(std::string_view name, std::uint32_t degradat
          "</Data></EventData></Event>";
 }
 
+// An event 100 as the Diagnostics-Performance log renders it, with the fields boot_record()
+// reads: a boot that started at `start` (xs:dateTime) and took `boot_ms`, the desktop after
+// `main_path_ms`, then `post_boot_ms` until idle; profile load and Explorer start inside the
+// main path.
+inline std::string boot_event_xml(std::string_view start, std::uint32_t boot_ms,
+                                  std::uint32_t main_path_ms, std::uint32_t post_boot_ms,
+                                  std::uint32_t profile_ms, std::uint32_t explorer_ms) {
+  const auto data = [](std::string_view name, const std::string& value) {
+    return "<Data Name='" + std::string(name) + "'>" + value + "</Data>";
+  };
+  return "<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System>"
+         "<Provider Name='Microsoft-Windows-Diagnostics-Performance'/><EventID>100</EventID>"
+         "<TimeCreated SystemTime='" +
+         std::string(start) + "'/></System><EventData>" + data("BootTsVersion", "2") +
+         data("BootStartTime", std::string(start)) + data("BootTime", std::to_string(boot_ms)) +
+         data("MainPathBootTime", std::to_string(main_path_ms)) +
+         data("BootUserProfileProcessingTime", std::to_string(profile_ms)) +
+         data("BootExplorerInitTime", std::to_string(explorer_ms)) +
+         data("BootPostBootTime", std::to_string(post_boot_ms)) + "</EventData></Event>";
+}
+
 // The Diagnostics-Performance log in memory: `xml`, newest first, or `error`.
 class FakeDiagnosticsLog final : public IDiagnosticsLog {
  public:

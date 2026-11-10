@@ -289,6 +289,48 @@ std::optional<BootDelay> boot_delay(const DiagnosticsEvent& event) {
           std::chrono::duration<double>(std::chrono::milliseconds{*degradation}).count()};
 }
 
+std::optional<BootRecord> boot_record(const DiagnosticsEvent& event) {
+  constexpr std::uint32_t boot_event = 100;
+  if (event.id != boot_event) {
+    return std::nullopt;
+  }
+  const auto milliseconds = [&](std::string_view name) -> std::optional<std::chrono::milliseconds> {
+    const std::optional<std::uint32_t> value =
+        number_of<std::uint32_t>(event.value(name).value_or(""));
+    return value ? std::optional{std::chrono::milliseconds{*value}} : std::nullopt;
+  };
+  const std::optional<WallTime> started = parse_utc(event.value("BootStartTime").value_or(""));
+  const std::optional<std::chrono::milliseconds> boot = milliseconds("BootTime");
+  const std::optional<std::chrono::milliseconds> main_path = milliseconds("MainPathBootTime");
+  const std::optional<std::chrono::milliseconds> post_boot = milliseconds("BootPostBootTime");
+  const std::optional<std::chrono::milliseconds> profile =
+      milliseconds("BootUserProfileProcessingTime");
+  const std::optional<std::chrono::milliseconds> explorer = milliseconds("BootExplorerInitTime");
+  if (!started || !boot || boot->count() == 0 || !main_path || !post_boot || !profile ||
+      !explorer) {
+    return std::nullopt;
+  }
+  return BootRecord{.start = *started,
+                    .boot = *boot,
+                    .main_path = *main_path,
+                    .post_boot = *post_boot,
+                    .logon = *profile + *explorer + *post_boot};
+}
+
+std::vector<BootRecord> boot_records(std::span<const std::string> events) {
+  std::vector<BootRecord> boots;
+  for (const std::string& xml : events) {
+    const Result<DiagnosticsEvent> event = parse_event(xml);
+    if (!event) {
+      continue;
+    }
+    if (std::optional<BootRecord> boot = boot_record(*event)) {
+      boots.push_back(*boot);
+    }
+  }
+  return boots;
+}
+
 std::vector<BootDelay> boot_delays(std::span<const std::string> events, WallTime since) {
   std::vector<BootDelay> delays;
   for (const std::string& xml : events) {

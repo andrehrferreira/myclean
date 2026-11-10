@@ -284,7 +284,8 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
   auto cleaning = make_cleaning(options, files, *telemetry, *disk_health);
   auto startup = std::make_unique<svc::StartupComponent>(svc::StartupSources{
       .view = [telemetry = telemetry.get()] { return telemetry->processes(); },
-      .logon = [](std::string_view owner) { return svc::owner_logon_time(owner); }});
+      .logon = [](std::string_view owner) { return svc::owner_logon_time(owner); },
+      .diagnostics = std::make_unique<platform::Win32DiagnosticsLog>()});
 
   std::vector<std::unique_ptr<svc::IComponent>> components;
   components.push_back(std::move(alerts));

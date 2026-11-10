@@ -15,6 +15,7 @@
 #include "core/ipc/status.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
+#include "core/startup/boot_times.hpp"
 #include "core/startup/impact.hpp"
 #include "core/store/migrations.hpp"
 #include "core/telemetry/process_collector.hpp"
@@ -49,9 +50,13 @@ std::vector<store::MigrationSet> StartupComponent::migrations() const {
   return {startup::impact_migrations()};
 }
 
+bool StartupComponent::measures(const Context& context) const {
+  return sources_.view && sources_.logon && !context.owner_sid().empty();
+}
+
 Result<void> StartupComponent::start(const Context& context) {
-  if (!sources_.view || !sources_.logon || context.owner_sid().empty()) {
-    return {};  // nothing to measure: no process table or no owner
+  if (!measures(context) && !sources_.diagnostics) {
+    return {};  // nothing to measure or record: no process table, owner or boot log
   }
   // NOLINTNEXTLINE(bugprone-exception-escape): only std::bad_alloc, as anywhere in the service
   worker_ = std::jthread([this, context](const std::stop_token& stop) { run(stop, context); });
@@ -60,11 +65,19 @@ Result<void> StartupComponent::start(const Context& context) {
 
 void StartupComponent::run(const std::stop_token& stop, const Context& context) {
   startup::LogonRecorder recorder(context.store());
+  std::optional<MonoTime> boots_read;
   std::mutex wait_mutex;
   std::condition_variable_any wake;
   std::unique_lock lock(wait_mutex);
   while (!stop.stop_requested()) {
-    tick(context, recorder);
+    if (measures(context)) {
+      tick(context, recorder);
+    }
+    const MonoTime now = context.clock().monotonic();
+    if (sources_.diagnostics && (!boots_read || now - *boots_read >= boot_interval)) {
+      boots_read = now;
+      record_boots(context);
+    }
     static_cast<void>(wake.wait_for(lock, stop, std::chrono::seconds{1}, [] { return false; }));
   }
 }
@@ -109,11 +122,25 @@ void StartupComponent::tick(const Context& context, startup::LogonRecorder& reco
   }
 }
 
+void StartupComponent::record_boots(const Context& context) {
+  const Result<void> recorded = startup::record_boot_events(context.store(), *sources_.diagnostics);
+  const std::scoped_lock lock(mutex_);
+  if (recorded) {
+    boot_problem_.reset();
+  } else if (boot_problem_ != recorded.error().message) {
+    boot_problem_ = recorded.error().message;
+    spdlog::warn("startup: {}", *boot_problem_);
+  }
+}
+
 ipc::ComponentHealth StartupComponent::health() const {
   ipc::ComponentHealth health{.name = std::string(name())};
   const std::scoped_lock lock(mutex_);
   if (problem_) {
     health.problems.push_back(*problem_);
+  }
+  if (boot_problem_) {
+    health.problems.push_back(*boot_problem_);
   }
   health.healthy = health.problems.empty();
   return health;

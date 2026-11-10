@@ -18,7 +18,8 @@
 // elevated administrators and service logons can read that log (spike X6), so the service reads
 // it (IDiagnosticsLog, src/platform/diagnostics) and everything else asks the service. Event 101
 // ("an application slowed the boot") is the impact shown for a startup item before MyClean has
-// measured a logon with it (startup spec, "Fallback before history exists").
+// measured a logon with it (startup spec, "Fallback before history exists"); event 100 ("Windows
+// has started up") gives the duration of each boot and of its logon (boot_times.hpp).
 namespace myclean::startup {
 
 // How far back events 101 count for the impact of a startup item.
@@ -52,6 +53,29 @@ struct DiagnosticsEvent {
 // events that do not parse are left out.
 [[nodiscard]] std::vector<BootDelay> boot_delays(std::span<const std::string> events,
                                                  WallTime since);
+
+// One boot as Windows measured it (event 100, durations in milliseconds as the event holds
+// them). Windows leaves out the time the logon screen waited for the owner.
+struct BootRecord {
+  WallTime start;                         // BootStartTime
+  std::chrono::milliseconds boot{};       // BootTime: until the system was idle after the boot
+  std::chrono::milliseconds main_path{};  // MainPathBootTime: until the desktop appeared
+  std::chrono::milliseconds post_boot{};  // BootPostBootTime: from the desktop until idle
+  // The logon: BootUserProfileProcessingTime + BootExplorerInitTime + BootPostBootTime, from the
+  // owner's credentials being accepted (the profile loads) until the system was idle, which is
+  // where the startup items run.
+  std::chrono::milliseconds logon{};
+
+  friend bool operator==(const BootRecord&, const BootRecord&) = default;
+};
+
+// The BootRecord of an event 100; nullopt for another event, or one without a valid
+// BootStartTime, a BootTime above 0 or one of the durations above.
+[[nodiscard]] std::optional<BootRecord> boot_record(const DiagnosticsEvent& event);
+
+// The boots of the events 100 among `events` (rendered XML), in their order; events that do not
+// parse are left out.
+[[nodiscard]] std::vector<BootRecord> boot_records(std::span<const std::string> events);
 
 // The Diagnostics-Performance/Operational log. Implemented by src/platform/diagnostics; tests
 // use fakes.
