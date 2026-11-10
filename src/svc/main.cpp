@@ -64,6 +64,7 @@
 #include "svc/cleaning_component.hpp"
 #include "svc/component.hpp"
 #include "svc/disk_health_component.hpp"
+#include "svc/elimination_component.hpp"
 #include "svc/events_adapter.hpp"
 #include "svc/governor_component.hpp"
 #include "svc/host.hpp"
@@ -153,7 +154,8 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
                                                       const myclean::packs::IPackFiles& files,
                                                       const svc::TelemetryComponent& telemetry,
                                                       const svc::DiskHealthComponent& disks,
-                                                      svc::AlertsComponent& alerts) {
+                                                      svc::AlertsComponent& alerts,
+                                                      myclean::elimination::IPauses& pauses) {
   namespace platform = myclean::platform;
   const std::string drive = system_drive();
   const std::optional<std::filesystem::path> git = platform::find_git();
@@ -192,7 +194,8 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
       },
       .diagnostics = std::make_unique<platform::Win32DiagnosticsLog>(),
       .indexer = std::make_unique<platform::Win32IndexerScope>(),
-      .alerts = &alerts};
+      .alerts = &alerts,
+      .pauses = &pauses};
   // "C:" / "" stays "C:" (a drive-relative path); the handlers need the volume root "C:\".
   const std::filesystem::path root =
       std::filesystem::path((drive.empty() ? std::string("C:") : drive) + "\\");
@@ -313,7 +316,18 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
       trust.get());
 
   auto governor = make_governor(options, files, *telemetry, *events);
-  auto cleaning = make_cleaning(options, files, *telemetry, *disk_health, *alerts);
+  // Guided freeze elimination suspends a suspect only where the governor protects nothing.
+  auto elimination = std::make_unique<svc::EliminationComponent>(svc::EliminationSources{
+      .processes = std::make_unique<platform::Win32ProcessControl>(),
+      .view = [telemetry = telemetry.get()] { return telemetry->processes(); },
+      .protects =
+          [governor = governor.get()](const myclean::os::ProcessKey& key) {
+            const myclean::governing::Governor* running = governor->governor();
+            return running == nullptr ||
+                   running->protects({.pid = key.pid, .created = key.created});
+          },
+      .alerts = alerts.get()});
+  auto cleaning = make_cleaning(options, files, *telemetry, *disk_health, *alerts, *elimination);
   auto startup = std::make_unique<svc::StartupComponent>(svc::StartupSources{
       .view = [telemetry = telemetry.get()] { return telemetry->processes(); },
       .logon = [](std::string_view owner) { return svc::owner_logon_time(owner); },
@@ -333,6 +347,7 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
   components.push_back(std::make_unique<svc::InputComponent>());
   components.push_back(std::move(startup));
   components.push_back(std::move(resident));
+  components.push_back(std::move(elimination));
   components.push_back(std::move(cleaning));
   return components;
 }

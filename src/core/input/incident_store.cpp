@@ -254,4 +254,24 @@ Result<std::vector<FreezeGroup>> freeze_summary(store::Store& store) {
   return groups;
 }
 
+Result<std::vector<WallTime>> incident_times(store::Store& store) {
+  std::vector<WallTime> times;
+  const Result<void> read = store.read([&](store::Database& db) -> Result<void> {
+    Result<store::Statement> statement =
+        db.prepare("SELECT time FROM input_incident ORDER BY time, id");
+    if (!statement) {
+      return tl::unexpected(statement.error());
+    }
+    Result<bool> row = statement->step();
+    for (; row && *row; row = statement->step()) {
+      times.push_back(store::from_unix_seconds(statement->column_int(0)));
+    }
+    return row ? Result<void>{} : tl::unexpected(row.error());
+  });
+  if (!read) {
+    return tl::unexpected(read.error());
+  }
+  return times;
+}
+
 }  // namespace myclean::input

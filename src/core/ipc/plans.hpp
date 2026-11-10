@@ -19,7 +19,7 @@ namespace myclean::ipc {
 // PlanSummary:
 //   {"id": int, "title": string,
 //    "kind": "cleanup"|"handler"|"native"|"relocate"|"system_setting"|"quarantine_restore"|
-//            "recycle_bin"|"archive"|"uninstall"|"compact",
+//            "recycle_bin"|"archive"|"uninstall"|"compact"|"pause",
 //    "tier": "auto"|"ask"|"report", "scope": "user"|"service",
 //    "state": "proposed"|"auto"|"awaiting_approval"|"approved"|"applying"|"applied"|"verified"|
 //             "rolled_back"|"failed"|"rejected",
@@ -33,7 +33,8 @@ namespace myclean::ipc {
 //   owner deleted long ago, deleted permanently; archive = a cold folder moved to the HDD archive;
 //   uninstall = an installed program's own uninstaller started (the last two: the owner's
 //   one-click decisions, plans.owner_action); compact = WSL and Docker virtual disks compacted
-//   (plans.propose_compact; not reversible).
+//   (plans.propose_compact; not reversible); pause = a freeze suspect paused for a while
+//   (plans.propose_pause).
 //   scope: "service" plans run in the service; "user" plans run in the tray with the owner's
 //   token (user_tasks.*).
 //   verification: the newest re-measurement of the metric the plan targets (optimizer spec,
@@ -195,6 +196,17 @@ inline constexpr std::string_view plans_propose_index_exclusion_method =
 // {"plan": int, "state": "awaiting_approval"}. Fails with not_found for an unknown candidate id
 // and invalid_argument for a candidate that is not a disk of space.vhdx.
 inline constexpr std::string_view plans_propose_compact_method = "plans.propose_compact";
+
+// Parameters: suspect (integer, required): an "id" of input.pauses' suspects; hours (integer,
+// optional; 1..168, default 24); client (token, optional). Creates an awaiting_approval plan
+// (kind pause, action PauseSuspect, run by the service once the owner approves it in the tray)
+// that pauses the suspect for that long, mode guided for a suspect that owns a keyboard hook
+// (the owner quits it), suspend otherwise (see input.pauses): {"plan": int, "state":
+// "awaiting_approval"}. An approved pause waits while another one is active. Fails with
+// invalid_state while the baseline is still being collected, not_found for an unknown suspect,
+// invalid_argument for hours out of range, already_exists while a pause plan of the suspect is
+// open.
+inline constexpr std::string_view plans_propose_pause_method = "plans.propose_pause";
 
 // TRAY ONLY. Parameters: candidates (record, required): {"ids": [int]}. The owner deletes
 // report-view items (a duplicate, an old download) to the Recycle Bin: an approved user-scope

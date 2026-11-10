@@ -32,9 +32,9 @@ namespace {
 
 using Json = nlohmann::json;
 
-constexpr std::array<std::string_view, 10> kind_names = {
+constexpr std::array<std::string_view, 11> kind_names = {
     "cleanup",     "handler", "native",    "relocate", "system_setting", "quarantine_restore",
-    "recycle_bin", "archive", "uninstall", "compact"};
+    "recycle_bin", "archive", "uninstall", "compact",  "pause"};
 
 std::string utf8(const std::filesystem::path& path) {
   return utf8_text(path);

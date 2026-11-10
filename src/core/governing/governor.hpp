@@ -143,6 +143,12 @@ class Governor {
   // What is not working, for the component's health.
   [[nodiscard]] std::vector<std::string> problems() const;
 
+  // Whether `key` must never be suspended by anyone (guided freeze elimination): a process of a
+  // protected class (system, game, allowed; every service), MyClean itself, the owner's foreground
+  // process, and, failing safe, any process while the governor is not running, one it does not
+  // know or while the tray has not reported the foreground recently.
+  [[nodiscard]] bool protects(const governor::ProcessKey& key) const;
+
  private:
   // What the governor knows about a running process.
   struct Known {

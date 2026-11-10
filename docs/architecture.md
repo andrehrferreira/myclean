@@ -147,6 +147,7 @@ write, owner read).
 | Time series | `ts_raw` (in-memory ring, 1 h), `ts_minute`, `ts_hour` keyed by (metric, entity, time) | 1 h / 30 d / 2 y |
 | Entities | `disk`, `volume`, `process_image`, `app`, `startup_item`, `extension`, `service` | current + history |
 | Events | `proc_start`, `governor_event`, `input_incident`, `alert`, `health_sample` | 2 y |
+| Guided freeze elimination | `suspect_pause` (mode, period, end, baseline and pause incidents and hours), `suspect_pause_process`, `suspect_pause_span` | permanent |
 | Resident processes | `resident_fine` (5-min private bytes per program), `resident_hour` (hourly CPU, RAM, disk, network per program) | 2 d / 35 d |
 | Findings & plans | `finding`, `plan`, `plan_item`, `approval` | 2 y |
 | Actions | `action_log` (append-only; trigger blocks UPDATE/DELETE), `undo_blob`, `quarantine` | permanent |
@@ -300,6 +301,8 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   | `alerts.dismiss` | rule, entity | alerts |
   | `input.record_incident` | incident (record) | input |
   | `input.summary` | none | input |
+  | `input.pauses` | none | elimination |
+  | `input.end_pause` (tray only) | none | elimination |
   | `governor.status` | none | governor |
   | `governor.events` | since, limit | governor |
   | `governor.choose` (tray only) | pid, created, choice | governor |
@@ -332,16 +335,34 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   methods: `health_snapshot` (qualifying trees with trust and the
   unrecognized ones, system signals), `metrics_latest`, `metrics_history`,
   `top_processes`, `list_volumes`, `explain_process`, `disk_health`,
-  `list_alerts`, `freeze_summary`, the storage tools, `dev_drive_advice`, `list_vhdx`, `list_plans`,
+  `list_alerts`, `freeze_summary`, `freeze_elimination`, the storage tools, `dev_drive_advice`, `list_vhdx`, `list_plans`,
   `get_plan`, `list_startup`, `boot_times`, `background_costs`,
   `memory_trend` and `find_indexed_build_folders`. Proposal tools (`propose_cleanup`,
   `propose_optimization`, `propose_disable_startup`, `propose_index_exclusion`,
-  `propose_compact_vhdx`;
+  `propose_compact_vhdx`, `propose_pause`;
   `propose_uninstall`
   arrives later) create plans in the `awaiting_approval` state, which
   triggers a tray notification. They name what they propose only by the
-  numbers a read tool returned (candidate ids, startup item ids, folder ids, disk ids), never by
+  numbers a read tool returned (candidate ids, startup item ids, folder ids, disk ids, suspect
+  ids), never by
   a path or registry name, so no client string reaches an OS API.
+
+**Guided freeze elimination (I3, `core/elimination`, `svc::EliminationComponent`):** once the
+first freeze incident is 7 days old, `input.pauses` offers the highest-ranked running suspect
+(the rank of `input::known_suspects()`) not compared yet. A pause is a plan (`PauseSuspect`, kind
+`pause`) that runs only after the owner approves it in the tray; an approved pause waits while
+another one is active. A suspect that owns a low-level keyboard or mouse hook (PowerToys Keyboard
+Manager, Armoury Crate's session helper, Discord, or any suspect running in a slow-keyboard-hook
+incident) is never suspended: suspended, it would make every keystroke wait for the hook timeout
+until Windows drops the hook, and it would stay broken after the resume. Its pause is guided: the
+owner quits it, only the spans no process of it runs count, an alert (`freeze.guided-pause-ended`)
+reminds the owner to start it again, and MyClean never launches or ends it. Any other suspect is
+suspended in the owner's session only (never a service, a game, an allowed or MyClean process or
+the foreground app, as `governing::Governor::protects` judges), each process recorded in
+`suspect_pause_process` before its suspend and resumed exactly as recorded at the end, at the
+owner's early end, at the clean stop and by a service restarted after a crash. Each pause records
+its baseline (the 7 days before it, earlier pauses left out) and the incidents and hours during
+it, and the plan's verification compares the two rates.
 
 ## 9. Security
 

@@ -44,4 +44,7 @@ struct FreezeGroup {
 // with invalid_data when a row cannot be read back.
 [[nodiscard]] Result<std::vector<FreezeGroup>> freeze_summary(store::Store& store);
 
+// The time of every stored incident, oldest first (the incident rates of guided elimination).
+[[nodiscard]] Result<std::vector<WallTime>> incident_times(store::Store& store);
+
 }  // namespace myclean::input

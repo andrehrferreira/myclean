@@ -175,6 +175,8 @@ void Poller::fetch_rest(WallTime now, bool dashboard_open, PollResult& result) {
     if (slow || incidents_sent) {
       result.freezes =
           fetch(*link_, ipc::input_summary_method, Json::object(), &parse_input_summary);
+      result.elimination =
+          fetch(*link_, ipc::input_pauses_method, Json::object(), &parse_input_pauses);
     }
     if (range_ != Range::live && (!next_range_ || now >= *next_range_)) {
       next_range_ = now + slow_interval;
@@ -237,6 +239,19 @@ bool Poller::handle_cleanup(const Request& request, PollResult& result) {
   if (const auto* action = std::get_if<OwnerAction>(&request)) {
     return decide("Starting it", ipc::plans_owner_action_method,
                   owner_action_params(action->candidate));
+  }
+  if (const auto* pause = std::get_if<ProposePause>(&request)) {
+    decide("Proposing the pause", ipc::plans_propose_pause_method,
+           Json{{"suspect", pause->suspect}, {"hours", pause->hours}});
+    result.elimination =
+        fetch(*link_, ipc::input_pauses_method, Json::object(), &parse_input_pauses);
+    return true;
+  }
+  if (std::holds_alternative<EndPause>(request)) {
+    decide("Ending the pause", ipc::input_end_pause_method, Json::object());
+    result.elimination =
+        fetch(*link_, ipc::input_pauses_method, Json::object(), &parse_input_pauses);
+    return true;
   }
   if (const auto* open = std::get_if<OpenPlan>(&request)) {
     open_plans_.insert(open->id);

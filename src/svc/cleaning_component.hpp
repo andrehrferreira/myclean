@@ -17,6 +17,7 @@
 #include "core/cleanup/handler_host.hpp"
 #include "core/cleanup/recycle_bin.hpp"
 #include "core/devdrive/advisor.hpp"
+#include "core/elimination/keeper.hpp"
 #include "core/health/analysis.hpp"
 #include "core/indexer/scope.hpp"
 #include "core/ipc/status.hpp"
@@ -77,6 +78,8 @@ struct CleaningSources {
   std::unique_ptr<indexer::IIndexerScope> indexer;
   // The alert sink plan verifications report to (must outlive the component); null: none.
   health::IAlertSink* alerts = nullptr;
+  // The pauses of guided freeze elimination (must outlive the component); null: none.
+  elimination::IPauses* pauses = nullptr;
 };
 
 // How this service runs cleaning.

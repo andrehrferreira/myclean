@@ -9,6 +9,8 @@ myclean_add_library(svc
     component.hpp
     disk_health_component.cpp
     disk_health_component.hpp
+    elimination_component.cpp
+    elimination_component.hpp
     events_adapter.cpp
     events_adapter.hpp
     governor_component.cpp
@@ -33,6 +35,7 @@ myclean_add_library(svc
     myclean::actions
     myclean::alerts
     myclean::cleaning
+    myclean::elimination
     myclean::events
     myclean::governing
     myclean::health

@@ -90,6 +90,9 @@ class DashboardModel {
   [[nodiscard]] const std::optional<std::vector<FreezeGroupRow>>& freezes() const {
     return freezes_;
   }
+  // Guided freeze elimination in the Freezes view; nullopt before the first (or while the
+  // service does not offer it).
+  [[nodiscard]] const std::optional<EliminationView>& elimination() const { return elimination_; }
   [[nodiscard]] const std::optional<IncidentQueue::Counts>& incident_counts() const {
     return incident_counts_;
   }
@@ -157,6 +160,7 @@ class DashboardModel {
   std::vector<Toasted> toasted_;
   std::vector<AlertRow> toasts_;
   std::optional<std::vector<FreezeGroupRow>> freezes_;
+  std::optional<EliminationView> elimination_;
   std::optional<IncidentQueue::Counts> incident_counts_;
   std::string watchdog_error_;
   CleanupView cleanup_;

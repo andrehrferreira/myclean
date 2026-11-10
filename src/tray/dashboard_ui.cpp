@@ -1002,9 +1002,83 @@ void draw_freeze_group(const tray_model::FreezeGroupRow& group, const std::chron
   ImGui::PopID();
 }
 
-void draw_freezes(const DashboardModel& model, const std::chrono::time_zone& zone) {
+std::string per_day_text(const tray_model::FreezeRateRow& rate) {
+  return rate.per_day ? std::format("{:.1f} per day", *rate.per_day) : std::string("n/a");
+}
+
+void draw_active_pause(const tray_model::PauseRow& pause, const std::chrono::time_zone& zone,
+                       UiState& state) {
+  const std::string until = local_date_time(zone, pause.ends);
+  if (pause.mode == "guided") {
+    wrapped_text(color::warning,
+                 std::format("Quit {} until {}: it owns a keyboard hook, so MyClean does not "
+                             "suspend it and only counts the hours it is not running.{}",
+                             pause.image, until,
+                             pause.running.value_or(false) ? " It is running now." : ""));
+  } else {
+    wrapped_text(color::warning, std::format("{} is paused until {}; it is resumed automatically.",
+                                             pause.image, until));
+  }
+  if (ImGui::Button("End the pause now")) {
+    state.requests.emplace_back(tray_model::EndPause{});
+  }
+}
+
+void draw_pause_offer(const tray_model::PauseOfferRow& offer, UiState& state) {
+  const std::string what = offer.mode == "guided"
+                               ? std::format("Quit {} for {} hours", offer.image, offer.hours)
+                               : std::format("Pause {} for {} hours", offer.image, offer.hours);
+  text("Next suspect: " + what + " to see whether the freezes stop.");
+  if (ImGui::Button("Propose it (approve it in the inbox)")) {
+    state.requests.emplace_back(
+        tray_model::ProposePause{.suspect = offer.suspect, .hours = offer.hours});
+  }
+}
+
+std::string change_text(const std::optional<std::string>& change) {
+  if (change == "lower") {
+    return "fewer freezes";
+  }
+  if (change == "higher") {
+    return "more freezes";
+  }
+  return change == "same" ? "no change" : "not comparable";
+}
+
+// Guided freeze elimination: the baseline, the active pause, the offer and the comparisons.
+void draw_elimination(const DashboardModel& model, const std::chrono::time_zone& zone,
+                      UiState& state) {
+  const std::optional<tray_model::EliminationView>& view = model.elimination();
+  if (!view) {
+    return;
+  }
+  if (view->collecting || !view->baseline) {
+    muted_text("Guided elimination: a baseline of freezes is still being collected (7 days).");
+  } else {
+    text(std::format("Baseline: {} ({} freezes in {:.0f} h)", per_day_text(*view->baseline),
+                     view->baseline->incidents, view->baseline->hours));
+  }
+  if (view->active) {
+    draw_active_pause(*view->active, zone, state);
+  } else if (view->offer) {
+    draw_pause_offer(*view->offer, state);
+  }
+  for (const tray_model::PauseRow& pause : view->pauses) {
+    if (!pause.restored) {
+      continue;
+    }
+    const std::string during = pause.during ? per_day_text(*pause.during) : std::string("n/a");
+    muted_text(std::format("{} ({}): {} before, {} during {:.0f} h - {}", pause.image, pause.mode,
+                           per_day_text(pause.baseline), during,
+                           pause.during ? pause.during->hours : 0.0, change_text(pause.change)));
+  }
+  ImGui::Separator();
+}
+
+void draw_freezes(const DashboardModel& model, const std::chrono::time_zone& zone, UiState& state) {
   draw_watchdog_status(model);
   ImGui::Spacing();
+  draw_elimination(model, zone, state);
   const auto& freezes = model.freezes();
   if (!freezes) {
     muted_text("Freezes: " + std::string(tray_model::not_available));
@@ -1145,7 +1219,7 @@ void draw_dashboard(const DashboardModel& model, const std::chrono::time_zone& z
       draw_alerts(model, zone, state);
       break;
     case Section::freezes:
-      draw_freezes(model, zone);
+      draw_freezes(model, zone, state);
       break;
     case Section::cleanup:
       draw_cleanup(model, zone, state);

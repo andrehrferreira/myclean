@@ -94,6 +94,9 @@ src/core/governing/     the governor in the service: proactive build/test jobs, 
                         observe/act mode, governor_* tables, the methods of ipc/governor.hpp
 src/core/input/         copy/paste freeze watchdog logic, mechanism classifier, incident store,
                         the incident record sent over the pipe
+src/core/elimination/   guided freeze elimination: ranked suspects, baseline and pause rates, the
+                        pause keeper (suspend, or guided for a keyboard-hook owner), PauseSuspect,
+                        input.pauses
 src/core/ipc/           frames, the JSON-RPC dispatcher with typed parameters, the method
                         contracts (status, telemetry, disk_health, alerts, input, plans,
                         governor)
@@ -270,6 +273,7 @@ started in this order (stopped in reverse), so that each starts after those it u
 | `input` | `input_incident` table for the tray's watchdog | `input.*` |
 | `startup` | measures the first 2 minutes of each owner logon (`logon_impact`) and, every 10 min, records the boots Windows measured from the Diagnostics-Performance log (`boot_time`) | (read by `startup.*`) |
 | `resident` | every second hands the newest process table to `resident::Tracker`: per program (the lower-case image of its trees' root) and minute, CPU time, private bytes, RAM, disk I/O and the network bytes of `net_minute`; 5-minute private bytes in `resident_fine` (2 days), hourly totals in `resident_hour` (35 days); at each closed 5-minute bucket the leak readings go to `alerts` (rule `process.memory-leak`). Reads only: it cannot act on a process | `resident.*` |
+| `elimination` | guided freeze elimination (`core/elimination`): the pauses the cleaning executor starts for approved `PauseSuspect` plans, ticked every 5 s (period end, the spans of a guided pause), suspend pauses resumed as recorded at the start after a crash and at the stop; suspends only processes `governing::Governor::protects` leaves alone | `input.pauses`, `input.end_pause` |
 | `cleaning` | rule scans (the clean cases of the knowledge packs that apply, reloaded at every scan) and plans by tier; runs approved service-scope plans and, after every scan, its auto-tier plan; auto run hourly (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge (runs past 7 days, and at once every run on a volume under 10 % free) on the in-app scheduler; user tasks for the tray; space analyses, including the build-output and cache folders Windows Search indexes (`space.indexed_folders`, with `plans.propose_index_exclusion`); the startup items, their impact and the boot and logon times | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*`, `startup.*` |
 
 The contracts of the cleaning methods are in `src/core/ipc/plans.hpp`, the governor's in

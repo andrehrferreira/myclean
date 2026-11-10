@@ -64,6 +64,8 @@ enum class ProcessSort { cpu, memory };
 
 // input.summary (core/ipc/input.hpp).
 [[nodiscard]] Result<std::vector<FreezeGroupRow>> parse_input_summary(const nlohmann::json& reply);
+// input.pauses (core/ipc/input.hpp).
+[[nodiscard]] Result<EliminationView> parse_input_pauses(const nlohmann::json& reply);
 
 // Unix seconds.
 [[nodiscard]] std::int64_t unix_seconds(WallTime time);

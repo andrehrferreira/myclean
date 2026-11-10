@@ -406,6 +406,29 @@ const Json& tool_list() {
                            {"maxItems", 64},
                            {"description", "Up to 64 'id' values from list_startup"}}}},
                         Json::array({"item_ids"}))),
+      tool("freeze_elimination",
+           "Guided elimination of the copy/paste freeze suspects: the baseline freeze rate (or "
+           "that it is still being collected), the ranked suspects with whether each runs and "
+           "how it would be paused (suspend, or guided: a program that owns a keyboard hook is "
+           "quit by the owner instead, since suspending it would lag every keystroke), the pause "
+           "MyClean offers, the active pause and each pause with the freeze rate during it "
+           "against the baseline. Reads only.",
+           object_schema()),
+      proposal_tool(
+          "propose_pause",
+          "Proposes pausing one freeze suspect for a while to see whether the freezes stop. It "
+          "only creates a plan in state 'awaiting_approval' and notifies the owner: nothing is "
+          "paused until the owner approves it in the MyClean tray. Takes only a suspect 'id' of "
+          "freeze_elimination.",
+          object_schema(
+              {{"suspect_id",
+                {{"type", "integer"}, {"description", "A suspect 'id' from freeze_elimination"}}},
+               {"hours",
+                {{"type", "integer"},
+                 {"minimum", 1},
+                 {"maximum", 168},
+                 {"description", "How long the pause lasts; 24 when absent"}}}},
+              Json::array({"suspect_id"}))),
   });
   return list;
 }
@@ -559,6 +582,16 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
         .method = ipc::plans_propose_startup_method,
         .params = Json{{"candidates", {{"ids", arguments.at("item_ids")}}}, {"client", client}}};
   }
+  if (tool == "freeze_elimination") {
+    return ServiceCall{.method = ipc::input_pauses_method, .params = Json::object()};
+  }
+  if (tool == "propose_pause") {
+    Json params{{"suspect", arguments.at("suspect_id")}, {"client", client}};
+    if (arguments.contains("hours")) {
+      params["hours"] = arguments.at("hours");
+    }
+    return ServiceCall{.method = ipc::plans_propose_pause_method, .params = std::move(params)};
+  }
   if (tool == "propose_optimization") {
     Json proposal = arguments;
     proposal["client"] = client;
@@ -680,7 +713,8 @@ Json Server::initialize(const Json& params) {
        "(explain_process), disk health, alerts, copy/paste freezes, the largest files, old "
        "downloads, duplicates, used installers, startup items and MyClean's plans. No tool "
        "changes anything: nothing can close, suspend or reprioritize a process, and "
-       "propose_cleanup, propose_optimization and propose_disable_startup only create plans "
+       "propose_cleanup, propose_optimization, propose_disable_startup and propose_pause only "
+       "create plans "
        "that wait for the owner's approval in the "
        "MyClean tray; no tool approves or executes a plan. A process flagged "
        "'unrecognized' is not in MyClean's knowledge base and has a stated reason (unsigned, "

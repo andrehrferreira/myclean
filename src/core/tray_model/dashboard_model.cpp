@@ -105,6 +105,9 @@ void DashboardModel::apply(PollResult result) {
   if (result.freezes) {
     freezes_ = std::move(result.freezes);
   }
+  if (result.elimination) {
+    elimination_ = std::move(result.elimination);
+  }
   if (result.governor_action) {
     governor_action_error_ = std::move(*result.governor_action);
   }

@@ -7,6 +7,7 @@ myclean_add_test(cleaning
     executor_test.cpp
     recycle_bin_test.cpp
     service_test.cpp
+    pause_test.cpp
     verification_test.cpp
   DEPENDS
     myclean::cleaning

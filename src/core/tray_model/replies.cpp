@@ -386,4 +386,61 @@ Result<std::vector<FreezeGroupRow>> parse_input_summary(const Json& reply) {
   }
 }
 
+namespace {
+
+FreezeRateRow rate_row(const Json& rate) {
+  return FreezeRateRow{.incidents = rate.at("incidents").get<std::int64_t>(),
+                       .hours = rate.at("hours").get<double>(),
+                       .per_day = nullable<double>(rate, "per_day")};
+}
+
+PauseRow pause_row(const Json& pause) {
+  const Json& during = pause.at("during");
+  return PauseRow{
+      .plan = pause.at("plan").get<std::int64_t>(),
+      .image = pause.at("image").get<std::string>(),
+      .mode = pause.at("mode").get<std::string>(),
+      .started = from_unix_seconds(pause.at("started").get<std::int64_t>()),
+      .ends = from_unix_seconds(pause.at("ends").get<std::int64_t>()),
+      .restored = nullable_time(pause, "restored"),
+      .end_reason = nullable<std::string>(pause, "end_reason"),
+      .baseline = rate_row(pause.at("baseline")),
+      .during = during.is_null() ? std::nullopt : std::optional(rate_row(during)),
+      .change = nullable<std::string>(pause, "change"),
+      .running = pause.contains("running") ? nullable<bool>(pause, "running") : std::nullopt};
+}
+
+}  // namespace
+
+Result<EliminationView> parse_input_pauses(const Json& reply) {
+  try {
+    EliminationView view{.collecting = reply.at("collecting").get<bool>()};
+    if (const Json& baseline = reply.at("baseline"); !baseline.is_null()) {
+      view.baseline = rate_row(baseline);
+    }
+    for (const Json& suspect : reply.at("suspects")) {
+      view.suspects.push_back(SuspectRow{.id = suspect.at("id").get<std::int64_t>(),
+                                         .image = suspect.at("image").get<std::string>(),
+                                         .hook = suspect.at("hook").get<bool>(),
+                                         .mode = suspect.at("mode").get<std::string>(),
+                                         .running = nullable<bool>(suspect, "running")});
+    }
+    if (const Json& offer = reply.at("offer"); !offer.is_null()) {
+      view.offer = PauseOfferRow{.suspect = offer.at("suspect").get<std::int64_t>(),
+                                 .image = offer.at("image").get<std::string>(),
+                                 .mode = offer.at("mode").get<std::string>(),
+                                 .hours = offer.at("hours").get<std::int64_t>()};
+    }
+    if (const Json& active = reply.at("active"); !active.is_null()) {
+      view.active = pause_row(active);
+    }
+    for (const Json& pause : reply.at("pauses")) {
+      view.pauses.push_back(pause_row(pause));
+    }
+    return view;
+  } catch (const std::exception& error) {
+    return fail(Errc::invalid_data, std::string("input.pauses: ") + error.what());
+  }
+}
+
 }  // namespace myclean::tray_model

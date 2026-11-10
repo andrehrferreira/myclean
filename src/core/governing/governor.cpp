@@ -964,6 +964,20 @@ Json Governor::orphans_json() const {
               {"rules", std::move(rules)}};
 }
 
+bool Governor::protects(const governor::ProcessKey& key) const {
+  const std::scoped_lock lock(mutex_);
+  if (!started_ || stopped_) {
+    return true;
+  }
+  const auto found = known_.find(key);
+  const std::optional<UserState> user = fresh_user_state();
+  if (found == known_.end() || !user || user->foreground_pid == key.pid) {
+    return true;
+  }
+  return protected_class(class_of(key)) || myclean_image(found->second.facts.image) ||
+         under_class(key, rules::ProcessClass::game);
+}
+
 rules::ProcessClass Governor::class_of(const governor::ProcessKey& key) const {
   const auto found = known_.find(key);
   if (found == known_.end()) {

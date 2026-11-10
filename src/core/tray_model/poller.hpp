@@ -106,10 +106,18 @@ struct DecideOrphans {
   std::int64_t id = 0;
   std::string decision;
 };
-using Request = std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange, ScanNow,
-                             OpenPlan, ClosePlan, ApprovePlan, RejectPlan, UndoPlan,
-                             RestoreQuarantine, PurgeQuarantine, LoadSpace, ProposeCleanup,
-                             OwnerAction, ChooseForTree, PauseGovernor, SetGameMode, DecideOrphans>;
+// Guided freeze elimination: the owner proposes the offered pause (a plan that waits in the
+// inbox for the owner's approval), or ends the active pause now.
+struct ProposePause {
+  std::int64_t suspect = 0;
+  std::int64_t hours = 24;
+};
+struct EndPause {};
+using Request =
+    std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange, ScanNow, OpenPlan,
+                 ClosePlan, ApprovePlan, RejectPlan, UndoPlan, RestoreQuarantine, PurgeQuarantine,
+                 LoadSpace, ProposeCleanup, OwnerAction, ChooseForTree, PauseGovernor, SetGameMode,
+                 DecideOrphans, ProposePause, EndPause>;
 
 // The tray's executor of user-scope plans, as the poller drives it: the poller takes a task
 // (user_tasks.next) only from a reachable service and only while the runner is idle, and
@@ -164,6 +172,7 @@ struct PollResult {
   std::optional<AlertSummary> badge;
   std::optional<std::vector<AlertRow>> alerts;
   std::optional<std::vector<FreezeGroupRow>> freezes;
+  std::optional<EliminationView> elimination;  // fetched with the freezes
   std::optional<RangeHistory> range;
   std::optional<Result<Explanation>> explanation;
   // Why a snooze or dismiss failed; empty when it worked.

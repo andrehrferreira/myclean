@@ -190,7 +190,9 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
                                              "propose_compact_vhdx",
                                              "list_startup",
                                              "boot_times",
-                                             "propose_disable_startup"}));
+                                             "propose_disable_startup",
+                                             "freeze_elimination",
+                                             "propose_pause"}));
   // No tool approves, rejects, executes, undoes, restores or deletes anything.
   for (const std::string& name : names) {
     for (const char* verb :
@@ -289,6 +291,22 @@ TEST_F(ServerTest, VirtualDiskToolsCallTheirMethodsWithDiskIdsOnly) {
   EXPECT_EQ(calls()[0].params, (Json{{"refresh", false}}));
   EXPECT_EQ(calls()[1].method, "plans.propose_compact");
   EXPECT_EQ(calls()[1].params, (Json{{"candidates", {{"ids", {9}}}}, {"client", "claude-code"}}));
+}
+
+// Spec "MCP cannot start a pause": the tool only proposes, by a suspect id.
+TEST_F(ServerTest, FreezeEliminationToolsCallTheirMethodsWithASuspectIdOnly) {
+  static_cast<void>(send(Json{{"jsonrpc", "2.0"},
+                              {"id", 1},
+                              {"method", "initialize"},
+                              {"params", {{"clientInfo", {{"name", "claude code"}}}}}}));
+  static_cast<void>(text(call_tool("freeze_elimination"), false));
+  static_cast<void>(text(call_tool("propose_pause", {{"suspect_id", 2}}), false));
+  static_cast<void>(text(call_tool("propose_pause", {{"suspect_id", 1}, {"hours", 8}}), false));
+  ASSERT_EQ(calls().size(), 3U);
+  EXPECT_EQ(calls()[0].method, "input.pauses");
+  EXPECT_EQ(calls()[1].method, "plans.propose_pause");
+  EXPECT_EQ(calls()[1].params, (Json{{"suspect", 2}, {"client", "claude-code"}}));
+  EXPECT_EQ(calls()[2].params, (Json{{"suspect", 1}, {"client", "claude-code"}, {"hours", 8}}));
 }
 
 TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
@@ -447,7 +465,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 28U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 30U);
 }
 
 }  // namespace

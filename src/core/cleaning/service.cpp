@@ -28,6 +28,7 @@
 #include "core/cleaning/records.hpp"
 #include "core/cleaning/views.hpp"
 #include "core/devdrive/advisor.hpp"
+#include "core/elimination/pause_action.hpp"
 #include "core/indexer/folders.hpp"
 #include "core/ipc/frame.hpp"
 #include "core/ipc/json_rpc.hpp"
@@ -1682,6 +1683,18 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
         return on_executor([&](Executor& executor) {
           return plan_answer(executor.propose_index_exclusion(
               ids_of(params.at("candidates"), "ids"), proposer_of(params, caller)));
+        });
+      }));
+  added.push_back(methods.add_for_caller(
+      std::string(ipc::plans_propose_pause_method),
+      {Param{.name = "suspect", .type = ParamType::integer, .required = true},
+       Param{.name = "hours", .type = ParamType::integer}, client},
+      [this](const Json& params, const ipc::Caller& caller) {
+        return on_executor([&](Executor& executor) {
+          return plan_answer(executor.propose_pause(
+              params.at("suspect").get<std::int64_t>(),
+              std::chrono::hours{params.value("hours", elimination::default_pause.count())},
+              proposer_of(params, caller)));
         });
       }));
   added.push_back(

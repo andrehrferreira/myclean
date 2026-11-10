@@ -21,6 +21,7 @@ myclean_add_library(cleaning
     myclean::clean
     myclean::cleanup
     myclean::devdrive
+    myclean::elimination
     myclean::health
     myclean::indexer
     myclean::ipc

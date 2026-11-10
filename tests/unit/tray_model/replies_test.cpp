@@ -297,6 +297,55 @@ TEST(RepliesTest, FreezeSummary) {
   EXPECT_FALSE(parse_input_summary(Json{{"groups", 3}}).has_value());
 }
 
+TEST(RepliesTest, FreezeElimination) {
+  const Json rate{{"incidents", 14}, {"hours", 168.0}, {"per_day", 2.0}};
+  const Json pause{{"plan", 7},
+                   {"image", "AnyDesk.exe"},
+                   {"mode", "suspend"},
+                   {"started", 1000},
+                   {"ends", 87400},
+                   {"restored", 87400},
+                   {"end_reason", "period_ended"},
+                   {"baseline", rate},
+                   {"during", {{"incidents", 0}, {"hours", 24.0}, {"per_day", 0.0}}},
+                   {"change", "lower"}};
+  Json active = pause;
+  active["mode"] = "guided";
+  active["restored"] = nullptr;
+  active["end_reason"] = nullptr;
+  active["during"] = nullptr;
+  active["change"] = nullptr;
+  active["running"] = true;
+  const Json reply{{"collecting", false},
+                   {"baseline", rate},
+                   {"suspects",
+                    {{{"id", 1},
+                      {"image", "PowerToys.KeyboardManagerEngine.exe"},
+                      {"hook", true},
+                      {"mode", "guided"},
+                      {"running", true}}}},
+                   {"offer", nullptr},
+                   {"active", active},
+                   {"pauses", {active, pause}}};
+  const Result<EliminationView> view = parse_input_pauses(reply);
+  ASSERT_TRUE(view.has_value()) << view.error().message;
+  EXPECT_FALSE(view->collecting);
+  EXPECT_EQ(view->baseline, (FreezeRateRow{.incidents = 14, .hours = 168.0, .per_day = 2.0}));
+  ASSERT_EQ(view->suspects.size(), 1U);
+  EXPECT_TRUE(view->suspects[0].hook);
+  EXPECT_FALSE(view->offer.has_value());
+  ASSERT_TRUE(view->active.has_value());
+  EXPECT_EQ(view->active.value_or(PauseRow{}).mode, "guided");
+  EXPECT_EQ(view->active.value_or(PauseRow{}).running, true);
+  ASSERT_EQ(view->pauses.size(), 2U);
+  EXPECT_EQ(view->pauses[1].change, "lower");
+  EXPECT_EQ(view->pauses[1].end_reason, "period_ended");
+  EXPECT_EQ(
+      view->pauses[1].during,
+      (std::optional<FreezeRateRow>(FreezeRateRow{.incidents = 0, .hours = 24.0, .per_day = 0.0})));
+  EXPECT_FALSE(parse_input_pauses(Json{{"collecting", true}}).has_value());
+}
+
 TEST(RepliesTest, UnixSeconds) {
   EXPECT_EQ(unix_seconds(from_unix_seconds(1'700'000'000)), 1'700'000'000);
   EXPECT_EQ(unix_seconds(WallTime{std::chrono::milliseconds{2999}}), 2);

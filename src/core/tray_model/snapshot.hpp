@@ -179,4 +179,59 @@ struct FreezeGroupRow {
   std::vector<FreezeRow> incidents;  // the newest of the group
 };
 
+// Guided freeze elimination (input.pauses): freezes over observed hours.
+struct FreezeRateRow {
+  std::int64_t incidents = 0;
+  double hours = 0.0;
+  std::optional<double> per_day;
+
+  friend bool operator==(const FreezeRateRow&, const FreezeRateRow&) = default;
+};
+
+struct SuspectRow {
+  std::int64_t id = 0;  // what plans.propose_pause takes
+  std::string image;
+  bool hook = false;  // owns a keyboard hook: paused by the owner quitting it
+  std::string mode;   // "suspend" or "guided"
+  std::optional<bool> running;
+
+  friend bool operator==(const SuspectRow&, const SuspectRow&) = default;
+};
+
+struct PauseOfferRow {
+  std::int64_t suspect = 0;
+  std::string image;
+  std::string mode;
+  std::int64_t hours = 0;
+
+  friend bool operator==(const PauseOfferRow&, const PauseOfferRow&) = default;
+};
+
+struct PauseRow {
+  std::int64_t plan = 0;
+  std::string image;
+  std::string mode;  // "suspend" or "guided"
+  WallTime started;
+  WallTime ends;
+  std::optional<WallTime> restored;
+  std::optional<std::string> end_reason;
+  FreezeRateRow baseline;
+  std::optional<FreezeRateRow> during;
+  std::optional<std::string> change;  // "lower", "same" or "higher"
+  std::optional<bool> running;        // the active pause: whether the suspect runs now
+
+  friend bool operator==(const PauseRow&, const PauseRow&) = default;
+};
+
+struct EliminationView {
+  bool collecting = true;  // no baseline yet
+  std::optional<FreezeRateRow> baseline;
+  std::vector<SuspectRow> suspects;
+  std::optional<PauseOfferRow> offer;
+  std::optional<PauseRow> active;
+  std::vector<PauseRow> pauses;  // newest first
+
+  friend bool operator==(const EliminationView&, const EliminationView&) = default;
+};
+
 }  // namespace myclean::tray_model

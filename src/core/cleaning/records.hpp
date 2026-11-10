@@ -31,6 +31,7 @@ namespace myclean::cleaning {
 // recycle_bin: the Recycle Bin items deleted long ago, removed by the tray. archive: a cold folder
 // moved to the HDD archive, uninstall: a program's own uninstaller, both the owner's one-click
 // decisions run by the tray. compact: WSL and Docker virtual disks compacted (not reversible).
+// pause: a freeze suspect paused for a while (guided freeze elimination).
 enum class PlanKind {
   cleanup,
   handler,
@@ -41,7 +42,8 @@ enum class PlanKind {
   recycle_bin,
   archive,
   uninstall,
-  compact
+  compact,
+  pause
 };
 
 [[nodiscard]] std::string_view to_string(PlanKind kind);

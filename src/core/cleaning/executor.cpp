@@ -35,7 +35,11 @@
 #include "core/cleanup/dism_cleanup.hpp"
 #include "core/cleanup/handler_cleanup.hpp"
 #include "core/cleanup/recycle_bin.hpp"
+#include "core/elimination/pause_action.hpp"
+#include "core/elimination/pauses.hpp"
+#include "core/elimination/suspects.hpp"
 #include "core/indexer/exclusion.hpp"
+#include "core/input/incident_store.hpp"
 #include "core/model/action.hpp"
 #include "core/model/actor.hpp"
 #include "core/model/finding.hpp"
@@ -523,6 +527,11 @@ Result<ScanResult> Executor::scan(const RuleSet& rules, bool with_auto,
 
 Result<std::vector<PlanId>> Executor::approved_service_plans() const {
   std::vector<PlanId> plans;
+  bool paused = false;
+  if (probes_.pauses != nullptr) {
+    const Result<std::optional<elimination::PauseRecord>> active = probes_.pauses->active();
+    paused = !active || active->has_value();  // unknown counts as active
+  }
   const Result<void> read = environment_.store->read([&](store::Database& db) -> Result<void> {
     Result<store::Statement> query =
         db.prepare("SELECT id FROM plan WHERE state = 'approved' ORDER BY id");
@@ -544,6 +553,9 @@ Result<std::vector<PlanId>> Executor::approved_service_plans() const {
       }
       Result<PlanSpec> spec = spec_of(db, *plan);
       if (spec && spec->scope == ExecutionContext::service) {
+        if (plan->action == elimination::pause_action_name && paused) {
+          continue;  // one suspect at a time: it starts once the active pause is over
+        }
         plans.push_back(id);
       }
     }
@@ -619,6 +631,35 @@ Result<std::unique_ptr<Action>> index_exclusion(indexer::IIndexerScope* scope, c
 
 namespace {
 
+// The StartupToggle of a stored plan's params {"items", "enable"}, verified with the boots stored
+// in boot_time.
+Result<std::unique_ptr<Action>> startup_toggle(startup::IStartupSystem* system, const Json& params,
+                                               const actions::Environment& environment) {
+  if (system == nullptr) {
+    return fail(Errc::invalid_state, "SetStartupItems needs the startup items");
+  }
+  return std::make_unique<startup::StartupToggle>(
+      *system, *environment.clock, params.at("items").get<std::vector<std::string>>(),
+      params.at("enable").get<bool>(),
+      [store = environment.store] { return startup::stored_boots(*store); });
+}
+
+// The PauseSuspect of stored plan `plan` with params {"image", "mode", "hours"}.
+Result<std::unique_ptr<Action>> suspect_pause(elimination::IPauses* pauses, PlanId plan,
+                                              const Json& params) {
+  if (pauses == nullptr) {
+    return fail(Errc::invalid_state, "PauseSuspect needs the pauses of guided freeze elimination");
+  }
+  const std::optional<elimination::PauseMode> mode =
+      elimination::parse_pause_mode(params.at("mode").get<std::string>());
+  if (!mode) {
+    return fail(Errc::invalid_data, "unknown pause mode");
+  }
+  return std::make_unique<elimination::PauseSuspect>(
+      *pauses, plan, params.at("image").get<std::string>(), *mode,
+      std::chrono::hours{params.at("hours").get<std::int64_t>()});
+}
+
 // The CompactVhdx of a stored plan's params {"disks"}.
 Result<std::unique_ptr<Action>> compaction(const os::IFileSystem& file_system, const Probes& probes,
                                            const Json& params) {
@@ -636,7 +677,7 @@ Result<std::unique_ptr<Action>> compaction(const os::IFileSystem& file_system, c
 }  // namespace
 
 bool optimization(PlanKind kind) {
-  return kind == PlanKind::system_setting || kind == PlanKind::compact;
+  return kind == PlanKind::system_setting || kind == PlanKind::compact || kind == PlanKind::pause;
 }
 
 std::vector<alerts::Reading> verification_readings(PlanId id, const PlanSpec& spec,
@@ -712,16 +753,13 @@ Result<std::unique_ptr<Action>> Executor::action_for(const Plan& plan, const Pla
       return index_exclusion(probes_.indexer, params, environment_);
     }
     if (plan.action == startup::toggle_action_name) {
-      if (probes_.startup == nullptr) {
-        return missing("the startup items");
-      }
-      return std::make_unique<startup::StartupToggle>(
-          *probes_.startup, *environment_.clock, params.at("items").get<std::vector<std::string>>(),
-          params.at("enable").get<bool>(),
-          [store = environment_.store] { return startup::stored_boots(*store); });
+      return startup_toggle(probes_.startup, params, environment_);
     }
     if (plan.action == vhdx::compact_action_name) {
       return compaction(*environment_.file_system, probes_, params);
+    }
+    if (plan.action == elimination::pause_action_name) {
+      return suspect_pause(probes_.pauses, plan.id, params);
     }
     if (probes_.system == nullptr || probes_.tools == nullptr || probes_.drives == nullptr) {
       return missing("the system settings");
@@ -1267,6 +1305,98 @@ Result<Plan> Executor::propose_index_exclusion(std::span<const std::int64_t> ids
                        "index scope is as before",
                .params = Json{{"folders", stored}}},
       proposer);
+}
+
+Result<Plan> Executor::propose_pause(std::int64_t suspect, std::chrono::hours period,
+                                     const Actor& proposer) {
+  if (probes_.pauses == nullptr) {
+    return fail(Errc::invalid_state, "freeze suspects cannot be paused here");
+  }
+  if (period < std::chrono::hours{1} || period > elimination::max_pause) {
+    return fail(Errc::invalid_argument,
+                "a pause lasts 1 to " + std::to_string(elimination::max_pause.count()) + " hours");
+  }
+  Result<std::vector<input::FreezeGroup>> groups = input::freeze_summary(*environment_.store);
+  if (!groups) {
+    return tl::unexpected(groups.error());
+  }
+  std::vector<input::StoredIncident> incidents;
+  for (input::FreezeGroup& group : *groups) {
+    std::ranges::move(group.incidents, std::back_inserter(incidents));
+  }
+  const std::optional<elimination::Suspect> chosen = elimination::suspect_by_id(incidents, suspect);
+  if (!chosen) {
+    return fail(Errc::not_found, "no freeze suspect " + std::to_string(suspect));
+  }
+  Result<std::vector<WallTime>> times = input::incident_times(*environment_.store);
+  if (!times) {
+    return tl::unexpected(times.error());
+  }
+  Result<std::vector<elimination::Span>> periods = fail(Errc::io_error, "not read");
+  Result<bool> open = fail(Errc::io_error, "not read");
+  if (Result<void> read = environment_.store->read([&](store::Database& db) -> Result<void> {
+        periods = elimination::pause_periods(db);
+        Result<store::Statement> query = db.prepare(
+            "SELECT COUNT(*) FROM plan p JOIN plan_params pp ON pp.plan_id = p.id WHERE "
+            "p.action = ?1 AND p.state IN ('proposed', 'auto', 'awaiting_approval', 'approved', "
+            "'applying', 'applied') AND json_extract(pp.params, '$.params.image') = ?2");
+        if (!query) {
+          open = tl::unexpected(query.error());
+          return {};
+        }
+        query->bind(1, elimination::pause_action_name).bind(2, std::string_view{chosen->image});
+        const Result<bool> row = query->step();
+        open = row ? Result<bool>(query->column_int(0) > 0) : tl::unexpected(row.error());
+        return {};
+      });
+      !read) {
+    return tl::unexpected(read.error());
+  }
+  if (!periods) {
+    return tl::unexpected(periods.error());
+  }
+  if (!open) {
+    return tl::unexpected(open.error());
+  }
+  if (*open) {
+    return fail(Errc::already_exists, "a pause of " + chosen->image + " is waiting or active");
+  }
+  if (!elimination::baseline(*times, environment_.clock->now(), *periods)) {
+    return fail(Errc::invalid_state, "a baseline of freeze incidents is still being collected");
+  }
+  const elimination::PauseMode mode = chosen->mode();
+  const std::string hours = std::to_string(period.count()) + " hours";
+  PlanSpec spec{.kind = PlanKind::pause,
+                .tier = Tier::ask,
+                .scope = ExecutionContext::service,
+                .params = Json{{"image", chosen->image},
+                               {"mode", std::string(elimination::to_string(mode))},
+                               {"hours", period.count()}}};
+  if (mode == elimination::PauseMode::guided) {
+    spec.title = "Quit " + chosen->image + " for " + hours + " to test the freezes";
+    spec.commands = {"Nothing is suspended, closed or started: quit " + chosen->image +
+                     " yourself; MyClean counts only the hours it is not running"};
+    spec.undo = "ends the pause; start " + chosen->image + " again yourself";
+    spec.warnings = {chosen->image +
+                     " owns a keyboard hook: suspended, it would make every "
+                     "keystroke wait and stop working until restarted, so MyClean does not "
+                     "suspend it. Quit it for " +
+                     hours +
+                     "; MyClean reminds you to start it "
+                     "again when the pause is over"};
+  } else {
+    spec.title = "Pause " + chosen->image + " for " + hours + " to test the freezes";
+    spec.commands = {"Suspend every " + chosen->image +
+                     " process of your session (except the "
+                     "foreground app), and resume each after " +
+                     hours};
+    spec.undo = "resumes every process the pause suspended";
+    spec.warnings = {chosen->image +
+                     " stops responding until the pause is over or you end it "
+                     "in the Freezes view"};
+  }
+  elimination::PauseSuspect action(*probes_.pauses, PlanId{}, chosen->image, mode, period);
+  return submit_setting(action, std::string(elimination::pause_action_name), spec, proposer);
 }
 
 Result<Plan> Executor::propose_compaction(std::span<const std::int64_t> ids,

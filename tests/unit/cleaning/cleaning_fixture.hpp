@@ -26,7 +26,10 @@
 #include "core/cleaning/records.hpp"
 #include "core/cleaning/service.hpp"
 #include "core/devdrive/advisor.hpp"
+#include "core/elimination/keeper.hpp"
+#include "core/elimination/pauses.hpp"
 #include "core/health/analysis.hpp"
+#include "core/input/incident_store.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
@@ -301,7 +304,8 @@ class CleaningFixture : public ::testing::Test {
                    .startup = &startup_,
                    .disks = &disks_,
                    .indexer = &indexer_,
-                   .alerts = &alerts_},
+                   .alerts = &alerts_,
+                   .pauses = pauses_},
         .owner = [this]() -> Result<OwnerContext> {
           if (!owner_available_) {
             return fail(Errc::not_found, "the owner is not logged on");
@@ -407,6 +411,9 @@ class CleaningFixture : public ::testing::Test {
   startup::testing::FakeDiagnosticsLog& diagnostics() { return diagnostics_; }
   indexer::testing::FakeScope& indexer() { return indexer_; }
   AlertRecorder& alerts() { return alerts_; }
+  // The pauses of guided freeze elimination the executor runs PauseSuspect plans with; set
+  // before start().
+  void set_pauses(elimination::IPauses* pauses) { pauses_ = pauses; }
   space::testing::FakeDirectoryReader& reader() { return reader_; }
   CleaningService& service() { return *service_; }
   store::Store& store() { return *store_; }
@@ -429,8 +436,9 @@ class CleaningFixture : public ::testing::Test {
  private:
   void open_store() {
     const std::vector<store::MigrationSet> sets = {
-        actions::action_migrations(), cleaning_migrations(), startup::impact_migrations(),
-        resident::resident_migrations()};
+        actions::action_migrations(), cleaning_migrations(),
+        startup::impact_migrations(), resident::resident_migrations(),
+        input::input_migrations(),    elimination::elimination_migrations()};
     store_ = store::Store::open(folder_.path() / "myclean.db", clock_, sets).value();
   }
 
@@ -449,6 +457,7 @@ class CleaningFixture : public ::testing::Test {
   startup::testing::FakeDiagnosticsLog diagnostics_;
   indexer::testing::FakeScope indexer_;
   AlertRecorder alerts_;
+  elimination::IPauses* pauses_ = nullptr;
   space::testing::FakeDirectoryReader reader_;
   NameDigitHasher hasher_;
   NameDigitDecoder images_;

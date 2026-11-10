@@ -24,6 +24,7 @@
 #include "core/cleanup/command_runner.hpp"
 #include "core/cleanup/handler_host.hpp"
 #include "core/cleanup/recycle_bin.hpp"
+#include "core/elimination/keeper.hpp"
 #include "core/health/analysis.hpp"
 #include "core/indexer/scope.hpp"
 #include "core/model/actor.hpp"
@@ -68,6 +69,7 @@ struct Probes {
   indexer::IIndexerScope* indexer = nullptr;   // the Windows Search crawl scope
   // Told when a verification undid a change, found it worse or could not measure it.
   health::IAlertSink* alerts = nullptr;
+  elimination::IPauses* pauses = nullptr;  // the pauses of guided freeze elimination
 };
 
 struct ExecutorOptions {
@@ -155,7 +157,8 @@ class Executor {
   [[nodiscard]] Result<ScanResult> scan(const RuleSet& rules, bool with_auto,
                                         const std::stop_token& stop);
 
-  // The approved service-scope plans, oldest first.
+  // The approved service-scope plans, oldest first; an approved pause waits while another pause
+  // is active (one suspect at a time).
   [[nodiscard]] Result<std::vector<PlanId>> approved_service_plans() const;
   // Runs approved service-scope plan `id`, undoing it at once when it is an optimization that
   // made its metric worse, and reports its verification_readings to Probes::alerts. An auto run
@@ -213,6 +216,15 @@ class Executor {
   // another source, and as IndexerExclusion::preview does for a folder no longer indexed.
   [[nodiscard]] Result<Plan> propose_index_exclusion(std::span<const std::int64_t> ids,
                                                      const Actor& proposer);
+  // An approval-only plan that pauses freeze suspect `suspect` (elimination::Suspect::id) for
+  // `period` (guided freeze elimination): action "PauseSuspect", kind pause, one item
+  // "pause:<image>", params {"image", "mode", "hours"}; mode guided (the owner quits it) for a
+  // suspect that owns a keyboard hook, suspend otherwise. Fails with invalid_state without the
+  // pauses or while a baseline of freeze incidents is still being collected, not_found for an
+  // unknown suspect, invalid_argument for a period outside 1 h .. elimination::max_pause, and
+  // already_exists while a pause plan of the same suspect is open.
+  [[nodiscard]] Result<Plan> propose_pause(std::int64_t suspect, std::chrono::hours period,
+                                           const Actor& proposer);
   // When the system volume has less than low_space_ratio free: automatic plans (approved at once,
   // run by the service, undoable) that reduce full hibernation and that keep a 4096 MB page file
   // on the system volume for crash dumps while a system-managed one goes to the best healthy
