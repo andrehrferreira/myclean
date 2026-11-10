@@ -64,6 +64,8 @@ src/core/cleanup/       Windows cleanup handlers, native prune commands and DISM
 src/core/space/         scanner v1 and the space analyses (top-N, old downloads, installers,
                         duplicates, near-duplicate photos by dHash)
 src/core/index/         NTFS volume index from the $MFT with USN refresh and folder growth
+src/core/indexer/       Windows Search scope: build-output and cache folders it indexes (from the
+                        packs' attribution areas and project cases), IndexerExclusion with undo
 src/core/map/           `myclean map`: attribution of every byte of a volume and how to reclaim it
 src/core/placement/     drive classes and targets, relocation and recipes, hibernation, page
                         file and shadow-storage actions
@@ -102,7 +104,8 @@ src/core/user_tasks/    the user-scope plans the tray runs under the owner's tok
                         commands, user-profile cleanup handlers, relocations; their reports
 src/platform/<module>/  Win32 implementations of src/core interfaces (proc, perf, disk,
                         disk_health, etw, trust, input, ipc, fs, service, scan, clean, git,
-                        cleanup, settings, ntfs, compress, defrag, packs, jobs, games, image)
+                        cleanup, settings, ntfs, compress, defrag, packs, jobs, games, image,
+                        indexer)
 src/svc/                myclean-svc: host, Service and its components (see below)
 src/tray/               myclean-tray: tray icon, toasts, dashboard (approval inbox, Space),
                         input watchdog, the worker that runs user tasks
@@ -258,7 +261,7 @@ started in this order (stopped in reverse), so that each starts after those it u
 | `input` | `input_incident` table for the tray's watchdog | `input.*` |
 | `startup` | measures the first 2 minutes of each owner logon (`logon_impact`) and, every 10 min, records the boots Windows measured from the Diagnostics-Performance log (`boot_time`) | (read by `startup.*`) |
 | `resident` | every second hands the newest process table to `resident::Tracker`: per program (the lower-case image of its trees' root) and minute, CPU time, private bytes, RAM, disk I/O and the network bytes of `net_minute`; 5-minute private bytes in `resident_fine` (2 days), hourly totals in `resident_hour` (35 days); at each closed 5-minute bucket the leak readings go to `alerts` (rule `process.memory-leak`). Reads only: it cannot act on a process | `resident.*` |
-| `cleaning` | rule scans (the clean cases of the knowledge packs that apply, reloaded at every scan) and plans by tier; runs approved service-scope plans and, after every scan, its auto-tier plan; auto run hourly (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge (runs past 7 days, and at once every run on a volume under 10 % free) on the in-app scheduler; user tasks for the tray; space analyses; the startup items, their impact and the boot and logon times | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*`, `startup.*` |
+| `cleaning` | rule scans (the clean cases of the knowledge packs that apply, reloaded at every scan) and plans by tier; runs approved service-scope plans and, after every scan, its auto-tier plan; auto run hourly (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge (runs past 7 days, and at once every run on a volume under 10 % free) on the in-app scheduler; user tasks for the tray; space analyses, including the build-output and cache folders Windows Search indexes (`space.indexed_folders`, with `plans.propose_index_exclusion`); the startup items, their impact and the boot and logon times | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*`, `startup.*` |
 
 The contracts of the cleaning methods are in `src/core/ipc/plans.hpp`, the governor's in
 `src/core/ipc/governor.hpp` (`governor.choose`, `.pause`, `.game_mode` and `.user_state` are

@@ -34,6 +34,7 @@
 #include "core/store/store.hpp"
 #include "fakes/fake_clock.hpp"
 #include "fakes/fake_file_system.hpp"
+#include "indexer/fake_scope.hpp"
 #include "packs/pack_fakes.hpp"
 #include "placement/placement_fakes.hpp"
 #include "space/space_fakes.hpp"
@@ -258,7 +259,8 @@ class CleaningFixture : public ::testing::Test {
                    .system = &system_,
                    .tools = &tools_,
                    .drives = &drives_,
-                   .startup = &startup_},
+                   .startup = &startup_,
+                   .indexer = &indexer_},
         .owner = [this]() -> Result<OwnerContext> {
           if (!owner_available_) {
             return fail(Errc::not_found, "the owner is not logged on");
@@ -356,6 +358,7 @@ class CleaningFixture : public ::testing::Test {
   placement::testing::FakeDriveFacts& drives() { return drives_; }
   startup::testing::FakeStartupSystem& startup() { return startup_; }
   startup::testing::FakeDiagnosticsLog& diagnostics() { return diagnostics_; }
+  indexer::testing::FakeScope& indexer() { return indexer_; }
   space::testing::FakeDirectoryReader& reader() { return reader_; }
   CleaningService& service() { return *service_; }
   store::Store& store() { return *store_; }
@@ -393,6 +396,7 @@ class CleaningFixture : public ::testing::Test {
   placement::testing::FakeDriveFacts drives_;
   startup::testing::FakeStartupSystem startup_;
   startup::testing::FakeDiagnosticsLog diagnostics_;
+  indexer::testing::FakeScope indexer_;
   space::testing::FakeDirectoryReader reader_;
   NameDigitHasher hasher_;
   NameDigitDecoder images_;

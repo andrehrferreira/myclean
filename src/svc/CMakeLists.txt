@@ -43,6 +43,7 @@ myclean_add_library(svc
     myclean::platform_clean
     myclean::platform_fs
     myclean::platform_git
+    myclean::platform_indexer
     myclean::platform_ipc
     myclean::platform_proc
     myclean::platform_scan

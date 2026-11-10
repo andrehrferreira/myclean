@@ -241,6 +241,15 @@ const Json& tool_list() {
                        "acts on them, one click each in the MyClean tray; no tool can.") +
                std::string(space_note),
            object_schema({{"refresh", refresh_property()}})),
+      tool(
+          "find_indexed_build_folders",
+          std::string("Build-output and cache folders (node_modules, Cargo target, package and app "
+                      "caches the knowledge packs name, and project outputs below the workspace "
+                      "roots) that Windows Search indexes, with their category and label. Each "
+                      "'id' is what propose_index_exclusion takes.") +
+              std::string(" The analysis runs in the background: while 'state' is 'scanning', "
+                          "call again in a minute. Reads only; changes nothing."),
+          object_schema({{"refresh", refresh_property()}})),
       tool("list_plans",
            "MyClean's plans, newest first: id, title, kind (cleanup, handler, native, relocate, "
            "system_setting, quarantine_restore, recycle_bin, archive, uninstall), tier, scope, "
@@ -322,6 +331,21 @@ const Json& tool_list() {
                  {"enum", {"move", "regenerate"}},
                  {"description", "relocate: move the existing content, or let it regenerate"}}}},
               Json::array({"kind"}))),
+      proposal_tool(
+          "propose_index_exclusion",
+          "Proposes keeping folders found by find_indexed_build_folders out of the Windows Search "
+          "index, one exclusion rule each; the folders and their files are not touched and undo "
+          "restores the index scope exactly. It only creates a plan in state 'awaiting_approval' "
+          "and notifies the owner: nothing changes until the owner approves it in the MyClean "
+          "tray. Takes only the 'id' values find_indexed_build_folders returned, never paths.",
+          object_schema(
+              {{"folder_ids",
+                {{"type", "array"},
+                 {"items", {{"type", "integer"}}},
+                 {"minItems", 1},
+                 {"maxItems", 64},
+                 {"description", "Up to 64 'id' values from find_indexed_build_folders"}}}},
+              Json::array({"folder_ids"}))),
       tool("list_startup",
            "Every program that starts automatically: Run and RunOnce registry values (both "
            "registry views), Startup-folder files, scheduled tasks with a logon or boot trigger "
@@ -461,6 +485,14 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
   }
   if (tool == "find_owner_decisions") {
     return ServiceCall{.method = ipc::space_owner_decisions_method, .params = refresh};
+  }
+  if (tool == "find_indexed_build_folders") {
+    return ServiceCall{.method = ipc::space_indexed_folders_method, .params = refresh};
+  }
+  if (tool == "propose_index_exclusion") {
+    return ServiceCall{
+        .method = ipc::plans_propose_index_exclusion_method,
+        .params = Json{{"candidates", {{"ids", arguments.at("folder_ids")}}}, {"client", client}}};
   }
   if (tool == "list_plans") {
     return ServiceCall{.method = ipc::plans_list_method, .params = arguments};

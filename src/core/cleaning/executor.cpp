@@ -33,6 +33,7 @@
 #include "core/cleanup/dism_cleanup.hpp"
 #include "core/cleanup/handler_cleanup.hpp"
 #include "core/cleanup/recycle_bin.hpp"
+#include "core/indexer/exclusion.hpp"
 #include "core/model/action.hpp"
 #include "core/model/actor.hpp"
 #include "core/model/finding.hpp"
@@ -583,6 +584,22 @@ actions::QuarantineRoot Executor::quarantine_root() const {
   };
 }
 
+namespace {
+
+// The IndexerExclusion of a stored plan's params {"folders"}.
+Result<std::unique_ptr<Action>> index_exclusion(indexer::IIndexerScope* scope, const Json& params) {
+  if (scope == nullptr) {
+    return fail(Errc::invalid_state, "SetIndexerScope needs the Windows Search scope");
+  }
+  std::vector<fs::path> folders;
+  for (const std::string& folder : params.at("folders").get<std::vector<std::string>>()) {
+    folders.push_back(from_utf8(folder));
+  }
+  return std::make_unique<indexer::IndexerExclusion>(*scope, std::move(folders));
+}
+
+}  // namespace
+
 Result<std::unique_ptr<Action>> Executor::action_for(const Plan& plan, const PlanSpec& spec,
                                                      const Actor& actor) const {
   const auto missing = [&](std::string_view what) {
@@ -615,6 +632,9 @@ Result<std::unique_ptr<Action>> Executor::action_for(const Plan& plan, const Pla
         return missing("the command runner");
       }
       return std::make_unique<cleanup::DismCleanup>(*probes_.commands, probes_.dism, spec.tier);
+    }
+    if (plan.action == indexer::exclusion_action_name) {
+      return index_exclusion(probes_.indexer, params);
     }
     if (plan.action == startup::toggle_action_name) {
       if (probes_.startup == nullptr) {
@@ -1037,6 +1057,51 @@ Result<Plan> Executor::propose_startup(std::span<const std::string> ids, bool en
                                    "service's start type (Manual)"},
                .undo = "restores each item's previous state exactly",
                .params = Json{{"items", items}, {"enable", enable}}},
+      proposer);
+}
+
+Result<Plan> Executor::propose_index_exclusion(std::span<const std::int64_t> ids,
+                                               const Actor& proposer) {
+  if (probes_.indexer == nullptr) {
+    return fail(Errc::invalid_state, "the Windows Search scope cannot be read here");
+  }
+  if (ids.empty()) {
+    return fail(Errc::invalid_argument, "no folder named");
+  }
+  Result<std::vector<Candidate>> candidates = fail(Errc::not_found, "not read");
+  if (Result<void> read = environment_.store->read([&](store::Database& db) -> Result<void> {
+        candidates = candidates_by_id(db, ids);
+        return {};
+      });
+      !read) {
+    return tl::unexpected(read.error());
+  }
+  if (!candidates) {
+    return tl::unexpected(candidates.error());
+  }
+  std::vector<fs::path> folders;
+  std::vector<std::string> stored;
+  for (const Candidate& candidate : *candidates) {
+    if (candidate.source != indexed_folders_source) {
+      return fail(Errc::invalid_argument,
+                  "candidate " + std::to_string(candidate.id) + " is no indexed folder");
+    }
+    folders.push_back(candidate.path);
+    stored.push_back(utf8_text(candidate.path));
+  }
+  indexer::IndexerExclusion action(*probes_.indexer, folders);
+  return submit_setting(
+      action, std::string(indexer::exclusion_action_name),
+      PlanSpec{.kind = PlanKind::system_setting,
+               .tier = Tier::ask,
+               .scope = ExecutionContext::service,
+               .title = "Exclude " + std::to_string(folders.size()) + " folder" +
+                        (folders.size() == 1 ? "" : "s") + " from Windows Search",
+               .commands = {"Add a Windows Search exclusion rule for each folder "
+                            "(ISearchCrawlScopeManager::AddUserScopeRule); the files stay"},
+               .undo = "removes each rule added, or puts back the rule it replaced: the "
+                       "index scope is as before",
+               .params = Json{{"folders", stored}}},
       proposer);
 }
 

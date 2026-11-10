@@ -27,6 +27,7 @@
 #include "core/cleaning/executor.hpp"
 #include "core/cleaning/records.hpp"
 #include "core/cleaning/views.hpp"
+#include "core/indexer/folders.hpp"
 #include "core/ipc/frame.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/plans.hpp"
@@ -140,6 +141,21 @@ void fit_groups(Json& json) {
   groups.erase(groups.begin() + static_cast<std::ptrdiff_t>(kept), groups.end());
   json["groups_total"] = total;
   json["truncated"] = kept < total;
+}
+
+// data\workspaces.toml: nullopt when it does not exist, an error when it does not parse.
+Result<std::optional<clean::Workspaces>> read_workspaces(const packs::IPackFiles& files,
+                                                         const fs::path& data_dir) {
+  const fs::path file = data_dir / "workspaces.toml";
+  const Result<std::string> text = files.read(file);
+  if (!text) {
+    return std::optional<clean::Workspaces>{};
+  }
+  Result<clean::Workspaces> parsed = clean::parse_workspace_file(*text, file);
+  if (!parsed) {
+    return tl::unexpected(parsed.error());
+  }
+  return std::optional<clean::Workspaces>{*std::move(parsed)};
 }
 
 Candidate file_candidate(const fs::path& path, Bytes size, std::string reason, WallTime now) {
@@ -308,9 +324,18 @@ void CleaningService::reload_packs() {
   std::ranges::copy_if(
       registry_.attribution, std::back_inserter(uninstall_areas),
       [](const map::Area& area) { return area.reclaim.kind == map::ReclaimKind::uninstall; });
+  std::vector<map::Area> index_areas;
+  std::ranges::copy_if(registry_.attribution, std::back_inserter(index_areas),
+                       [](const map::Area& area) { return indexer::kept_out(area.category); });
+  std::vector<rules::CleaningRule> project_rules;
+  std::ranges::copy_if(
+      registry_.clean, std::back_inserter(project_rules),
+      [](const rules::CleaningRule& rule) { return rule.project_marker.has_value(); });
   const std::scoped_lock lock(mutex_);
   recipes_ = registry_.relocate;
   uninstall_areas_ = std::move(uninstall_areas);
+  index_areas_ = std::move(index_areas);
+  project_rules_ = std::move(project_rules);
   pack_status_ = std::move(status);
 }
 
@@ -972,6 +997,9 @@ Result<Json> CleaningService::analyze(const std::string& key, const std::stop_to
   if (key == "owner_decisions") {
     return analyze_decisions(stop);
   }
+  if (key == "indexed_folders") {
+    return analyze_indexed_folders(stop);
+  }
   const std::optional<fs::path> downloads = owner_->downloads;
   if (!downloads) {
     return fail(Errc::not_found, "the owner's Downloads folder is unknown");
@@ -1247,6 +1275,58 @@ Result<Json> CleaningService::analyze_decisions(const std::stop_token& stop) {
               {"notes", std::move(notes)}};
 }
 
+Result<Json> CleaningService::analyze_indexed_folders(const std::stop_token& stop) {
+  if (sources_.probes.indexer == nullptr || sources_.probes.tree == nullptr) {
+    return fail(Errc::invalid_state, "the Windows Search scope cannot be read here");
+  }
+  std::vector<map::Area> areas;
+  std::vector<rules::CleaningRule> rules;
+  {
+    const std::scoped_lock lock(mutex_);
+    areas = index_areas_;
+    rules = project_rules_;
+  }
+  Result<std::optional<clean::Workspaces>> workspaces =
+      read_workspaces(*sources_.files, sources_.data_dir);
+  if (!workspaces) {
+    return tl::unexpected(workspaces.error());
+  }
+  Result<std::vector<indexer::IndexedFolder>> folders = indexer::indexed_build_folders(
+      *sources_.probes.indexer, *sources_.probes.tree, *owner_->environment,
+      indexer::Knowledge{
+          .areas = areas, .rules = rules, .workspaces = *workspaces ? &**workspaces : nullptr},
+      stop);
+  if (!folders) {
+    return tl::unexpected(folders.error());
+  }
+  const WallTime now = sources_.clock->now();
+  std::vector<Candidate> found;
+  found.reserve(folders->size());
+  for (const indexer::IndexedFolder& folder : *folders) {
+    found.push_back(Candidate{.source = std::string(indexed_folders_source),
+                              .category = folder.category,
+                              .tier = Tier::ask,
+                              .scope = ExecutionContext::service,
+                              .strategy = "index_exclude",
+                              .path = folder.path,
+                              .reason = folder.label,
+                              .found_at = now});
+  }
+  if (Result<void> stored =
+          store_candidates(*sources_.store, std::string(indexed_folders_source), found);
+      !stored) {
+    return tl::unexpected(stored.error());
+  }
+  Json list = Json::array();
+  for (const Candidate& candidate : found) {
+    list.push_back(Json{{"id", candidate.id},
+                        {"path", utf8(candidate.path)},
+                        {"category", candidate.category},
+                        {"label", candidate.reason}});
+  }
+  return Json{{"folders", std::move(list)}};
+}
+
 std::vector<scanall::Finding> CleaningService::cold_folders(const space::ScanResult& tree,
                                                             const fs::path& profile, WallTime now,
                                                             Json& notes) const {
@@ -1437,6 +1517,14 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
       [this](const Json& params, const ipc::Caller& caller) {
         return propose_startup(params, proposer_of(params, caller));
       }));
+  added.push_back(methods.add_for_caller(
+      std::string(ipc::plans_propose_index_exclusion_method), {candidates, client},
+      [this](const Json& params, const ipc::Caller& caller) {
+        return on_executor([&](Executor& executor) {
+          return plan_answer(executor.propose_index_exclusion(
+              ids_of(params.at("candidates"), "ids"), proposer_of(params, caller)));
+        });
+      }));
   added.push_back(add(
       ipc::plans_recycle_method, {candidates},
       [this](const Json& params) {
@@ -1509,7 +1597,8 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
   for (const auto& [method, key] :
        {std::pair{ipc::space_old_downloads_method, "old_downloads"},
         std::pair{ipc::space_used_installers_method, "used_installers"},
-        std::pair{ipc::space_owner_decisions_method, "owner_decisions"}}) {
+        std::pair{ipc::space_owner_decisions_method, "owner_decisions"},
+        std::pair{ipc::space_indexed_folders_method, "indexed_folders"}}) {
     added.push_back(add(method, {refresh}, [this, key](const Json& params) {
       return space_answer(key, params.value("refresh", false));
     }));

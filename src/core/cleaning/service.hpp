@@ -212,6 +212,9 @@ class CleaningService {
   // space.owner_decisions: the cold folders of the owner's profile and the installed programs
   // in uninstall areas, stored as owner-decision candidates.
   [[nodiscard]] Result<nlohmann::json> analyze_decisions(const std::stop_token& stop);
+  // space.indexed_folders: the build-output and cache folders Windows Search indexes, stored
+  // as indexed-folder candidates.
+  [[nodiscard]] Result<nlohmann::json> analyze_indexed_folders(const std::stop_token& stop);
   // The cold folders of `tree` (the owner's profile, `profile`) and the installed programs to
   // review; what could not be judged goes to `notes`.
   [[nodiscard]] std::vector<scanall::Finding> cold_folders(const space::ScanResult& tree,
@@ -252,8 +255,10 @@ class CleaningService {
   mutable std::mutex mutex_;  // guards the members below
   std::optional<std::string> owner_problem_;
   std::vector<std::string> problems_;
-  std::vector<packs::RelocationRecipe> recipes_;  // of registry_
-  std::vector<map::Area> uninstall_areas_;        // of registry_: reclaim kind uninstall
+  std::vector<packs::RelocationRecipe> recipes_;    // of registry_
+  std::vector<map::Area> uninstall_areas_;          // of registry_: reclaim kind uninstall
+  std::vector<map::Area> index_areas_;              // of registry_: indexer::kept_out categories
+  std::vector<rules::CleaningRule> project_rules_;  // of registry_: clean cases of projects
   std::vector<ipc::PackStatus> pack_status_;
   std::vector<PlanId> purges_;  // runs to purge early, oldest request first; the first runs now
   std::vector<std::string> startup_items_;  // startup::Item::id of each id of startup.list, 1..n

@@ -23,6 +23,7 @@
 #include "core/cleanup/command_runner.hpp"
 #include "core/cleanup/handler_host.hpp"
 #include "core/cleanup/recycle_bin.hpp"
+#include "core/indexer/scope.hpp"
 #include "core/model/actor.hpp"
 #include "core/model/ids.hpp"
 #include "core/model/plan.hpp"
@@ -59,6 +60,7 @@ struct Probes {
   // The owner's environment, registry and running programs: where automatic recipes are now.
   const placement::Tools* owner_tools = nullptr;
   startup::IStartupSystem* startup = nullptr;  // the owner's startup items and the machine's
+  indexer::IIndexerScope* indexer = nullptr;   // the Windows Search crawl scope
 };
 
 struct ExecutorOptions {
@@ -73,6 +75,10 @@ struct ExecutorOptions {
 // The candidate source of the owner decisions (space.owner_decisions): cold folders (strategy
 // "archive") and installed programs to review (strategy "uninstall").
 inline constexpr std::string_view owner_decisions_source = "space.owner_decisions";
+
+// The candidate source of the build-output and cache folders Windows Search indexes
+// (space.indexed_folders), strategy "index_exclude".
+inline constexpr std::string_view indexed_folders_source = "space.indexed_folders";
 
 // Below this share of free space a volume's quarantined items go to the overflow volume, and a
 // quarantine already on it is purged by the next scheduled purge.
@@ -159,6 +165,13 @@ class Executor {
   // StartupToggle::preview does for an id it cannot change.
   [[nodiscard]] Result<Plan> propose_startup(std::span<const std::string> ids, bool enable,
                                              const Actor& proposer);
+  // An approval-only plan that keeps the folders of indexed-folder candidates `ids`
+  // (indexed_folders_source) out of the Windows Search index: action "SetIndexerScope", kind
+  // system_setting, one item per folder, params {"folders"}. Fails with invalid_state without
+  // the indexer probe, not_found for an unknown or stale candidate, invalid_argument for one of
+  // another source, and as IndexerExclusion::preview does for a folder no longer indexed.
+  [[nodiscard]] Result<Plan> propose_index_exclusion(std::span<const std::int64_t> ids,
+                                                     const Actor& proposer);
   // When the system volume has less than low_space_ratio free: automatic plans (approved at once,
   // run by the service, undoable) that reduce full hibernation and that keep a 4096 MB page file
   // on the system volume for crash dumps while a system-managed one goes to the best healthy

@@ -41,6 +41,7 @@
 #include "platform/games/win32_games.hpp"
 #include "platform/git/git_cli.hpp"
 #include "platform/image/wic_image_decoder.hpp"
+#include "platform/indexer/win32_indexer_scope.hpp"
 #include "platform/ipc/pipe_io.hpp"
 #include "platform/jobs/win32_jobs.hpp"
 #include "platform/jobs/win32_process_control.hpp"
@@ -184,7 +185,8 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
       .startup = [](std::string_view owner) -> std::unique_ptr<myclean::startup::IStartupSystem> {
         return std::make_unique<platform::Win32StartupSystem>(std::string(owner));
       },
-      .diagnostics = std::make_unique<platform::Win32DiagnosticsLog>()};
+      .diagnostics = std::make_unique<platform::Win32DiagnosticsLog>(),
+      .indexer = std::make_unique<platform::Win32IndexerScope>()};
   // "C:" / "" stays "C:" (a drive-relative path); the handlers need the volume root "C:\".
   const std::filesystem::path root =
       std::filesystem::path((drive.empty() ? std::string("C:") : drive) + "\\");

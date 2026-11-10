@@ -166,6 +166,16 @@ inline constexpr std::string_view startup_boot_times_method = "startup.boot_time
 // list, and with invalid_argument for an item that cannot change that way.
 inline constexpr std::string_view plans_propose_startup_method = "plans.propose_startup";
 
+// Parameters: candidates (record, required): {"ids": [int]}, "id" values of
+// space.indexed_folders; client (token, optional). Creates an awaiting_approval plan that keeps
+// those folders out of the Windows Search index with one exclusion rule each (the folders and
+// their files are not touched; undo restores the index scope exactly):
+// {"plan": int, "state": "awaiting_approval"}. Fails with not_found for an unknown or stale
+// id, invalid_argument for a candidate that is no indexed folder, and invalid_state for a
+// folder the index no longer holds or when Windows Search cannot be reached.
+inline constexpr std::string_view plans_propose_index_exclusion_method =
+    "plans.propose_index_exclusion";
+
 // TRAY ONLY. Parameters: candidates (record, required): {"ids": [int]}. The owner deletes
 // report-view items (a duplicate, an old download) to the Recycle Bin: an approved user-scope
 // cleanup plan, run by the tray through IFileOperation with FOFX_RECYCLEONDELETE.
@@ -319,6 +329,16 @@ inline constexpr std::string_view space_used_installers_method = "space.used_ins
 // judged, and why.
 inline constexpr std::string_view space_owner_decisions_method = "space.owner_decisions";
 inline constexpr std::size_t max_owner_programs = 100;
+
+// Parameters: refresh (boolean, optional). The build-output and cache folders Windows Search
+// indexes (core/indexer): the existing folders of the knowledge packs' attribution areas of
+// categories build-artifacts, dev-caches and app-caches, and the targets of their project clean
+// cases in the projects below the workspace roots, that the crawl scope includes (a folder
+// inside another one listed is left out):
+//   {..., "folders": [{"id", "path", "category", "label"}]}
+// "id" is what plans.propose_index_exclusion takes. Fails ("failed") when Windows Search is
+// not running.
+inline constexpr std::string_view space_indexed_folders_method = "space.indexed_folders";
 
 inline constexpr int space_result_minutes = 60;
 inline constexpr int max_space_top = 100;

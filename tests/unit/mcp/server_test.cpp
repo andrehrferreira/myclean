@@ -179,10 +179,12 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
                                              "find_duplicates",
                                              "find_used_installers",
                                              "find_owner_decisions",
+                                             "find_indexed_build_folders",
                                              "list_plans",
                                              "get_plan",
                                              "propose_cleanup",
                                              "propose_optimization",
+                                             "propose_index_exclusion",
                                              "list_startup",
                                              "boot_times",
                                              "propose_disable_startup"}));
@@ -280,7 +282,13 @@ TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
   static_cast<void>(text(call_tool("list_startup"), false));
   static_cast<void>(text(call_tool("propose_disable_startup", {{"item_ids", {2, 7}}}), false));
   static_cast<void>(text(call_tool("boot_times"), false));
-  ASSERT_EQ(calls().size(), 5U);
+  static_cast<void>(text(call_tool("find_indexed_build_folders", {{"refresh", true}}), false));
+  static_cast<void>(text(call_tool("propose_index_exclusion", {{"folder_ids", {8}}}), false));
+  ASSERT_EQ(calls().size(), 7U);
+  EXPECT_EQ(calls()[5].method, "space.indexed_folders");
+  EXPECT_EQ(calls()[5].params, (Json{{"refresh", true}}));
+  EXPECT_EQ(calls()[6].method, "plans.propose_index_exclusion");
+  EXPECT_EQ(calls()[6].params, (Json{{"candidates", {{"ids", {8}}}}, {"client", "claude-code"}}));
   EXPECT_EQ(calls()[2].method, "startup.list");
   EXPECT_EQ(calls()[3].method, "plans.propose_startup");
   EXPECT_EQ(calls()[3].params,
@@ -305,7 +313,10 @@ TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
   // A startup item is named by its number only, never by a registry value name.
   static_cast<void>(
       text(call_tool("propose_disable_startup", {{"item_ids", {"run:user:Discord"}}}), true));
-  EXPECT_EQ(calls().size(), 5U);
+  // An indexed folder too: a path is no folder id.
+  static_cast<void>(text(
+      call_tool("propose_index_exclusion", {{"folder_ids", {R"(F:\app\node_modules)"}}}), true));
+  EXPECT_EQ(calls().size(), 7U);
 }
 
 TEST_F(ServerTest, HealthSnapshotCombinesQualifyingTreesAndSystemSignals) {
@@ -416,7 +427,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 23U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 25U);
 }
 
 }  // namespace

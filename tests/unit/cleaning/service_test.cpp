@@ -919,6 +919,79 @@ TEST_F(CleaningServiceTest, StartupItemsChangeOnlyAfterTheOwnerApprovesAndUndoRe
             "not_found");
 }
 
+// Optimizer spec "Indexed node_modules detected", "Exclusion undone": a project's node_modules
+// inside the indexed scope is listed with an id, excluded only after the owner approves the plan,
+// and undo leaves the crawl scope as it was.
+TEST_F(CleaningServiceTest,
+       IndexedBuildFoldersAreExcludedOnlyAfterApprovalAndUndoRestoresTheScope) {
+  pack_files().put(testing::data_dir / "packs" / "node" / "pack.toml",
+                   std::string(R"toml(id = "node"
+version = "1.0.0"
+title = "Node"
+description = "Node projects."
+sources = ["observed on reference machine"]
+min_myclean = "0.1.0"
+)toml"));
+  pack_files().put(testing::data_dir / "packs" / "node" / "clean.toml", std::string(R"toml(
+[[rule]]
+id       = "artifacts"
+category = "dev-artifacts"
+tier     = "auto"
+scope    = "user"
+strategy = "delete"
+project  = { marker = "package.json" }
+targets  = ["node_modules"]
+require  = { git_ignored = true, not_in_use = true, inactive_days = 30 }
+)toml"));
+  pack_files().put(testing::data_dir / "workspaces.toml", std::string("roots = ['F:\\']\n"));
+  fs().add_file(LR"(F:\app\package.json)", Bytes{10});
+  fs().add_directory(LR"(F:\app\node_modules\react)");
+  fs().add_directory(LR"(F:\app\src)");
+  indexer().rules_list = {
+      indexer::ScopeRule{.url = LR"(file:///F:\)", .included = true, .user = true}};
+  const std::vector<indexer::ScopeRule> before = indexer().rules_list;
+  start();
+  work();
+
+  EXPECT_EQ(call("space.indexed_folders").at("state"), "scanning");
+  work_space();
+  const Json found = call("space.indexed_folders");
+  ASSERT_EQ(found.at("state"), "ready") << found.dump();
+  ASSERT_EQ(found.at("folders").size(), 1U) << found.dump();
+  const Json& folder = found.at("folders")[0];
+  EXPECT_EQ(folder.at("path"), "F:\\app\\node_modules");
+  EXPECT_EQ(folder.at("category"), "build-artifacts");
+  EXPECT_EQ(folder.at("label"), "Output of projects with package.json");
+
+  const Json proposed =
+      call("plans.propose_index_exclusion",
+           Json{{"candidates", {{"ids", {folder.at("id")}}}}, {"client", "claude"}}, false);
+  const std::int64_t id = proposed.at("plan").get<std::int64_t>();
+  EXPECT_EQ(proposed.at("state"), "awaiting_approval");
+  EXPECT_EQ(get(id).at("kind"), "system_setting");
+  EXPECT_EQ(get(id).at("proposer"), "mcp:claude");
+  work();
+  EXPECT_EQ(indexer().writes, 0);
+  EXPECT_TRUE(indexer().included(LR"(F:\app\node_modules)").value());
+
+  approve_all(id);
+  work();
+  EXPECT_EQ(get(id).at("state"), "verified");
+  EXPECT_FALSE(indexer().included(LR"(F:\app\node_modules)").value());
+  EXPECT_TRUE(indexer().included(LR"(F:\app\src)").value());
+
+  static_cast<void>(call("plans.undo", Json{{"id", id}}));
+  work();
+  EXPECT_EQ(get(id).at("state"), "rolled_back");
+  EXPECT_EQ(indexer().rules_list, before);
+
+  // A candidate of another analysis is no indexed folder.
+  EXPECT_EQ(error_of("plans.propose_index_exclusion", Json{{"candidates", {{"ids", {999}}}}}, true)
+                .at("data")
+                .at("errc"),
+            "not_found");
+}
+
 // Startup spec "Fallback before history exists": before MyClean has measured a logon, an item
 // shows the boot delay Windows attributed to its program in the last 30 days, labelled as such;
 // an item Windows did not report shows no impact.

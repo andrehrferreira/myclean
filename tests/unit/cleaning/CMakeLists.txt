@@ -9,6 +9,7 @@ myclean_add_test(cleaning
     service_test.cpp
   DEPENDS
     myclean::cleaning
+    myclean::indexer
     myclean::fakes
     myclean::packs
     myclean::user_tasks)

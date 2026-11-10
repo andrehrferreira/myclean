@@ -16,6 +16,7 @@
 #include "core/cleanup/command_runner.hpp"
 #include "core/cleanup/handler_host.hpp"
 #include "core/cleanup/recycle_bin.hpp"
+#include "core/indexer/scope.hpp"
 #include "core/ipc/status.hpp"
 #include "core/model/result.hpp"
 #include "core/os/file_system.hpp"
@@ -67,6 +68,8 @@ struct CleaningSources {
   std::function<std::unique_ptr<startup::IStartupSystem>(std::string_view owner_sid)> startup;
   // Windows' Diagnostics-Performance boot events; null: none.
   std::unique_ptr<startup::IDiagnosticsLog> diagnostics;
+  // The Windows Search crawl scope; null: no indexer-scope check.
+  std::unique_ptr<indexer::IIndexerScope> indexer;
 };
 
 // How this service runs cleaning.
