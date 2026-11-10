@@ -1,15 +1,15 @@
 ## 1. Implementation
 - [ ] 1.1 X6 spike: StartupApproved value format and task/service disable-enable round trip; note in docs/spikes/X6-startup.md
-- [ ] 1.3 O1: startup inventory (Run/RunOnce incl. WOW6432Node, Startup folders, StartupApproved state, logon/boot tasks via ITaskService, non-Microsoft auto services) with measured first-2-minutes impact; disable/enable via StartupApproved, task Enabled flag, service start type, with undo
-- [ ] 1.5 O3: search-indexer scope: detect indexed build/cache folders and offer exclusion as an action with undo
-- [ ] 1.6 O4: memory-leak detector on per-tree private bytes (sustained growth for hours) with trend alert
-- [ ] 1.7 O5: boot and logon time tracking attributed to startup items and services
-- [ ] 1.8 O6: background-app cost report (30-day CPU, RAM, disk, network per resident process)
-- [ ] 1.9 O7: verify loop: before/after measurement for every applied optimization, alert or auto-undo when reversible and worse
-- [ ] 1.11 S4: photo near-duplicates via WIC decode + 64-bit dHash, Hamming distance <= 6
-- [ ] 1.14 P4: Dev Drive advisor (explain + guide; never creates the volume itself)
-- [ ] 1.15 C6: WSL/Docker VHDX size report and compaction (ask tier; wsl --shutdown + compact)
-- [ ] 1.16 I3: guided freeze elimination: pause one suspect at a time with approval, auto-restore, compare incident rates
+- [x] 1.3 O1: startup inventory (Run/RunOnce incl. WOW6432Node, Startup folders, StartupApproved state, logon/boot tasks via ITaskService, non-Microsoft auto services) with measured first-2-minutes impact; disable/enable via StartupApproved, task Enabled flag, service start type, with undo; done in 01ce6a4 (core inventory and toggle), 5d520cd (Win32 layer), 61d1f13 (startup.list, MCP list_startup / propose_disable_startup, logon impact) and 6b75f99 (Diagnostics-Performance event 101 fallback, labelled "diagnostics"); the HKLM, task and service write paths are verified only against fakes until spike 1.1 runs
+- [x] 1.5 O3: search-indexer scope: detect indexed build/cache folders and offer exclusion as an action with undo; done in e372bb1 (space.indexed_folders / MCP find_indexed_build_folders from pack categories and workspace build targets, SetIndexerScope plan with exact undo; the live test only reads the crawl scope)
+- [x] 1.6 O4: memory-leak detector on per-tree private bytes (sustained growth for hours) with trend alert; done in 661ab58 (core/resident history: 5-min private-bytes buckets kept 2 days; rule process.memory-leak after 6 h of strictly rising hourly medians, >= 64 MiB and >= 10 %; detection only)
+- [x] 1.7 O5: boot and logon time tracking attributed to startup items and services; done in 354b70a (boot_time table from Diagnostics-Performance event 100, startup.boot_times / MCP boot_times with the 30-day median, contributors and before/after of disabled items)
+- [x] 1.8 O6: background-app cost report (30-day CPU, RAM, disk, network per resident process); done in 661ab58 (resident_hour kept 35 days; resident.costs / MCP background_costs, resident.trend / MCP memory_trend)
+- [x] 1.9 O7: verify loop: before/after measurement for every applied optimization, alert or auto-undo when reversible and worse; done in 8b5e3c7 (pending verification completed by the service every 60 s; logon_seconds and indexer_cpu_seconds_per_hour metrics, 10 % tolerance; auto-undo of reversible optimizations, alerts plan.rolled-back / plan.worse / plan.unverified)
+- [x] 1.11 S4: photo near-duplicates via WIC decode + 64-bit dHash, Hamming distance <= 6; done in 78d48b0 (space.duplicates mode "photos", MCP find_duplicates mode; WIC decode in src/platform/image; report only)
+- [x] 1.14 P4: Dev Drive advisor (explain + guide; never creates the volume itself); done in a1a0946 (space.dev_drive / MCP dev_drive_advice; read-only)
+- [x] 1.15 C6: WSL/Docker VHDX size report and compaction (ask tier; wsl --shutdown + compact); done in 01276a1 (space.vhdx / MCP list_vhdx, CompactVhdx ask-tier plan via plans.propose_compact / MCP propose_compact_vhdx: wsl --shutdown then the Virtual Disk API; never run on the reference machine, compaction tested on temporary VHDX files)
+- [x] 1.16 I3: guided freeze elimination: pause one suspect at a time with approval, auto-restore, compare incident rates; done in 6eafb77 (core/elimination, PauseSuspect plans approved in the tray, one at a time, restored at the end, on stop and after a crash; suspects owning low-level hooks get a guided pause the owner performs, never a suspend; tests use fakes only)
 - [ ] 1.17 Acceptance: prompt 2 passes; every applied optimization in the audit log has a verification result; NTFS index matches a full rescan on C: and F:
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
