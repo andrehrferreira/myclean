@@ -552,6 +552,52 @@ TEST_F(CleaningServiceTest, PhotoModeGroupsNearDuplicatesWhoseCopiesCanBePropose
   EXPECT_TRUE(fs().exists(pictures / L"beach7_small.jpg"));
 }
 
+TEST_F(CleaningServiceTest, TheDevDriveAdviceEstimatesRepositoriesAndCachesAndGuides) {
+  pack_files().put(testing::data_dir / "workspaces.toml", "roots = ['F:\\']\n");
+  pack_files().put(testing::data_dir / "packs" / "devcaches" / "pack.toml",
+                   R"toml(id = "devcaches"
+version = "1.0.0"
+title = "Dev caches"
+description = "A package cache."
+sources = ["observed on reference machine"]
+min_myclean = "0.1.0"
+)toml");
+  pack_files().put(testing::data_dir / "packs" / "devcaches" / "attribution.toml", R"toml(
+[[area]]
+id       = "npm"
+paths    = ['F:\caches\npm']
+category = "dev-caches"
+label    = "npm cache"
+reclaim  = { kind = "relocate", ref = "npm" }
+)toml");
+  fs().add_file(L"F:\\proj\\.git\\HEAD", 1_KiB);
+  fs().add_file(L"F:\\proj\\src\\main.rs", 2_MiB);
+  fs().add_file(L"F:\\caches\\npm\\_cacache\\blob", 3_MiB);
+  start();
+  work();  // the owner's session, then the packs
+
+  EXPECT_EQ(call("space.dev_drive", Json{{"refresh", true}}, false).at("state"), "scanning");
+  work_space();
+  const Json answer = call("space.dev_drive", Json::object(), false);
+
+  ASSERT_EQ(answer.at("state"), "ready") << answer.dump();
+  EXPECT_TRUE(answer.at("supported").get<bool>());
+  EXPECT_EQ(answer.at("build"), "26200.7171");
+  EXPECT_EQ(answer.at("dev_drives"), Json::array());
+  ASSERT_EQ(answer.at("repositories").size(), 1U);
+  EXPECT_EQ(answer.at("repositories")[0].at("path"), "F:\\proj");
+  ASSERT_EQ(answer.at("caches").size(), 1U);
+  EXPECT_EQ(answer.at("caches")[0].at("area"), "devcaches/npm");
+  EXPECT_EQ(answer.at("caches")[0].at("relocation"), "npm");
+  EXPECT_EQ(answer.at("recommended_bytes"), 50'000'000'000ULL);
+  EXPECT_EQ(answer.at("host").at("volume"), "D:");  // the healthy NVMe drive with most room
+  EXPECT_FALSE(answer.at("steps").empty());
+  EXPECT_FALSE(answer.at("explanation").get<std::string>().empty());
+  // Advice only: the files are where they were.
+  EXPECT_TRUE(fs().exists(L"F:\\proj\\src\\main.rs"));
+  EXPECT_TRUE(fs().exists(L"F:\\caches\\npm\\_cacache\\blob"));
+}
+
 TEST_F(CleaningServiceTest, TheHourlyPurgeDeletesAQuarantineOnAVolumeShortOfSpaceAtOnce) {
   add_targets();
   start();

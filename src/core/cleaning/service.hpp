@@ -24,6 +24,7 @@
 #include "core/clean/probes.hpp"
 #include "core/cleaning/executor.hpp"
 #include "core/cleaning/tray_tasks.hpp"
+#include "core/devdrive/advisor.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/status.hpp"
 #include "core/map/attribution.hpp"
@@ -81,7 +82,8 @@ struct SpaceProbes {
   const space::IZoneIdentifierReader* zones = nullptr;
   const space::IContentHasher* hasher = nullptr;
   const space::IInstallerInspector* installers = nullptr;
-  const space::IImageDecoder* images = nullptr;  // near-duplicate photos
+  const space::IImageDecoder* images = nullptr;         // near-duplicate photos
+  const devdrive::IDevDriveProbe* dev_drive = nullptr;  // the Dev Drive advisor
 };
 
 // Every pointer must outlive the service.
@@ -212,6 +214,8 @@ class CleaningService {
   // space.owner_decisions: the cold folders of the owner's profile and the installed programs
   // in uninstall areas, stored as owner-decision candidates.
   [[nodiscard]] Result<nlohmann::json> analyze_decisions(const std::stop_token& stop);
+  // space.dev_drive: the Dev Drive advice (read-only).
+  [[nodiscard]] Result<nlohmann::json> analyze_dev_drive(const std::stop_token& stop);
   // space.indexed_folders: the build-output and cache folders Windows Search indexes, stored
   // as indexed-folder candidates.
   [[nodiscard]] Result<nlohmann::json> analyze_indexed_folders(const std::stop_token& stop);
@@ -256,6 +260,7 @@ class CleaningService {
   std::optional<std::string> owner_problem_;
   std::vector<std::string> problems_;
   std::vector<packs::RelocationRecipe> recipes_;    // of registry_
+  std::vector<map::Area> dev_cache_areas_;          // of registry_: category dev-caches
   std::vector<map::Area> uninstall_areas_;          // of registry_: reclaim kind uninstall
   std::vector<map::Area> index_areas_;              // of registry_: indexer::kept_out categories
   std::vector<rules::CleaningRule> project_rules_;  // of registry_: clean cases of projects

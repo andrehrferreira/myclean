@@ -180,6 +180,7 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
                                              "find_used_installers",
                                              "find_owner_decisions",
                                              "find_indexed_build_folders",
+                                             "dev_drive_advice",
                                              "list_plans",
                                              "get_plan",
                                              "propose_cleanup",
@@ -252,8 +253,9 @@ TEST_F(ServerTest, StorageAndPlanToolsCallTheirMethods) {
   static_cast<void>(text(call_tool("get_plan", {{"id", 12}}), false));
   static_cast<void>(text(call_tool("find_owner_decisions"), false));
   static_cast<void>(text(call_tool("find_duplicates", {{"mode", "photos"}}), false));
+  static_cast<void>(text(call_tool("dev_drive_advice", {{"refresh", true}}), false));
 
-  ASSERT_EQ(calls().size(), 9U);
+  ASSERT_EQ(calls().size(), 10U);
   EXPECT_EQ(calls()[0].method, "space.top");
   EXPECT_EQ(calls()[0].params, (Json{{"path", "C"}, {"n", 20}, {"refresh", false}}));
   EXPECT_EQ(calls()[1].params, (Json{{"path", "downloads"}, {"n", 5}, {"refresh", false}}));
@@ -269,6 +271,8 @@ TEST_F(ServerTest, StorageAndPlanToolsCallTheirMethods) {
   EXPECT_EQ(calls()[7].params, (Json{{"refresh", false}}));
   EXPECT_EQ(calls()[8].method, "space.duplicates");
   EXPECT_EQ(calls()[8].params, (Json{{"refresh", false}, {"mode", "photos"}}));
+  EXPECT_EQ(calls()[9].method, "space.dev_drive");
+  EXPECT_EQ(calls()[9].params, (Json{{"refresh", true}}));
 }
 
 TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
@@ -427,7 +431,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 25U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 26U);
 }
 
 }  // namespace

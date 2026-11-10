@@ -23,6 +23,7 @@
 #include "core/clean/probes.hpp"
 #include "core/cleaning/records.hpp"
 #include "core/cleaning/service.hpp"
+#include "core/devdrive/advisor.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
@@ -229,6 +230,17 @@ class NameDigitDecoder final : public space::IImageDecoder {
   }
 };
 
+// Windows 11 25H2 with NTFS volumes C: and F:, unless a test changes them.
+class FakeDevDriveProbe final : public devdrive::IDevDriveProbe {
+ public:
+  devdrive::Support version{.build = 26200, .revision = 7171};
+  std::vector<devdrive::VolumeState> list{{.root = L"C:\\", .file_system = "NTFS"},
+                                          {.root = L"F:\\", .file_system = "NTFS"}};
+
+  [[nodiscard]] Result<devdrive::Support> support() const override { return version; }
+  [[nodiscard]] Result<std::vector<devdrive::VolumeState>> volumes() const override { return list; }
+};
+
 // A CleaningService over fakes, with its methods on a dispatcher. Volumes as on the owner's
 // machine: C: has 8 % free (its quarantine overflows to L:), F: 13 %.
 class CleaningFixture : public ::testing::Test {
@@ -276,7 +288,10 @@ class CleaningFixture : public ::testing::Test {
         },
         .files = &files_,
         .data_dir = data_dir,
-        .space = {.reader = &reader_, .hasher = &hasher_, .images = &images_},
+        .space = {.reader = &reader_,
+                  .hasher = &hasher_,
+                  .images = &images_,
+                  .dev_drive = &dev_drive_},
         .busy = [this] { return busy_; },
         .diagnostics = &diagnostics_};
     service_ = std::make_unique<CleaningService>(std::move(sources), std::move(settings));
@@ -400,6 +415,7 @@ class CleaningFixture : public ::testing::Test {
   space::testing::FakeDirectoryReader reader_;
   NameDigitHasher hasher_;
   NameDigitDecoder images_;
+  FakeDevDriveProbe dev_drive_;
   packs::testing::FakePackFiles files_;
   std::unique_ptr<store::Store> store_;
   std::unique_ptr<ipc::Dispatcher> methods_;

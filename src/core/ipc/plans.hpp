@@ -330,6 +330,21 @@ inline constexpr std::string_view space_used_installers_method = "space.used_ins
 inline constexpr std::string_view space_owner_decisions_method = "space.owner_decisions";
 inline constexpr std::size_t max_owner_programs = 100;
 
+// Parameters: refresh (boolean, optional). The Dev Drive advisor (placement spec): advice only,
+// it never creates, formats or resizes a volume and moves nothing.
+//   {..., "supported": bool (Windows 11 build 22621.2338 or later), "build": "<build>.<UBR>",
+//    "dev_drives": [{"volume", "file_system", "trusted", "note"}] (the Dev Drives present),
+//    "explanation": string (what a Dev Drive is), "repositories": [{"path", "bytes", "changed"}]
+//    (git repositories below the workspaces.toml roots changed in the last 30 days, not on a
+//    Dev Drive), "caches": [{"area", "label", "path", "bytes", "relocation", "note"}] (the
+//    package caches the knowledge packs name, not on a Dev Drive; "relocation" is the cache
+//    plans.propose_optimization kind relocate moves, "" when MyClean does not move it),
+//    "total_bytes", "recommended_bytes" (what would move plus half again, at least 50 GB),
+//    "host": null | {"volume", "free", "drive_class"} (where a new Dev Drive VHDX would go: the
+//    healthy NVMe or SATA SSD with the most room that keeps 10 % free), "steps": [string] (what
+//    the owner does, in order), "notes": [string] (what could not be judged), "sources": [string]}
+inline constexpr std::string_view space_dev_drive_method = "space.dev_drive";
+
 // Parameters: refresh (boolean, optional). The build-output and cache folders Windows Search
 // indexes (core/indexer): the existing folders of the knowledge packs' attribution areas of
 // categories build-artifacts, dev-caches and app-caches, and the targets of their project clean

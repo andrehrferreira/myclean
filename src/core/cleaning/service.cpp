@@ -27,6 +27,7 @@
 #include "core/cleaning/executor.hpp"
 #include "core/cleaning/records.hpp"
 #include "core/cleaning/views.hpp"
+#include "core/devdrive/advisor.hpp"
 #include "core/indexer/folders.hpp"
 #include "core/ipc/frame.hpp"
 #include "core/ipc/json_rpc.hpp"
@@ -324,6 +325,10 @@ void CleaningService::reload_packs() {
   std::ranges::copy_if(
       registry_.attribution, std::back_inserter(uninstall_areas),
       [](const map::Area& area) { return area.reclaim.kind == map::ReclaimKind::uninstall; });
+  std::vector<map::Area> dev_cache_areas;
+  std::ranges::copy_if(
+      registry_.attribution, std::back_inserter(dev_cache_areas),
+      [](const map::Area& area) { return area.category == map::Category::dev_caches; });
   std::vector<map::Area> index_areas;
   std::ranges::copy_if(registry_.attribution, std::back_inserter(index_areas),
                        [](const map::Area& area) { return indexer::kept_out(area.category); });
@@ -334,6 +339,7 @@ void CleaningService::reload_packs() {
   const std::scoped_lock lock(mutex_);
   recipes_ = registry_.relocate;
   uninstall_areas_ = std::move(uninstall_areas);
+  dev_cache_areas_ = std::move(dev_cache_areas);
   index_areas_ = std::move(index_areas);
   project_rules_ = std::move(project_rules);
   pack_status_ = std::move(status);
@@ -479,14 +485,12 @@ void CleaningService::run_scan(bool scheduled, const std::stop_token& stop) {
   }
   reload_packs();
   std::optional<clean::Workspaces> workspaces;
-  const fs::path workspace_file = sources_.data_dir / "workspaces.toml";
-  if (Result<std::string> text = sources_.files->read(workspace_file); text) {
-    Result<clean::Workspaces> parsed = clean::parse_workspace_file(*text, workspace_file);
-    if (parsed) {
-      workspaces = *std::move(parsed);
-    } else {
-      note(parsed.error().message);
-    }
+  if (Result<std::optional<clean::Workspaces>> read =
+          read_workspaces(*sources_.files, sources_.data_dir);
+      read) {
+    workspaces = *std::move(read);
+  } else {
+    note(read.error().message);
   }
   {
     const std::scoped_lock lock(mutex_);
@@ -997,6 +1001,9 @@ Result<Json> CleaningService::analyze(const std::string& key, const std::stop_to
   if (key == "owner_decisions") {
     return analyze_decisions(stop);
   }
+  if (key == "dev_drive") {
+    return analyze_dev_drive(stop);
+  }
   if (key == "indexed_folders") {
     return analyze_indexed_folders(stop);
   }
@@ -1201,6 +1208,53 @@ Result<Json> CleaningService::analyze_photo_duplicates(const std::stop_token& st
   json["mode"] = "photos";
   fit_groups(json);  // the most reclaimable groups first
   return json;
+}
+
+Result<Json> CleaningService::analyze_dev_drive(const std::stop_token& stop) {
+  if (sources_.space.dev_drive == nullptr) {
+    return fail(Errc::invalid_state, "the Dev Drive probe is not available");
+  }
+  Result<devdrive::Support> support = sources_.space.dev_drive->support();
+  if (!support) {
+    return tl::unexpected(support.error());
+  }
+  Result<std::vector<devdrive::VolumeState>> volumes = sources_.space.dev_drive->volumes();
+  if (!volumes) {
+    return tl::unexpected(volumes.error());
+  }
+  devdrive::Inputs inputs{.support = *support, .volumes = *std::move(volumes)};
+  std::vector<std::string> notes;
+  if (sources_.probes.drives != nullptr) {
+    if (Result<std::vector<placement::TargetVolume>> targets = sources_.probes.drives->volumes();
+        targets) {
+      inputs.targets = *std::move(targets);
+    } else {
+      notes.push_back("drive health and free space: " + targets.error().message);
+    }
+  }
+  if (sources_.probes.tree == nullptr) {
+    notes.emplace_back("the file system cannot be read here, so nothing is estimated");
+  } else {
+    const Result<std::optional<clean::Workspaces>> workspaces =
+        read_workspaces(*sources_.files, sources_.data_dir);
+    if (!workspaces) {
+      notes.push_back("repositories: " + workspaces.error().message);
+    } else if (!*workspaces) {
+      notes.emplace_back("repositories: no workspaces.toml names where projects live");
+    } else {
+      inputs.repositories = devdrive::active_repositories(
+          *sources_.probes.tree, **workspaces, sources_.clock->now(), devdrive::active_span, stop);
+    }
+    std::vector<map::Area> areas;
+    {
+      const std::scoped_lock lock(mutex_);
+      areas = dev_cache_areas_;
+    }
+    inputs.caches = devdrive::package_caches(*sources_.probes.tree, areas, *owner_->environment);
+  }
+  devdrive::Advice advice = devdrive::advise(inputs);
+  std::ranges::move(notes, std::back_inserter(advice.notes));
+  return Json(advice);
 }
 
 Result<Json> CleaningService::analyze_decisions(const std::stop_token& stop) {
@@ -1598,6 +1652,7 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
        {std::pair{ipc::space_old_downloads_method, "old_downloads"},
         std::pair{ipc::space_used_installers_method, "used_installers"},
         std::pair{ipc::space_owner_decisions_method, "owner_decisions"},
+        std::pair{ipc::space_dev_drive_method, "dev_drive"},
         std::pair{ipc::space_indexed_folders_method, "indexed_folders"}}) {
     added.push_back(add(method, {refresh}, [this, key](const Json& params) {
       return space_answer(key, params.value("refresh", false));

@@ -250,6 +250,15 @@ const Json& tool_list() {
               std::string(" The analysis runs in the background: while 'state' is 'scanning', "
                           "call again in a minute. Reads only; changes nothing."),
           object_schema({{"refresh", refresh_property()}})),
+      tool("dev_drive_advice",
+           std::string("Dev Drive advice: what a Dev Drive is (a ReFS volume Microsoft Defender "
+                       "scans in performance mode), whether this Windows supports one and which "
+                       "Dev Drives exist, the active git repositories and package caches that "
+                       "would move onto one with their sizes, the recommended size and the "
+                       "drive for a new one, and the owner's steps to create it and move them. "
+                       "Advice only: MyClean never creates, formats or resizes a volume.") +
+               std::string(space_note),
+           object_schema({{"refresh", refresh_property()}})),
       tool("list_plans",
            "MyClean's plans, newest first: id, title, kind (cleanup, handler, native, relocate, "
            "system_setting, quarantine_restore, recycle_bin, archive, uninstall), tier, scope, "
@@ -482,6 +491,9 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
   }
   if (tool == "find_used_installers") {
     return ServiceCall{.method = ipc::space_used_installers_method, .params = refresh};
+  }
+  if (tool == "dev_drive_advice") {
+    return ServiceCall{.method = ipc::space_dev_drive_method, .params = refresh};
   }
   if (tool == "find_owner_decisions") {
     return ServiceCall{.method = ipc::space_owner_decisions_method, .params = refresh};

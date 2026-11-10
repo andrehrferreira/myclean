@@ -16,6 +16,7 @@
 #include "core/cleanup/command_runner.hpp"
 #include "core/cleanup/handler_host.hpp"
 #include "core/cleanup/recycle_bin.hpp"
+#include "core/devdrive/advisor.hpp"
 #include "core/indexer/scope.hpp"
 #include "core/ipc/status.hpp"
 #include "core/model/result.hpp"
@@ -54,6 +55,7 @@ struct CleaningSources {
   std::unique_ptr<space::IContentHasher> hasher;
   std::unique_ptr<space::IInstallerInspector> installers;
   std::unique_ptr<space::IImageDecoder> images;
+  std::unique_ptr<devdrive::IDevDriveProbe> dev_drive;
   // The owner's session context for the owner with this SID (see svc::owner_context).
   std::function<Result<cleaning::OwnerContext>(std::string_view owner_sid)> owner;
   std::function<bool()> busy;  // the system volume is critically busy
