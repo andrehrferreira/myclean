@@ -74,3 +74,17 @@ paths    = ['%LOCALAPPDATA%\*\Saved\Logs', '%LOCALAPPDATA%\*\Saved\Crashes']
 category = "app-caches"
 label    = "Logs and crash reports of Unreal Engine games"
 reclaim  = { kind = "clean-rule", ref = "unreal-game-logs" }
+
+[[area]]
+id       = "battlenet-data"
+paths    = ['%ProgramData%\Battle.net']
+category = "games"
+label    = "Battle.net launcher data (agent, embedded browser, setup)"
+reclaim  = { kind = "uninstall", note = "Goes with the Battle.net launcher." }
+
+[[area]]
+id       = "overwolf-data"
+paths    = ['%ProgramData%\Overwolf']
+category = "games"
+label    = "Overwolf updater, setup files and logs"
+reclaim  = { kind = "uninstall", note = "Goes with Overwolf." }

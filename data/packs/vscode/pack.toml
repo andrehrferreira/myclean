@@ -1,5 +1,5 @@
 id          = "vscode"
-version     = "1.2.0"
+version     = "1.3.0"
 title       = "Visual Studio Code"
 description = "VS Code's leftovers of older versions, downloaded extension packages, the storage of workspaces no longer opened, its Chromium caches and its webviews' resource cache; extension web storage, installed extensions and Cursor's data are listed for review. Also what VS Code's and Copilot's processes are."
 sources     = [
@@ -8,10 +8,11 @@ sources     = [
   "https://code.visualstudio.com/api/references/vscode-api#ExtensionContext (storageUri: per-workspace extension storage, in User\\workspaceStorage)",
   "observed on reference machine: %APPDATA%\\Code holds CachedData (one folder per VS Code version), CachedExtensionVSIXs (the .vsix of installed extensions, downloaded again on update), User\\workspaceStorage (157 workspaces) and WebStorage; Cache, Code Cache, GPUCache and Crashpad beside Local Storage; extensions in %USERPROFILE%\\.vscode and %USERPROFILE%\\.cursor (analysis F-013, F-016)",
   "observed on reference machine: Code.exe and copilot-runtime.exe, their image paths and signers",
+  "observed on reference machine (2026-11-10 scan-all of C:): %APPDATA%\\Code\\User\\globalStorage (0.37 GiB, most of it the Zig toolchain ziglang.vscode-zig downloaded); %APPDATA%\\Antigravity with the VS Code layout (Backups, CachedData, CachedExtensionVSIXs, Cache, Code Cache), 0.53 GiB",
 ]
 min_myclean = "0.1.0"
 
 [applies_when]
 any = [{ path_exists = '%APPDATA%\Code' }, { path_exists = '%USERPROFILE%\.vscode' },
        { path_exists = '%USERPROFILE%\.cursor' }, { path_exists = '%APPDATA%\Cursor' },
-       { app_installed = '^Microsoft Visual Studio Code' }]
+       { app_installed = '^Microsoft Visual Studio Code' }, { path_exists = '%APPDATA%\Antigravity' }]

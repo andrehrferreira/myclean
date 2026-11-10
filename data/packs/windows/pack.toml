@@ -1,5 +1,5 @@
 id          = "windows"
-version     = "1.3.0"
+version     = "1.4.0"
 title       = "Windows"
 description = "Windows' own temporary files, crash data and servicing areas (cleaned through Windows' cleanup handlers and DISM where Windows owns them), PowerToys' leftover update installers (cleaned), the system files and folders of a volume, MyClean's quarantine, the owner's folders, and what the Windows processes are."
 sources     = [
@@ -13,5 +13,6 @@ sources     = [
   "https://learn.microsoft.com/windows/win32/msi/rollback-installation (the installer keeps rollback scripts and backed-up files until the installation commits)",
   "observed on reference machine: G:\\Config.Msi (hidden, access denied to the owner)",
   "observed on reference machine: E:\\$RECYCLE.BIN held 49.1 GiB; each deleted item's $I record holds its size and deletion time, read without Explorer (docs/analysis/e-drive-reclaim/04-recycle-bin.md)",
+  "observed on reference machine (2026-11-10 scan-all of C:): %ProgramData%\\Microsoft\\Windows Defender\\Definition Updates holds the current definitions and a Backup copy, 0.48 GiB; %ProgramData%\\MyClean holds myclean.db (0.78 GiB), logs, dumps and deploy",
 ]
 min_myclean = "0.1.0"

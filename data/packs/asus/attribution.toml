@@ -1,0 +1,8 @@
+# Sources: pack.toml.
+
+[[area]]
+id       = "asus-data"
+paths    = ['%ProgramData%\ASUS']
+category = "apps"
+label    = "ASUS Armoury Crate data (diagnostics, lighting SDK and effects, logs)"
+reclaim  = { kind = "uninstall", note = "Goes with Armoury Crate." }

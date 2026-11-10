@@ -1,9 +1,10 @@
 id          = "device-software"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "Device software"
 description = "What the background processes of audio, network, printer and accessory software (Realtek, Intel, Epson, TC-Helicon, Apple Bonjour) are, and Corsair iCUE's data folder."
 sources     = [
   "observed on reference machine: the Realtek audio, Intel PROSet wireless, Epson scanner, TC-Helicon GoXLR and Apple Bonjour processes, their image paths and signers",
   "observed on reference machine: %ProgramData%/Corsair/CUE5 holds iCUE's lighting effects and game integrations (GameSDKEffects), 1.9 GiB",
+  "observed on reference machine (2026-11-10 scan-all of C:): %APPDATA%\\Elgato (4KCaptureUtility, CameraHub, ControlCenter, ElgatoVirtualCapture, StreamDeck), 0.33 GiB; %ProgramData%\\Razer (Synapse3, Razer Central, GameManager), 0.39 GiB; %ProgramData%\\Sony\\Imaging Edge\\OnnxData, 0.34 GiB",
 ]
 min_myclean = "0.1.0"

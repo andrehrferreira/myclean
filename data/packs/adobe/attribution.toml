@@ -23,3 +23,11 @@ paths    = ['%ProgramData%\Adobe\CameraRaw']
 category = "apps"
 label    = "Adobe Camera Raw profiles and AI models (Photoshop, Lightroom)"
 reclaim  = { kind = "uninstall", note = "Goes with the last Adobe app that uses Camera Raw." }
+
+# Dunamis, the event store Adobe apps write (GUID-named folders; observed on reference machine).
+[[area]]
+id       = "adobe-dunamis"
+paths    = ['%APPDATA%\com.adobe.dunamis']
+category = "app-caches"
+label    = "Adobe Dunamis event store (usage data Adobe apps queue)"
+reclaim  = { kind = "manual-review", note = "Adobe apps write it; it goes with them." }

@@ -98,3 +98,8 @@ no_match = ['C:\ProgramData\NVIDIA Corporation\NVIDIA App\UpdateFramework']
 kind     = "attribution"
 case     = "ngx-models"
 match    = ['C:\ProgramData\NVIDIA\NGX\models']
+
+[[expect]]
+kind     = "attribution"
+case     = "nvidia-broadcast-data"
+match    = ['C:\ProgramData\NVIDIA Corporation\NVIDIA Broadcast']

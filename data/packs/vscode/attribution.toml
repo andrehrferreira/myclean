@@ -56,3 +56,20 @@ paths    = ['%APPDATA%\Cursor']
 category = "dev-caches"
 label    = "Cursor editor data (local history, workspace storage, caches)"
 reclaim  = { kind = "manual-review", note = "Its History folder is your local file history; uninstalling Cursor leaves this folder behind." }
+
+# Extensions keep their data here; some download their own toolchain (observed on reference
+# machine: ziglang.vscode-zig\zig\x86_64-windows-0.15.2, 0.36 GiB).
+[[area]]
+id       = "vscode-global-storage"
+paths    = ['%APPDATA%\Code\User\globalStorage']
+category = "dev-toolchains"
+label    = "VS Code extensions' own storage (data and toolchains extensions download)"
+reclaim  = { kind = "manual-review", note = "Uninstalling an extension removes what it keeps here." }
+
+# Antigravity, a VS Code fork: the same layout in %APPDATA%\Antigravity (observed on reference machine).
+[[area]]
+id       = "antigravity-data"
+paths    = ['%APPDATA%\Antigravity']
+category = "dev-caches"
+label    = "Antigravity editor data (backups, workspace storage, caches)"
+reclaim  = { kind = "manual-review", note = "Uninstalling Antigravity leaves this folder behind." }

@@ -4,3 +4,19 @@
 kind     = "attribution"
 case     = "corsair-icue"
 match    = ['C:\ProgramData\Corsair\CUE5']
+
+[[expect]]
+kind     = "attribution"
+case     = "elgato-apps"
+match    = ['C:\Users\owner\AppData\Roaming\Elgato']
+
+[[expect]]
+kind     = "attribution"
+case     = "razer-data"
+match    = ['C:\ProgramData\Razer']
+
+[[expect]]
+kind     = "attribution"
+case     = "sony-imaging-edge"
+match    = ['C:\ProgramData\Sony\Imaging Edge']
+no_match = ['C:\ProgramData\Sony']

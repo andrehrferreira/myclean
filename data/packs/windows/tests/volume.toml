@@ -117,3 +117,13 @@ kind     = "attribution"
 case     = "myclean-quarantine"
 match    = ['C:\.myclean-quarantine', 'D:\.myclean-quarantine']
 no_match = ['C:\.myclean-quarantine\1']
+
+[[expect]]
+kind     = "attribution"
+case     = "defender-data"
+match    = ['C:\ProgramData\Microsoft\Windows Defender']
+
+[[expect]]
+kind     = "attribution"
+case     = "myclean-data"
+match    = ['C:\ProgramData\MyClean']

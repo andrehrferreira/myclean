@@ -16,3 +16,8 @@ no_match = ['C:\Users\owner\AppData\Roaming\Adobe\Common\Peak Files']
 kind     = "attribution"
 case     = "camera-raw"
 match    = ['C:\ProgramData\Adobe\CameraRaw']
+
+[[expect]]
+kind     = "attribution"
+case     = "adobe-dunamis"
+match    = ['C:\Users\owner\AppData\Roaming\com.adobe.dunamis']

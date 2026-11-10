@@ -272,6 +272,15 @@ category = "downloads"
 label    = "Your downloads"
 reclaim  = { kind = "manual-review", note = "Old installers and archives are usually safe to delete after a look." }
 
+# Defender keeps the previous definitions in Definition Updates\Backup to roll an update back
+# (observed on reference machine).
+[[area]]
+id       = "defender-data"
+paths    = ['%ProgramData%\Microsoft\Windows Defender']
+category = "system"
+label    = "Microsoft Defender definitions and their backup copy"
+reclaim  = { kind = "none", note = "Defender manages its definitions itself." }
+
 # ---- MyClean's own ----------------------------------------------------------------------------
 
 # What an approved plan quarantined, in <volume>\.myclean-quarantine\<run>\<item>\<name>: kept 7
@@ -282,3 +291,10 @@ paths    = ['?:\.myclean-quarantine']
 category = "app-caches"
 label    = "MyClean quarantine (cleaned items kept 7 days for a restore)"
 reclaim  = { kind = "manual-review", note = "Purged by itself 7 days after each cleaning; the tray's quarantine page restores a run or deletes it now." }
+
+[[area]]
+id       = "myclean-data"
+paths    = ['%ProgramData%\MyClean']
+category = "apps"
+label    = "MyClean's own data (history database, logs, deploy copies)"
+reclaim  = { kind = "none", note = "The MyClean service manages it." }

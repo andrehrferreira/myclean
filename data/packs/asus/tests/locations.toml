@@ -1,0 +1,6 @@
+# Armoury Crate's machine-wide data on the reference machine.
+
+[[expect]]
+kind     = "attribution"
+case     = "asus-data"
+match    = ['C:\ProgramData\ASUS']

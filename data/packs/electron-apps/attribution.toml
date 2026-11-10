@@ -38,3 +38,12 @@ paths    = ['%LOCALAPPDATA%\*-updater']
 category = "app-caches"
 label    = "Downloaded app updates (Electron apps' auto-updater)"
 reclaim  = { kind = "clean-rule", ref = "updater-downloads", note = "The app downloads its next update in full instead of as a difference." }
+
+# The rest of each app's profile: sign-in, Local Storage, IndexedDB and the Service Worker
+# CacheStorage the app keeps for itself (observed on reference machine).
+[[area]]
+id       = "electron-app-data"
+paths    = ['%APPDATA%\discord', '%APPDATA%\Slack', '%APPDATA%\WhatsApp', '%APPDATA%\Replica Studios']
+category = "apps"
+label    = "Chromium-based app profiles (sign-in, local storage, service worker caches)"
+reclaim  = { kind = "manual-review", note = "Each app manages its own profile; signing out or reinstalling the app resets it. Cache, Code Cache and GPUCache are cleaned by their own rules." }

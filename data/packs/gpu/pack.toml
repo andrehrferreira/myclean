@@ -1,5 +1,5 @@
 id          = "gpu"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "Graphics drivers"
 description = "The shader caches of the NVIDIA and AMD drivers and of DirectX (cleaned, asking first), the drivers and updates the NVIDIA app downloaded (cleaned), other graphics driver installer leftovers (for review), NVIDIA's AI models (uninstall), and what the AMD and NVIDIA driver processes are."
 sources     = [
@@ -7,6 +7,7 @@ sources     = [
   "observed on reference machine: %ProgramData%\\NVIDIA\\NGX\\models holds NVIDIA Broadcast (nvbcast*) and DLSS models, 4.6 GiB",
   "observed on reference machine: NVIDIA shader caches in %LOCALAPPDATA%\\NVIDIA\\DXCache and GLCache and in LocalLow\\NVIDIA\\PerDriverVersion; DirectX's in %LOCALAPPDATA%\\D3DSCache; AMD's in %LOCALAPPDATA%\\AMD\\DxCache, DxcCache and VkCache; driver installers in C:\\NVIDIA, C:\\AMD and the NVIDIA app's download folders (analysis F-016)",
   "observed on reference machine: the AMD and NVIDIA driver processes, their image paths (DriverStore) and signers",
+  "observed on reference machine (2026-11-10 scan-all of C:): %ProgramData%\\NVIDIA Corporation\\NVIDIA Broadcast (assets, config, logs, temp), 0.27 GiB",
 ]
 min_myclean = "0.1.0"
 

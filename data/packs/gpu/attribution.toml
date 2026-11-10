@@ -51,3 +51,10 @@ paths    = ['%ProgramData%\NVIDIA\NGX\models']
 category = "apps"
 label    = "NVIDIA AI models (NVIDIA Broadcast effects, DLSS updates)"
 reclaim  = { kind = "uninstall", note = "Uninstalling NVIDIA Broadcast removes its models; the DLSS files belong to the driver." }
+
+[[area]]
+id       = "nvidia-broadcast-data"
+paths    = ['%ProgramData%\NVIDIA Corporation\NVIDIA Broadcast']
+category = "apps"
+label    = "NVIDIA Broadcast assets and data"
+reclaim  = { kind = "uninstall", note = "Goes with NVIDIA Broadcast." }

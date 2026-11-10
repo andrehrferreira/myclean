@@ -1,5 +1,5 @@
 id          = "electron-apps"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "Electron and WebView2 apps"
 description = "Chromium's HTTP, code and GPU caches and crash reports of Discord, Slack and Teams, and the update downloads Electron apps' auto-updater leaves behind (cleaned), and what their processes are."
 sources     = [
@@ -8,10 +8,11 @@ sources     = [
   "https://github.com/electron-userland/electron-builder/blob/master/packages/electron-updater/src/DownloadedUpdateHelper.ts (downloads go to <cache>\\pending with update-info.json; a missing or mismatching file is downloaded again)",
   "observed on reference machine: 12 %LOCALAPPDATA%\\<app>-updater folders (ledger-live-desktop, accurig, lm-studio, lens, binance, @trezorsuite-desktop, unityhub, ...) holding installer.exe and pending\\<setup>.exe, 3.9 GiB, most of them months or years old",
   "observed on reference machine: Discord.exe and ms-teams.exe, their image paths and signers",
+  "observed on reference machine (2026-11-10 scan-all of C:): %APPDATA%\\WhatsApp\\Service Worker\\CacheStorage (0.75 GiB) and %APPDATA%\\Slack\\Service Worker\\CacheStorage (0.61 GiB) beside Local Storage and IndexedDB; %APPDATA%\\Replica Studios with the same Chromium layout (0.31 GiB in Cache)",
 ]
 min_myclean = "0.1.0"
 
 [applies_when]
 any = [{ path_exists = '%APPDATA%\discord' }, { path_exists = '%APPDATA%\Slack' },
        { path_exists = '%APPDATA%\Microsoft\Teams' }, { path_exists = '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe' },
-       { path_exists = '%LOCALAPPDATA%\*-updater' }]
+       { path_exists = '%LOCALAPPDATA%\*-updater' }, { path_exists = '%APPDATA%\WhatsApp' }, { path_exists = '%APPDATA%\Replica Studios' }]

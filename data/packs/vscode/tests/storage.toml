@@ -1,0 +1,12 @@
+# Extension storage and the Antigravity fork.
+
+[[expect]]
+kind     = "attribution"
+case     = "vscode-global-storage"
+match    = ['C:\Users\owner\AppData\Roaming\Code\User\globalStorage']
+no_match = ['C:\Users\owner\AppData\Roaming\Code\User']
+
+[[expect]]
+kind     = "attribution"
+case     = "antigravity-data"
+match    = ['C:\Users\owner\AppData\Roaming\Antigravity']

@@ -1,8 +1,9 @@
 id          = "asus"
-version     = "1.0.0"
+version     = "1.1.0"
 title       = "ASUS utilities"
 description = "What the processes of ASUS Armoury Crate, Aura, ASUS system services and the bundled A-Volute (Nahimic, Sonic Studio) audio software are."
 sources     = [
   "observed on reference machine: the Armoury Crate, Aura, ASUS service and A-Volute Nahimic processes, their image paths and signers",
+  "observed on reference machine (2026-11-10 scan-all of C:): %ProgramData%\\ASUS holds ARMOURY CRATE Diagnosis (MBLedSDK, 0.47 GiB), FestsEffect\\data (0.31 GiB), ArmourySDK and logs",
 ]
 min_myclean = "0.1.0"

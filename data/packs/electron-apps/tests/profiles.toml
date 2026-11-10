@@ -1,0 +1,12 @@
+# App profiles: the caches go to their clean rules, the rest of the profile is the app's.
+
+[[expect]]
+kind     = "attribution"
+case     = "electron-app-data"
+match    = ['C:\Users\owner\AppData\Roaming\WhatsApp', 'C:\Users\owner\AppData\Roaming\Slack', 'C:\Users\owner\AppData\Roaming\discord', 'C:\Users\owner\AppData\Roaming\Replica Studios']
+no_match = ['C:\Users\owner\AppData\Roaming\discord\Cache', 'C:\Users\owner\AppData\Roaming\Slack\GPUCache']
+
+[[expect]]
+kind     = "attribution"
+case     = "slack-cache"
+match    = ['C:\Users\owner\AppData\Roaming\Slack\Cache']

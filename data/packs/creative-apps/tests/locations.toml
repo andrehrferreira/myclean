@@ -61,3 +61,8 @@ match    = ['C:\Users\owner\AppData\Roaming\.artomatix']
 kind     = "attribution"
 case     = "gaea-autosave"
 match    = ['C:\Users\owner\AppData\Roaming\QuadSpinner\Gaea\Autosave']
+
+[[expect]]
+kind     = "attribution"
+case     = "daz-data"
+match    = ['C:\Users\owner\AppData\Roaming\DAZ 3D']

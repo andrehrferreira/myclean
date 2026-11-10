@@ -112,3 +112,13 @@ no_match = ['C:\Users\owner\AppData\Local\b1\Saved\SaveGames\slot0.sav', 'C:\Use
 kind     = "attribution"
 case     = "unreal-game-logs"
 match    = ['C:\Users\owner\AppData\Local\SCUM\Saved\Crashes']
+
+[[expect]]
+kind     = "attribution"
+case     = "battlenet-data"
+match    = ['C:\ProgramData\Battle.net']
+
+[[expect]]
+kind     = "attribution"
+case     = "overwolf-data"
+match    = ['C:\ProgramData\Overwolf']

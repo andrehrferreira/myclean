@@ -63,3 +63,10 @@ paths    = ['%APPDATA%\.artomatix']
 category = "apps"
 label    = "Unity ArtEngine (discontinued) and its installed versions"
 reclaim  = { kind = "uninstall", note = "Settings > Apps uninstalls ArtEngine; each folder in Versions is one installed version." }
+
+[[area]]
+id       = "daz-data"
+paths    = ['%APPDATA%\DAZ 3D']
+category = "apps"
+label    = "DAZ Studio and DAZ Install Manager data"
+reclaim  = { kind = "manual-review", note = "Goes with DAZ Studio; your content library is elsewhere." }

@@ -6,3 +6,24 @@ paths    = ['%ProgramData%\Corsair\CUE5']
 category = "apps"
 label    = "Corsair iCUE lighting effects and game integrations"
 reclaim  = { kind = "uninstall", note = "Goes with Corsair iCUE." }
+
+[[area]]
+id       = "elgato-apps"
+paths    = ['%APPDATA%\Elgato']
+category = "apps"
+label    = "Elgato apps' data (Stream Deck, Camera Hub, Control Center, capture utilities)"
+reclaim  = { kind = "manual-review", note = "Stream Deck keeps your profiles here; the rest goes with the Elgato apps." }
+
+[[area]]
+id       = "razer-data"
+paths    = ['%ProgramData%\Razer']
+category = "apps"
+label    = "Razer Synapse and Razer Central data"
+reclaim  = { kind = "uninstall", note = "Goes with Razer Synapse." }
+
+[[area]]
+id       = "sony-imaging-edge"
+paths    = ['%ProgramData%\Sony\Imaging Edge']
+category = "apps"
+label    = "Sony Imaging Edge AI models (OnnxData)"
+reclaim  = { kind = "uninstall", note = "Goes with Sony Imaging Edge." }

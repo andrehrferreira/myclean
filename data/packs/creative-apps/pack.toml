@@ -1,5 +1,5 @@
 id          = "creative-apps"
-version     = "1.1.0"
+version     = "1.2.0"
 title       = "3D and video apps (Autodesk, Maxon, Reallusion)"
 description = "Installers Reallusion Hub downloaded (cleaned) and those Autodesk setup leaves behind (cleaned, asking first); the content libraries, QuickSaves and autosaves of ZBrush, Reallusion, Marvelous Designer and Gaea (for review); ArtEngine (uninstall); and what the licensing and helper processes of Autodesk, FlexNet, Maxon and Reallusion apps are."
 sources     = [
@@ -7,6 +7,7 @@ sources     = [
   "https://forums.autodesk.com/t5/installation-licensing-forum/ok-to-delete-c-autodesk-wi-folder-after-install/td-p/6038150 (community answers: programs run without C:\\Autodesk; Repair and some updates look for the installer files there)",
   "observed on reference machine: %LOCALAPPDATA%\\Reallusion\\RLDownloads keeps the setups Reallusion Hub downloaded (ActorCore_AccRIG.exe, Reallusion_HUB_*.exe); %PUBLIC%\\Documents\\Reallusion\\Reallusion Templates (15 GiB); %PUBLIC%\\Documents\\ZBrushData2025\\QuickSave (17.6 GiB of QuickSave files); %PUBLIC%\\Documents\\MarvelousDesigner\\Assets; %APPDATA%\\QuadSpinner\\Gaea\\Autosave; %APPDATA%\\.artomatix\\Versions\\ArtEngine\\2022.7.2",
   "observed on reference machine: the Autodesk, FlexNet licensing, Maxon (Red Giant) and Reallusion processes, their image paths and signers",
+  "observed on reference machine (2026-11-10 scan-all of C:): %APPDATA%\\DAZ 3D (Studio4, InstallManager, cms, dson), 0.26 GiB",
 ]
 min_myclean = "0.1.0"
 
@@ -15,4 +16,4 @@ any = [{ path_exists = '%SystemDrive%\Autodesk' }, { path_exists = '%ProgramFile
        { app_installed = '^Autodesk' }, { app_installed = '^Maxon' }, { app_installed = '^Red Giant' },
        { app_installed = '^Reallusion' }, { path_exists = '%LOCALAPPDATA%\Reallusion' },
        { path_exists = '%PUBLIC%\Documents\ZBrushData*' }, { path_exists = '%PUBLIC%\Documents\MarvelousDesigner' },
-       { path_exists = '%APPDATA%\QuadSpinner' }, { path_exists = '%APPDATA%\.artomatix' }]
+       { path_exists = '%APPDATA%\QuadSpinner' }, { path_exists = '%APPDATA%\.artomatix' }, { path_exists = '%APPDATA%\DAZ 3D' }]
