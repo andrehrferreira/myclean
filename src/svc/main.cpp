@@ -40,6 +40,7 @@
 #include "platform/fs/win32_file_system.hpp"
 #include "platform/games/win32_games.hpp"
 #include "platform/git/git_cli.hpp"
+#include "platform/image/wic_image_decoder.hpp"
 #include "platform/ipc/pipe_io.hpp"
 #include "platform/jobs/win32_jobs.hpp"
 #include "platform/jobs/win32_process_control.hpp"
@@ -168,6 +169,7 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
       .zones = std::make_unique<platform::Win32ZoneIdentifierReader>(),
       .hasher = std::make_unique<platform::Win32ContentHasher>(),
       .installers = std::make_unique<platform::Win32InstallerInspector>(),
+      .images = std::make_unique<platform::WicImageDecoder>(),
       .owner = [](std::string_view owner) { return svc::owner_context(owner); },
       // NOLINTNEXTLINE(bugprone-exception-escape): only std::bad_alloc, as anywhere in the service
       .busy = [&telemetry, drive] { return system_volume_busy(telemetry, drive); },

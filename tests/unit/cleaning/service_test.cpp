@@ -507,6 +507,51 @@ TEST_F(CleaningServiceTest, ManyDuplicatesStillFitOnePipeMessage) {
   EXPECT_LT(answer.dump().size(), ipc::max_payload_size);
 }
 
+TEST_F(CleaningServiceTest, PhotoModeGroupsNearDuplicatesWhoseCopiesCanBeProposedOnly) {
+  start();
+  work();
+  const path pictures = L"C:\\Users\\owner\\Pictures";
+  for (const wchar_t* name : {L"beach7.jpg", L"beach7_small.jpg", L"city42.jpg", L"broken.jpg"}) {
+    fs().add_file(pictures / name, 1_MiB);
+  }
+  reader().listings[pictures] = {space::testing::file("beach7.jpg", 3ULL << 20U, 1),
+                                 space::testing::file("beach7_small.jpg", 1ULL << 20U, 2),
+                                 space::testing::file("broken.jpg", 1ULL << 20U, 3),
+                                 space::testing::file("city42.jpg", 2ULL << 20U, 4)};
+  EXPECT_EQ(error_of("space.duplicates", Json{{"mode", "similar"}}, false).at("data").at("errc"),
+            "invalid_argument");
+  EXPECT_EQ(
+      call("space.duplicates", Json{{"mode", "photos"}, {"refresh", true}}, false).at("state"),
+      "scanning");
+  work_space();
+
+  const Json answer = call("space.duplicates", Json{{"mode", "photos"}}, false);
+  ASSERT_EQ(answer.at("state"), "ready") << answer.dump();
+  EXPECT_EQ(answer.at("mode"), "photos");
+  EXPECT_EQ(answer.at("analysed"), 3);
+  ASSERT_EQ(answer.at("not_analysed").size(), 1U);
+  EXPECT_EQ(answer.at("not_analysed")[0].at("path"), "C:\\Users\\owner\\Pictures\\broken.jpg");
+  ASSERT_EQ(answer.at("groups").size(), 1U);
+  const Json& files = answer.at("groups")[0].at("files");
+  ASSERT_EQ(files.size(), 2U);
+  EXPECT_EQ(files[0].at("path"), "C:\\Users\\owner\\Pictures\\beach7.jpg");
+  EXPECT_TRUE(files[0].at("keep").get<bool>());
+  EXPECT_EQ(files[1].at("path"), "C:\\Users\\owner\\Pictures\\beach7_small.jpg");
+  EXPECT_EQ(answer.at("groups")[0].at("distance"), 0);
+  EXPECT_EQ(answer.at("reclaimable"), 1ULL << 20U);
+  EXPECT_FALSE(answer.at("truncated").get<bool>());
+  // The exact-duplicate analysis is a separate result.
+  EXPECT_EQ(call("space.duplicates", Json::object(), false).at("state"), "scanning");
+
+  // Nothing was touched; the copy goes only through a proposal the owner approves.
+  EXPECT_TRUE(fs().exists(pictures / L"beach7_small.jpg"));
+  const Json proposed =
+      call("plans.propose_cleanup",
+           Json{{"candidates", {{"ids", {files[1].at("id")}}}}, {"client", "claude-code"}}, false);
+  EXPECT_EQ(proposed.at("state"), "awaiting_approval");
+  EXPECT_TRUE(fs().exists(pictures / L"beach7_small.jpg"));
+}
+
 TEST_F(CleaningServiceTest, TheHourlyPurgeDeletesAQuarantineOnAVolumeShortOfSpaceAtOnce) {
   add_targets();
   start();

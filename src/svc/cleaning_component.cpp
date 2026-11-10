@@ -81,7 +81,8 @@ Result<void> CleaningComponent::start(const Context& context) {
       .space = {.reader = sources_.reader.get(),
                 .zones = sources_.zones.get(),
                 .hasher = sources_.hasher.get(),
-                .installers = sources_.installers.get()},
+                .installers = sources_.installers.get(),
+                .images = sources_.images.get()},
       .busy = sources_.busy,
       .diagnostics = sources_.diagnostics.get()};
   service_ = std::make_unique<cleaning::CleaningService>(std::move(sources), std::move(settings));

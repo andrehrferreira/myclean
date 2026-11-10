@@ -26,6 +26,7 @@
 #include "core/space/downloads.hpp"
 #include "core/space/duplicates.hpp"
 #include "core/space/installers.hpp"
+#include "core/space/photos.hpp"
 #include "core/space/scanner.hpp"
 #include "core/startup/diagnostics.hpp"
 #include "core/startup/startup.hpp"
@@ -51,6 +52,7 @@ struct CleaningSources {
   std::unique_ptr<space::IZoneIdentifierReader> zones;
   std::unique_ptr<space::IContentHasher> hasher;
   std::unique_ptr<space::IInstallerInspector> installers;
+  std::unique_ptr<space::IImageDecoder> images;
   // The owner's session context for the owner with this SID (see svc::owner_context).
   std::function<Result<cleaning::OwnerContext>(std::string_view owner_sid)> owner;
   std::function<bool()> busy;  // the system volume is critically busy

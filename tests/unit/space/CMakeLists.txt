@@ -4,6 +4,7 @@ myclean_add_test(space
     duplicates_test.cpp
     installers_test.cpp
     json_test.cpp
+    photos_test.cpp
     scanner_test.cpp
     space_fakes.hpp
     top_test.cpp

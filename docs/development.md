@@ -62,7 +62,7 @@ src/core/packs/         knowledge packs (data/packs, docs/packs.md): loader, app
 src/core/clean/         rule engine: evaluates clean cases and finds dev artifacts (git-aware)
 src/core/cleanup/       Windows cleanup handlers, native prune commands and DISM as actions
 src/core/space/         scanner v1 and the space analyses (top-N, old downloads, installers,
-                        duplicates)
+                        duplicates, near-duplicate photos by dHash)
 src/core/index/         NTFS volume index from the $MFT with USN refresh and folder growth
 src/core/map/           `myclean map`: attribution of every byte of a volume and how to reclaim it
 src/core/placement/     drive classes and targets, relocation and recipes, hibernation, page
@@ -102,7 +102,7 @@ src/core/user_tasks/    the user-scope plans the tray runs under the owner's tok
                         commands, user-profile cleanup handlers, relocations; their reports
 src/platform/<module>/  Win32 implementations of src/core interfaces (proc, perf, disk,
                         disk_health, etw, trust, input, ipc, fs, service, scan, clean, git,
-                        cleanup, settings, ntfs, compress, defrag, packs, jobs, games)
+                        cleanup, settings, ntfs, compress, defrag, packs, jobs, games, image)
 src/svc/                myclean-svc: host, Service and its components (see below)
 src/tray/               myclean-tray: tray icon, toasts, dashboard (approval inbox, Space),
                         input watchdog, the worker that runs user tasks

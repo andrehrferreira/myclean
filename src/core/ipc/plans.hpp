@@ -279,13 +279,23 @@ inline constexpr std::string_view space_top_method = "space.top";
 //    "modified", "age_days", "origin": {"zone_id", "host_url", "referrer_url"}|null}]}
 inline constexpr std::string_view space_old_downloads_method = "space.old_downloads";
 
-// Parameters: refresh (boolean, optional). Exact duplicates in the owner's Desktop, Documents,
-// Downloads, Pictures, Videos and Music:
-//   {..., "roots": [string], "groups": [{"size", "hash", "reclaimable", "files": [{"id",
-//    "path", "size_on_disk", "modified"}]}], "reclaimable": int, "errors": [{"path", "error"}],
-//    "groups_total": int, "truncated": bool}
+// Parameters: refresh (boolean, optional), mode (token, optional): "exact" (default) or "photos".
+// Duplicates in the owner's Desktop, Documents, Downloads, Pictures, Videos and Music.
+// mode exact, files of equal content:
+//   {..., "mode": "exact", "roots": [string], "groups": [{"size", "hash", "reclaimable",
+//    "files": [{"id", "path", "size_on_disk", "modified"}]}], "reclaimable": int,
+//    "errors": [{"path", "error"}], "groups_total": int, "truncated": bool}
+// mode photos, near-duplicate photos (images of at least 16 KiB decoded with WIC, grouped when
+// their 64-bit dHash values differ in at most 6 bits, or are linked through such pairs):
+//   {..., "mode": "photos", "roots": [string], "groups": [{"distance" (the most bits two of
+//    its photos differ in), "reclaimable", "files": [{"id", "path", "size_on_disk", "modified",
+//    "width", "height", "hash" (hex), "keep": bool}]}], "reclaimable": int, "analysed": int,
+//    "not_analysed": [{"path", "error"}] (files no codec decoded), "groups_total": int,
+//    "truncated": bool}
+//   The first file of a group is the one to keep (the most pixels, then the largest file).
 // groups: the most reclaimable first, as many as fit 3/4 of one pipe message (truncated: some
-// were left out; every file of every group is still a candidate).
+// were left out; every file of every group is still a candidate). Each mode is its own analysis
+// with its own result. Fails with invalid_argument for another mode.
 inline constexpr std::string_view space_duplicates_method = "space.duplicates";
 
 // Parameters: refresh (boolean, optional). Installers in the owner's Downloads that are

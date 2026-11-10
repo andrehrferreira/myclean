@@ -54,6 +54,7 @@
 #include "core/space/duplicates.hpp"
 #include "core/space/installers.hpp"
 #include "core/space/json.hpp"
+#include "core/space/photos.hpp"
 #include "core/space/scanner.hpp"
 #include "core/space/top.hpp"
 #include "core/startup/boot_times.hpp"
@@ -121,6 +122,24 @@ Result<void> store_candidates(store::Store& store, const std::string& source,
                               std::vector<Candidate>& candidates) {
   return store.write(
       [&](store::Database& db) { return replace_candidates(db, source, candidates); });
+}
+
+// Keeps the first entries of json["groups"] that fit 3/4 of one pipe message, so the answer fits
+// one; sets "groups_total" and "truncated". Every file stays a candidate, so a proposal can name
+// any of them.
+void fit_groups(Json& json) {
+  Json& groups = json["groups"];
+  const std::size_t total = groups.size();
+  std::size_t kept = 0;
+  for (std::size_t bytes = 0; kept < total; ++kept) {
+    bytes += groups[kept].dump().size() + 1;
+    if (bytes > ipc::max_payload_size / 4 * 3) {
+      break;
+    }
+  }
+  groups.erase(groups.begin() + static_cast<std::ptrdiff_t>(kept), groups.end());
+  json["groups_total"] = total;
+  json["truncated"] = kept < total;
 }
 
 Candidate file_candidate(const fs::path& path, Bytes size, std::string reason, WallTime now) {
@@ -947,6 +966,9 @@ Result<Json> CleaningService::analyze(const std::string& key, const std::stop_to
   if (key == "duplicates") {
     return analyze_duplicates(stop);
   }
+  if (key == "photo_duplicates") {
+    return analyze_photo_duplicates(stop);
+  }
   if (key == "owner_decisions") {
     return analyze_decisions(stop);
   }
@@ -1066,22 +1088,29 @@ Result<Json> CleaningService::analyze_installers(const fs::path& downloads,
   return json;
 }
 
-Result<Json> CleaningService::analyze_duplicates(const std::stop_token& stop) {
-  if (sources_.space.hasher == nullptr) {
-    return fail(Errc::invalid_state, "the content hasher is not available");
-  }
+std::vector<space::ScanResult> CleaningService::scan_owner_folders(const std::stop_token& stop,
+                                                                   Json& roots_json) const {
   std::vector<fs::path> roots = owner_->locations.owner_known_folders;
   if (const std::optional<fs::path> downloads = owner_->downloads; downloads) {
     roots.push_back(*downloads);
   }
   std::vector<space::ScanResult> scans;
-  Json roots_json = Json::array();
+  roots_json = Json::array();
   for (const fs::path& root : roots) {
     if (Result<space::ScanResult> scanned = scan_folder(root, stop); scanned) {
       scans.push_back(*std::move(scanned));
       roots_json.push_back(utf8(root));
     }
   }
+  return scans;
+}
+
+Result<Json> CleaningService::analyze_duplicates(const std::stop_token& stop) {
+  if (sources_.space.hasher == nullptr) {
+    return fail(Errc::invalid_state, "the content hasher is not available");
+  }
+  Json roots_json;
+  const std::vector<space::ScanResult> scans = scan_owner_folders(stop, roots_json);
   const space::DuplicateReport report =
       space::find_duplicates(scans, *sources_.space.hasher, {}, stop);
   const WallTime now = sources_.clock->now();
@@ -1104,20 +1133,45 @@ Result<Json> CleaningService::analyze_duplicates(const std::stop_token& stop) {
     }
   }
   json["roots"] = std::move(roots_json);
-  // The answer must fit one pipe message: the most reclaimable groups, up to 3/4 of it. Every
-  // file stays a candidate, so a proposal can name any of them.
-  Json& groups = json["groups"];
-  const std::size_t total = groups.size();
-  std::size_t kept = 0;
-  for (std::size_t bytes = 0; kept < total; ++kept) {
-    bytes += groups[kept].dump().size() + 1;
-    if (bytes > ipc::max_payload_size / 4 * 3) {
-      break;
+  json["mode"] = "exact";
+  fit_groups(json);  // the most reclaimable groups first
+  return json;
+}
+
+Result<Json> CleaningService::analyze_photo_duplicates(const std::stop_token& stop) {
+  if (sources_.space.images == nullptr) {
+    return fail(Errc::invalid_state, "the image decoder is not available");
+  }
+  Json roots_json;
+  const std::vector<space::ScanResult> scans = scan_owner_folders(stop, roots_json);
+  const space::PhotoReport report =
+      space::find_similar_photos(scans, *sources_.space.images, {}, stop);
+  const WallTime now = sources_.clock->now();
+  std::vector<Candidate> found;
+  for (const space::PhotoGroup& group : report.groups) {
+    for (std::size_t index = 0; index < group.photos.size(); ++index) {
+      const space::Photo& photo = group.photos[index];
+      found.push_back(file_candidate(
+          photo.path, photo.size_on_disk,
+          std::string(index == 0 ? "the copy to keep of " : "near-duplicate photo of ") +
+              std::to_string(group.photos.size()) + " similar photos",
+          now));
     }
   }
-  groups.erase(groups.begin() + static_cast<std::ptrdiff_t>(kept), groups.end());
-  json["groups_total"] = total;
-  json["truncated"] = kept < total;
+  if (Result<void> stored = store_candidates(*sources_.store, "space.photo_duplicates", found);
+      !stored) {
+    return tl::unexpected(stored.error());
+  }
+  Json json = report;
+  std::size_t next = 0;
+  for (Json& group : json["groups"]) {
+    for (Json& file : group["files"]) {
+      file["id"] = found[next++].id;
+    }
+  }
+  json["roots"] = std::move(roots_json);
+  json["mode"] = "photos";
+  fit_groups(json);  // the most reclaimable groups first
   return json;
 }
 
@@ -1442,9 +1496,18 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
                       {Param{.name = "path", .type = ParamType::token, .required = true},
                        Param{.name = "n", .type = ParamType::integer}, refresh},
                       [this](const Json& params) { return space_top(params); }));
+  added.push_back(
+      add(ipc::space_duplicates_method, {refresh, Param{.name = "mode", .type = ParamType::token}},
+          [this](const Json& params) -> Result<Json> {
+            const std::string mode = params.value("mode", std::string("exact"));
+            if (mode != "exact" && mode != "photos") {
+              return fail(Errc::invalid_argument, "mode must be exact or photos, not " + mode);
+            }
+            return space_answer(mode == "photos" ? "photo_duplicates" : "duplicates",
+                                params.value("refresh", false));
+          }));
   for (const auto& [method, key] :
        {std::pair{ipc::space_old_downloads_method, "old_downloads"},
-        std::pair{ipc::space_duplicates_method, "duplicates"},
         std::pair{ipc::space_used_installers_method, "used_installers"},
         std::pair{ipc::space_owner_decisions_method, "owner_decisions"}}) {
     added.push_back(add(method, {refresh}, [this, key](const Json& params) {

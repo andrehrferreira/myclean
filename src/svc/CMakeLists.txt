@@ -64,8 +64,8 @@ add_executable(myclean-svc main.cpp ${PROJECT_SOURCE_DIR}/src/resources/myclean.
 target_link_libraries(myclean-svc PRIVATE
   myclean::svc myclean::platform_cleanup myclean::platform_diagnostics myclean::platform_disk
   myclean::platform_disk_health myclean::platform_etw myclean::platform_games myclean::platform_git
-  myclean::platform_jobs myclean::platform_packs myclean::platform_perf myclean::platform_proc
-  myclean::platform_settings myclean::platform_trust)
+  myclean::platform_image myclean::platform_jobs myclean::platform_packs myclean::platform_perf
+  myclean::platform_proc myclean::platform_settings myclean::platform_trust)
 if(MYCLEAN_ASAN)
   add_custom_command(TARGET myclean-svc POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${MYCLEAN_ASAN_RUNTIME}" "$<TARGET_FILE_DIR:myclean-svc>"

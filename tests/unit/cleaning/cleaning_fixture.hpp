@@ -27,6 +27,7 @@
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/space/duplicates.hpp"
+#include "core/space/photos.hpp"
 #include "core/startup/impact.hpp"
 #include "core/store/database.hpp"
 #include "core/store/migrations.hpp"
@@ -198,6 +199,35 @@ class NameDigitHasher final : public space::IContentHasher {
   }
 };
 
+// Decodes an image by the digits of its name: "beach7.jpg" and "beach7_small.jpg" show the same
+// picture (the "small" one at a quarter of the pixels); a name without digits does not decode.
+class NameDigitDecoder final : public space::IImageDecoder {
+ public:
+  [[nodiscard]] Result<space::DecodedImage> decode(
+      const std::filesystem::path& file) const override {
+    std::string digits;
+    const std::wstring name = file.filename().native();
+    for (const wchar_t character : name) {
+      if (character >= L'0' && character <= L'9') {
+        digits += static_cast<char>(character);
+      }
+    }
+    if (digits.empty()) {
+      return fail(Errc::invalid_data, "no codec decodes this file");
+    }
+    const bool small = name.find(L"small") != std::wstring::npos;
+    space::DecodedImage image{.thumbnail = {.width = 9, .height = 8, .pixels = {}},
+                              .width = small ? 2000U : 4000U,
+                              .height = small ? 1500U : 3000U};
+    std::size_t state = std::hash<std::string>{}(digits);
+    for (int pixel = 0; pixel < 72; ++pixel) {
+      state = (state * 6364136223846793005ULL) + 1442695040888963407ULL;
+      image.thumbnail.pixels.push_back(static_cast<std::uint8_t>(state >> 56U));
+    }
+    return image;
+  }
+};
+
 // A CleaningService over fakes, with its methods on a dispatcher. Volumes as on the owner's
 // machine: C: has 8 % free (its quarantine overflows to L:), F: 13 %.
 class CleaningFixture : public ::testing::Test {
@@ -244,7 +274,7 @@ class CleaningFixture : public ::testing::Test {
         },
         .files = &files_,
         .data_dir = data_dir,
-        .space = {.reader = &reader_, .hasher = &hasher_},
+        .space = {.reader = &reader_, .hasher = &hasher_, .images = &images_},
         .busy = [this] { return busy_; },
         .diagnostics = &diagnostics_};
     service_ = std::make_unique<CleaningService>(std::move(sources), std::move(settings));
@@ -365,6 +395,7 @@ class CleaningFixture : public ::testing::Test {
   startup::testing::FakeDiagnosticsLog diagnostics_;
   space::testing::FakeDirectoryReader reader_;
   NameDigitHasher hasher_;
+  NameDigitDecoder images_;
   packs::testing::FakePackFiles files_;
   std::unique_ptr<store::Store> store_;
   std::unique_ptr<ipc::Dispatcher> methods_;

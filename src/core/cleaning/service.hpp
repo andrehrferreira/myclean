@@ -45,6 +45,7 @@
 #include "core/space/downloads.hpp"
 #include "core/space/duplicates.hpp"
 #include "core/space/installers.hpp"
+#include "core/space/photos.hpp"
 #include "core/space/scanner.hpp"
 #include "core/startup/boot_times.hpp"
 #include "core/startup/diagnostics.hpp"
@@ -80,6 +81,7 @@ struct SpaceProbes {
   const space::IZoneIdentifierReader* zones = nullptr;
   const space::IContentHasher* hasher = nullptr;
   const space::IInstallerInspector* installers = nullptr;
+  const space::IImageDecoder* images = nullptr;  // near-duplicate photos
 };
 
 // Every pointer must outlive the service.
@@ -199,7 +201,14 @@ class CleaningService {
                                                              const std::stop_token& stop);
   [[nodiscard]] Result<nlohmann::json> analyze_installers(const std::filesystem::path& downloads,
                                                           const std::stop_token& stop);
+  // The scans of the owner's known folders and Downloads that could be read; their roots go to
+  // `roots_json`.
+  [[nodiscard]] std::vector<space::ScanResult> scan_owner_folders(const std::stop_token& stop,
+                                                                  nlohmann::json& roots_json) const;
   [[nodiscard]] Result<nlohmann::json> analyze_duplicates(const std::stop_token& stop);
+  // space.duplicates with mode "photos": the near-duplicate photos of the same folders, stored as
+  // candidates of "space.photo_duplicates".
+  [[nodiscard]] Result<nlohmann::json> analyze_photo_duplicates(const std::stop_token& stop);
   // space.owner_decisions: the cold folders of the owner's profile and the installed programs
   // in uninstall areas, stored as owner-decision candidates.
   [[nodiscard]] Result<nlohmann::json> analyze_decisions(const std::stop_token& stop);

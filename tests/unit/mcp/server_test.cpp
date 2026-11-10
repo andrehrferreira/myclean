@@ -249,14 +249,15 @@ TEST_F(ServerTest, StorageAndPlanToolsCallTheirMethods) {
   static_cast<void>(text(call_tool("list_plans", {{"state", "awaiting_approval"}}), false));
   static_cast<void>(text(call_tool("get_plan", {{"id", 12}}), false));
   static_cast<void>(text(call_tool("find_owner_decisions"), false));
+  static_cast<void>(text(call_tool("find_duplicates", {{"mode", "photos"}}), false));
 
-  ASSERT_EQ(calls().size(), 8U);
+  ASSERT_EQ(calls().size(), 9U);
   EXPECT_EQ(calls()[0].method, "space.top");
   EXPECT_EQ(calls()[0].params, (Json{{"path", "C"}, {"n", 20}, {"refresh", false}}));
   EXPECT_EQ(calls()[1].params, (Json{{"path", "downloads"}, {"n", 5}, {"refresh", false}}));
   EXPECT_EQ(calls()[2].method, "space.old_downloads");
   EXPECT_EQ(calls()[3].method, "space.duplicates");
-  EXPECT_EQ(calls()[3].params, (Json{{"refresh", true}}));
+  EXPECT_EQ(calls()[3].params, (Json{{"refresh", true}, {"mode", "exact"}}));
   EXPECT_EQ(calls()[4].method, "space.used_installers");
   EXPECT_EQ(calls()[5].method, "plans.list");
   EXPECT_EQ(calls()[5].params, (Json{{"state", "awaiting_approval"}}));
@@ -264,6 +265,8 @@ TEST_F(ServerTest, StorageAndPlanToolsCallTheirMethods) {
   EXPECT_EQ(calls()[6].params, (Json{{"id", 12}}));
   EXPECT_EQ(calls()[7].method, "space.owner_decisions");
   EXPECT_EQ(calls()[7].params, (Json{{"refresh", false}}));
+  EXPECT_EQ(calls()[8].method, "space.duplicates");
+  EXPECT_EQ(calls()[8].params, (Json{{"refresh", false}, {"mode", "photos"}}));
 }
 
 TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {

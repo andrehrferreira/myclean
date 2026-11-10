@@ -5,6 +5,7 @@
 #include "core/space/downloads.hpp"
 #include "core/space/duplicates.hpp"
 #include "core/space/installers.hpp"
+#include "core/space/photos.hpp"
 #include "core/space/scanner.hpp"
 #include "core/space/top.hpp"
 
@@ -32,5 +33,10 @@ void to_json(nlohmann::json& json, const InstallerReport& report);
 // {"groups": [{"size", "hash" (hex), "reclaimable", "files": [{"path", "size_on_disk",
 //  "modified"}]}], "reclaimable" (all groups), "errors": [{"path", "error"}], "cancelled"}
 void to_json(nlohmann::json& json, const DuplicateReport& report);
+
+// {"groups": [{"distance", "reclaimable", "files": [{"path", "size_on_disk", "modified", "width",
+//  "height", "hash" (hex), "keep": bool}]}], "reclaimable" (all groups), "analysed",
+//  "not_analysed": [{"path", "error"}], "cancelled"}. The first file of a group is the one to keep.
+void to_json(nlohmann::json& json, const PhotoReport& report);
 
 }  // namespace myclean::space

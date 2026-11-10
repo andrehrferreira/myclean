@@ -130,4 +130,30 @@ void to_json(nlohmann::json& json, const DuplicateReport& report) {
           {"cancelled", report.cancelled}};
 }
 
+void to_json(nlohmann::json& json, const PhotoReport& report) {
+  nlohmann::json groups = nlohmann::json::array();
+  std::uint64_t reclaimable = 0;
+  for (const PhotoGroup& group : report.groups) {
+    nlohmann::json files = nlohmann::json::array();
+    for (const Photo& photo : group.photos) {
+      files.push_back({{"path", utf8(photo.path)},
+                       {"size_on_disk", photo.size_on_disk.count()},
+                       {"modified", unix_seconds(photo.modified)},
+                       {"width", photo.width},
+                       {"height", photo.height},
+                       {"hash", to_hex(photo.hash)},
+                       {"keep", files.empty()}});
+    }
+    groups.push_back({{"distance", group.distance},
+                      {"reclaimable", group.reclaimable.count()},
+                      {"files", std::move(files)}});
+    reclaimable += group.reclaimable.count();
+  }
+  json = {{"groups", std::move(groups)},
+          {"reclaimable", reclaimable},
+          {"analysed", report.analysed},
+          {"not_analysed", errors_json(report.not_analysed)},
+          {"cancelled", report.cancelled}};
+}
+
 }  // namespace myclean::space

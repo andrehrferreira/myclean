@@ -215,11 +215,19 @@ const Json& tool_list() {
                std::string(space_note),
            object_schema({{"refresh", refresh_property()}})),
       tool("find_duplicates",
-           std::string("Exact duplicate files (equal content hash) in the owner's Desktop, "
-                       "Documents, Downloads, Pictures, Videos and Music, grouped, with the space "
-                       "each group could free.") +
+           std::string("Duplicate files in the owner's Desktop, Documents, Downloads, Pictures, "
+                       "Videos and Music, grouped, with the space each group could free. Mode "
+                       "'exact' (default): equal content hash. Mode 'photos': near-duplicate "
+                       "photos (a resized or re-encoded copy), decoded and compared by a 64-bit "
+                       "difference hash at most 6 bits apart, each file with its width, height "
+                       "and hash, the copy to keep (most pixels) first, and the images that could "
+                       "not be decoded listed as not analysed.") +
                std::string(space_note),
-           object_schema({{"refresh", refresh_property()}})),
+           object_schema({{"mode",
+                           {{"type", "string"},
+                            {"enum", {"exact", "photos"}},
+                            {"description", "exact (default) or photos"}}},
+                          {"refresh", refresh_property()}})),
       tool("find_used_installers",
            std::string("Installers (.msi, .exe) in the owner's Downloads whose product is "
                        "installed already.") +
@@ -444,7 +452,9 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
     return ServiceCall{.method = ipc::space_old_downloads_method, .params = refresh};
   }
   if (tool == "find_duplicates") {
-    return ServiceCall{.method = ipc::space_duplicates_method, .params = refresh};
+    return ServiceCall{.method = ipc::space_duplicates_method,
+                       .params = Json{{"refresh", arguments.value("refresh", false)},
+                                      {"mode", arguments.value("mode", "exact")}}};
   }
   if (tool == "find_used_installers") {
     return ServiceCall{.method = ipc::space_used_installers_method, .params = refresh};

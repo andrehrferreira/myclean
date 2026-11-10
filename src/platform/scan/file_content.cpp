@@ -84,9 +84,8 @@ Result<FILE_ID_INFO> file_id(HANDLE file, const fs::path& path) {
   return id;
 }
 
-// Opens a checked file for reading. It is opened as the entry itself first; only a file whose
-// content a filter serves in place is reopened through the filter, and must still be the same
-// file then.
+}  // namespace
+
 Result<wil::unique_hfile> open_content(const fs::path& path) {
   const Result<std::wstring> native = scan_support::win32_path(path);
   if (!native) {
@@ -126,8 +125,6 @@ Result<wil::unique_hfile> open_content(const fs::path& path) {
   }
   return filtered;
 }
-
-}  // namespace
 
 Result<std::optional<std::string>> Win32ZoneIdentifierReader::read(const fs::path& file) const {
   const Result<std::wstring> native = scan_support::win32_path(file);

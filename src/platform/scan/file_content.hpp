@@ -6,6 +6,8 @@
 #include <optional>
 #include <string>
 
+#include <wil/resource.h>
+
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/space/content.hpp"
@@ -45,6 +47,12 @@ class Win32ContentReader final : public space::IContentReader {
   [[nodiscard]] Result<std::string> read(const std::filesystem::path& file, std::uint64_t offset,
                                          std::size_t length) const override;
 };
+
+// Opens `path` for reading its content after checking the entry: a folder fails with
+// invalid_argument, a cloud file or a link with refused. It is opened as the entry itself first;
+// only a file whose content a filter serves in place (Windows compression, deduplication) is
+// reopened through the filter, and must still be the same file then.
+[[nodiscard]] Result<wil::unique_hfile> open_content(const std::filesystem::path& path);
 
 // The current user's Downloads folder (FOLDERID_Downloads).
 [[nodiscard]] Result<std::filesystem::path> downloads_folder();
