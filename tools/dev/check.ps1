@@ -13,20 +13,39 @@
 .EXAMPLE
     pwsh -File tools\dev\check.ps1 -Preset release
 #>
-param([string]$Preset = 'debug')
+param([string]$Preset = 'debug', [switch]$InOwnConsole)
 
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 
+# cl.exe prints its /showIncludes notes ("Observação: incluindo arquivo:" on a Portuguese MSVC) in
+# the code page of its console, or in the OEM code page when it has none (a git hook started
+# without a terminal), and ninja records a header dependency only when those bytes match the
+# msvc_deps_prefix CMake wrote into rules.ninja. CMake 4.1 writes it in UTF-8, cannot configure
+# under an OEM console, and corrupts it when ninja makes it regenerate under one. Builds ran with
+# mismatched bytes, objects had no header dependencies, and header edits left stale objects behind
+# (false ASan layout aborts in tests on 2026-11-10). So the gate always runs in a console of its
+# own, without a window, set to UTF-8: configure, regenerate and build then agree wherever the
+# gate is started from. (VSLANG=1033 is no way out: this MSVC has only its 1046 resources.)
+if (-not $InOwnConsole) {
+    $info = [Diagnostics.ProcessStartInfo]::new((Get-Process -Id $PID).Path)
+    foreach ($argument in @('-NoProfile', '-File', $PSCommandPath, '-Preset', $Preset, '-InOwnConsole')) {
+        $info.ArgumentList.Add($argument)
+    }
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.StandardOutputEncoding = [Text.Encoding]::UTF8
+    $process = [Diagnostics.Process]::Start($info)
+    while ($null -ne ($line = $process.StandardOutput.ReadLine())) { Write-Host $line }
+    $process.WaitForExit()
+    exit $process.ExitCode
+}
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+
 function Initialize-DevShell {
-    # cl.exe prints its /showIncludes notes ("Observação: incluindo arquivo:" on a Portuguese
-    # MSVC) in the code page of the console ninja runs in, and ninja records a header dependency
-    # only when those bytes match the prefix CMake wrote into rules.ninja. CMake 4.1 writes it in
-    # UTF-8 and cannot configure under an OEM console at all, so configure and build both run
-    # under UTF-8. (VSLANG=1033 is no way out: this MSVC has only its 1046 resources.)
-    [Console]::OutputEncoding = [Text.Encoding]::UTF8
     if (Get-Command cl.exe -ErrorAction SilentlyContinue) { return }
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) {
@@ -38,20 +57,27 @@ function Initialize-DevShell {
     Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64' | Out-Null
 }
 
-# A tree configured or built under an OEM console (this script did that until 2026-11-10) holds a
-# prefix that is not UTF-8, or objects compiled with no recorded header dependency, so a header
-# change left stale objects behind (seen as ASan layout aborts in tests). Such a tree is cleaned
-# and configured again once.
-function Reset-StaleBuildTree([string]$BuildDir) {
+# A tree whose rules.ninja does not hold the UTF-8 prefix cl.exe prints here (configured, or
+# regenerated, under another code page) is cleaned and configured again, once.
+function Reset-MismatchedBuildTree([string]$BuildDir) {
     $rules = Join-Path $BuildDir 'CMakeFiles\rules.ninja'
     if (-not (Test-Path -LiteralPath $rules)) { return }
-    $strict = [Text.UTF8Encoding]::new($false, $true)
+    $dir = Join-Path ([IO.Path]::GetTempPath()) "myclean-showincludes-$PID"
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
     try {
-        $null = $strict.GetString([IO.File]::ReadAllBytes($rules))
-        return
-    } catch [Text.DecoderFallbackException] {
-        Write-Host "== $BuildDir was configured under another code page; cleaning and configuring it again." -ForegroundColor Yellow
+        [IO.File]::WriteAllText((Join-Path $dir 'probe.h'), "`n")
+        [IO.File]::WriteAllText((Join-Path $dir 'probe.cpp'), "#include `"probe.h`"`n")
+        Push-Location $dir
+        try { $notes = & cl.exe /nologo /showIncludes /Zs probe.cpp 2>&1 } finally { Pop-Location }
+    } finally {
+        Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
     }
+    $note = $notes | Where-Object { "$_" -like '*probe.h' } | Select-Object -First 1
+    if (-not $note) { throw 'cl.exe printed no /showIncludes note.' }
+    $prefix = ("$note" -replace '\s*[A-Za-z]:\\.*$', '')
+    $recorded = [regex]::Match([IO.File]::ReadAllText($rules), '(?m)^\s*msvc_deps_prefix = ([^\r\n]*?)\s*$')
+    if ($recorded.Success -and $recorded.Groups[1].Value -eq $prefix) { return }
+    Write-Host "== $BuildDir expects another showIncludes prefix than cl.exe prints; cleaning and configuring it again." -ForegroundColor Yellow
     & ninja -C $BuildDir -t clean | Out-Null
     Remove-Item -LiteralPath (Join-Path $BuildDir 'CMakeCache.txt') -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $BuildDir 'CMakeFiles') -Recurse -Force
@@ -59,7 +85,7 @@ function Reset-StaleBuildTree([string]$BuildDir) {
 
 function Invoke-Step([string]$Name, [string]$FilePath, [string[]]$ArgumentList) {
     Write-Host "== $Name" -ForegroundColor Cyan
-    & $FilePath @ArgumentList
+    & $FilePath @ArgumentList 2>&1 | Out-Host
     if ($LASTEXITCODE -ne 0) {
         Write-Host "== $Name failed (exit code $LASTEXITCODE)" -ForegroundColor Red
         exit 1
@@ -70,9 +96,8 @@ Push-Location $RepoRoot
 try {
     Initialize-DevShell
     $tree = Join-Path $RepoRoot "build\$Preset"
-    Reset-StaleBuildTree $tree
-    if (-not (Test-Path -LiteralPath (Join-Path $tree 'CMakeCache.txt')) -or
-        -not (Test-Path -LiteralPath (Join-Path $tree 'CMakeFiles\rules.ninja'))) {
+    Reset-MismatchedBuildTree $tree
+    if (-not (Test-Path -LiteralPath (Join-Path $tree 'CMakeCache.txt'))) {
         Invoke-Step 'Configure' cmake @('--preset', $Preset)
     }
     Invoke-Step 'Build' cmake @('--build', '--preset', $Preset)
@@ -80,6 +105,9 @@ try {
     Invoke-Step 'Lint' cmake @('--build', '--preset', $Preset, '--target', 'lint')
     Invoke-Step 'Tests' ctest @('--preset', $Preset)
     Write-Host '== All checks passed' -ForegroundColor Green
+} catch {
+    Write-Host "== $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
 } finally {
     Pop-Location
 }
