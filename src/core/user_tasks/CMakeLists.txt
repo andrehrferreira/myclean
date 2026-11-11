@@ -10,6 +10,8 @@ myclean_add_library(user_tasks
     archive.hpp
     drive_facts.cpp
     drive_facts.hpp
+    recycle.cpp
+    recycle.hpp
     task.cpp
     task.hpp
     uninstall.cpp

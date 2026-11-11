@@ -113,7 +113,8 @@ const Json& tool_list() {
            "memory.commit_limit, memory.standby, memory.modified, memory.compressed, "
            "memory.hard_faults, disk.read_bytes, disk.write_bytes, disk.iops, "
            "disk.read_latency, disk.write_latency, disk.queue, disk.idle, volume.size, "
-           "volume.free, gpu.utilization, gpu.dedicated, gpu.shared, process.count. Reads only.",
+           "volume.free, gpu.utilization, gpu.dedicated, gpu.shared, process.count, "
+           "disk.temperature (entity: a drive's 'key' from disk_health). Reads only.",
            object_schema(
                {{"metric",
                  {{"type", "string"}, {"description", "Metric name, such as cpu.utility"}}},
@@ -121,8 +122,8 @@ const Json& tool_list() {
                  {{"type", "string"},
                   {"description",
                    "What the metric is about: 'system' (default), a disk number ('0'), a volume "
-                   "entity from list_volumes ('C'), a logical processor ('0_17') or a GPU "
-                   "adapter entity from metrics_latest"}}},
+                   "entity from list_volumes ('C'), a logical processor ('0_17'), a GPU "
+                   "adapter entity from metrics_latest or a drive 'key' from disk_health"}}},
                 {"hours",
                  {{"type", "number"},
                   {"exclusiveMinimum", 0},

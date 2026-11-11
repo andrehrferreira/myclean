@@ -43,7 +43,12 @@ class Win32BinRecords final : public cleanup::IBinRecords {
 // that exceeds `timeout`, or whose `stop` is requested, stops before the next item and fails;
 // when the item in progress does not end within a grace period, its thread is abandoned and
 // keeps running in the background.
-class Win32RecycleBin final : public cleanup::IRecycleBin {
+//
+// It is also the owner's cleanup::IRecycler: recycle() sends files to their volume's Recycle Bin
+// the way Explorer's Delete does (FOF_ALLOWUNDO | FOFX_RECYCLEONDELETE), with the same private
+// desktop, timeout and cancellation, and a progress sink that refuses the permanent delete the
+// shell falls back to when the Recycle Bin cannot take a file, so that file stays.
+class Win32RecycleBin final : public cleanup::IRecycleBin, public cleanup::IRecycler {
  public:
   explicit Win32RecycleBin(std::chrono::milliseconds timeout);
   ~Win32RecycleBin() override;
@@ -55,6 +60,8 @@ class Win32RecycleBin final : public cleanup::IRecycleBin {
   [[nodiscard]] Result<std::vector<cleanup::BinItem>> items(const std::stop_token& stop) override;
   [[nodiscard]] Result<std::vector<cleanup::Skipped>> remove(std::span<const std::string> ids,
                                                              const std::stop_token& stop) override;
+  [[nodiscard]] Result<std::vector<cleanup::Skipped>> recycle(
+      std::span<const std::filesystem::path> files, const std::stop_token& stop) override;
 
  private:
   std::chrono::milliseconds timeout_;

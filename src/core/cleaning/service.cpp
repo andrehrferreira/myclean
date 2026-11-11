@@ -1668,8 +1668,9 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
   store::Store& store = *sources_.store;
 
   std::vector<Result<void>> added;
-  added.push_back(add(ipc::cleaning_scan_method, {},
-                      [this](const Json&) -> Result<Json> { return request_scan(); }));
+  added.push_back(add(
+      ipc::cleaning_scan_method, {}, [this](const Json&) -> Result<Json> { return request_scan(); },
+      Access::tray));
   added.push_back(add(ipc::cleaning_status_method, {},
                       [this](const Json&) -> Result<Json> { return status(); }));
   added.push_back(add(ipc::plans_list_method, {Param{.name = "state", .type = ParamType::token}},

@@ -141,23 +141,33 @@ std::optional<std::string> TrustComponent::signer(std::string_view image) {
     return known->second;
   }
   if (queued_.insert(std::move(key)).second) {
-    queue_.push_back(path);
+    queue_.emplace_back(image);
     wake_.notify_one();
   }
   return std::nullopt;
 }
 
+std::vector<std::pair<std::string, std::string>> TrustComponent::take_resolved() {
+  const std::scoped_lock lock(mutex_);
+  return std::exchange(resolved_, {});
+}
+
 void TrustComponent::run(const std::stop_token& stop) {
   std::unique_lock lock(mutex_);
   while (wake_.wait(lock, stop, [this] { return !queue_.empty(); })) {
-    const std::filesystem::path image = std::move(queue_.front());
+    std::string image = std::move(queue_.front());
     queue_.pop_front();
     lock.unlock();
-    Result<trust::TrustSignal> signal = evaluator_->evaluate(image, kb_);
+    Result<trust::TrustSignal> signal =
+        evaluator_->evaluate(std::filesystem::path(std::u8string(image.begin(), image.end())), kb_);
     lock.lock();
-    std::string key = folded(utf8(image));
+    std::string key = folded(image);
     queued_.erase(key);
-    signers_.insert_or_assign(std::move(key), signal ? signal->signature.signer : std::nullopt);
+    const std::optional<std::string> signer = signal ? signal->signature.signer : std::nullopt;
+    signers_.insert_or_assign(std::move(key), signer);
+    if (signer) {
+      resolved_.emplace_back(std::move(image), *signer);
+    }
   }
 }
 

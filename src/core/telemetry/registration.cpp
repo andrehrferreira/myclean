@@ -21,37 +21,43 @@ namespace myclean::telemetry {
 
 namespace {
 
-// Adds the opened collector to the pipeline and returns it, or records why it is unavailable.
+// Adds `collector` to the pipeline, through `wrap` when it is set, and returns it.
 template <typename T>
-T* add_or_report(Pipeline& pipeline, Registration& registration, std::string_view name,
-                 Result<std::unique_ptr<T>> opened) {
+T* add(Pipeline& pipeline, const CollectorWrap& wrap, std::unique_ptr<T> collector) {
+  T* added = collector.get();
+  if (wrap) {
+    pipeline.add(wrap(std::move(collector)));
+  } else {
+    pipeline.add(std::move(collector));
+  }
+  return added;
+}
+
+// The same for a collector that may fail to open, or records why it is unavailable.
+template <typename T>
+T* add_or_report(Pipeline& pipeline, Registration& registration, const CollectorWrap& wrap,
+                 std::string_view name, Result<std::unique_ptr<T>> opened) {
   if (!opened) {
     registration.unavailable.push_back(Error{
         .code = opened.error().code, .message = std::string(name) + ": " + opened.error().message});
     return nullptr;
   }
-  T* collector = opened->get();
-  pipeline.add(std::move(*opened));
-  return collector;
+  return add(pipeline, wrap, *std::move(opened));
 }
 
 }  // namespace
 
 Registration register_collectors(Pipeline& pipeline, IProcessTable& processes,
                                  IPerfCounters& counters, const IMemoryStatus& memory,
-                                 const IVolumeInfo& volumes) {
+                                 const IVolumeInfo& volumes, const CollectorWrap& wrap) {
   Registration registration;
-  auto process_collector = std::make_unique<ProcessCollector>(processes);
-  registration.live.processes = process_collector.get();
-  pipeline.add(std::move(process_collector));
-  add_or_report(pipeline, registration, "cpu", make_cpu_collector(counters));
-  add_or_report(pipeline, registration, "memory", make_memory_collector(memory, counters));
-  add_or_report(pipeline, registration, "disks", make_disk_collector(counters));
+  registration.live.processes = add(pipeline, wrap, std::make_unique<ProcessCollector>(processes));
+  add_or_report(pipeline, registration, wrap, "cpu", make_cpu_collector(counters));
+  add_or_report(pipeline, registration, wrap, "memory", make_memory_collector(memory, counters));
+  add_or_report(pipeline, registration, wrap, "disks", make_disk_collector(counters));
   registration.live.gpu =
-      add_or_report(pipeline, registration, "gpu", GpuCollector::open(counters));
-  auto volume_collector = std::make_unique<VolumeCollector>(volumes);
-  registration.live.volumes = volume_collector.get();
-  pipeline.add(std::move(volume_collector));
+      add_or_report(pipeline, registration, wrap, "gpu", GpuCollector::open(counters));
+  registration.live.volumes = add(pipeline, wrap, std::make_unique<VolumeCollector>(volumes));
   return registration;
 }
 

@@ -317,8 +317,8 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   | `plans.propose_uninstall` | app, client | cleaning |
   | `alerts.list` | since | alerts |
   | `alerts.badge` | none | alerts |
-  | `alerts.snooze` | rule, entity, minutes | alerts |
-  | `alerts.dismiss` | rule, entity | alerts |
+  | `alerts.snooze` (tray only) | rule, entity, minutes | alerts |
+  | `alerts.dismiss` (tray only) | rule, entity | alerts |
   | `input.record_incident` | incident (record) | input |
   | `input.summary` | none | input |
   | `input.pauses` | none | elimination |

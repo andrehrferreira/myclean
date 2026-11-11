@@ -141,10 +141,12 @@ TEST_F(Phase1ServiceTest, VolumeFactsRaiseAlerts) {
   EXPECT_EQ(alerts[0].at("rule"), "volume.free-space-low");
   EXPECT_EQ(alerts[0].at("entity"), "C");
   EXPECT_EQ(ok(ipc::alerts_badge_method), (Json{{"count", 1}, {"worst", "warning"}}));
-  EXPECT_EQ(
-      ok(ipc::alerts_dismiss_method, Json{{"rule", "volume.free-space-low"}, {"entity", "C"}}),
-      Json::object());
-  EXPECT_EQ(ok(ipc::alerts_badge_method).at("count"), 0);
+  // Only the owner's tray may dismiss it: this client is not the configured tray.
+  const Result<Json> dismissed =
+      call(ipc::alerts_dismiss_method, Json{{"rule", "volume.free-space-low"}, {"entity", "C"}});
+  ASSERT_FALSE(dismissed.has_value());
+  EXPECT_EQ(dismissed.error().code, Errc::refused);
+  EXPECT_EQ(ok(ipc::alerts_badge_method).at("count"), 1);
 }
 
 TEST_F(Phase1ServiceTest, DiskHealthMapsDrivesToVolumes) {

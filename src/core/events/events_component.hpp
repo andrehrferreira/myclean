@@ -29,7 +29,9 @@ namespace myclean::events {
 //  - start() subscribes an EventRecorder (proc_start, net_minute) to the router, starts the event
 //    source, then seeds the router with the running processes, and starts a worker thread that
 //    closes network minutes every second and snapshots the TCP/UDP tables every minute;
-//  - other modules (governor, apps) subscribe their sinks to router().
+//  - other modules (governor, apps) subscribe their sinks to router();
+//  - every tick gives the stored starts whose image was verified since (ISignerLookup::
+//    take_resolved) their signer.
 // When the event source cannot start (for example, not elevated), start() still succeeds: the
 // connection snapshots keep working and unavailable() says why events are missing.
 class EventsComponent {
@@ -66,14 +68,16 @@ class EventsComponent {
     return connections_.get();
   }
 
-  // The worker's periodic work: closes network minutes, and snapshots the connection tables when
-  // connection_interval has passed. Only between start() and stop(); public for tests.
+  // The worker's periodic work: closes network minutes, backfills the signers resolved since,
+  // and snapshots the connection tables when connection_interval has passed. Only between
+  // start() and stop(); public for tests.
   void tick();
 
  private:
   IEventSource* source_;
   IConnectionTable* connection_table_;
   telemetry::IProcessTable* processes_;
+  ISignerLookup* signers_;
   EventRouter router_;
 
   const os::IClock* clock_ = nullptr;

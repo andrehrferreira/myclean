@@ -183,14 +183,17 @@ class ComponentHarness {
     return component.start(Context(*store_, methods_, *clock_, data_dir, owner_sid));
   }
 
-  [[nodiscard]] Result<nlohmann::json> call(
-      std::string_view method, const nlohmann::json& params = nlohmann::json::object()) const {
-    return ipc::parse_response(methods_.handle(ipc::make_request(7, method, params)), 7);
+  // `caller` {.tray = true} calls as the owner's tray, for the tray-only methods.
+  [[nodiscard]] Result<nlohmann::json> call(std::string_view method,
+                                            const nlohmann::json& params = nlohmann::json::object(),
+                                            const ipc::Caller& caller = {}) const {
+    return ipc::parse_response(methods_.handle(ipc::make_request(7, method, params), caller), 7);
   }
   // The JSON-RPC error code of a call; 0 when it succeeded.
-  [[nodiscard]] int code(std::string_view method, const nlohmann::json& params) const {
+  [[nodiscard]] int code(std::string_view method, const nlohmann::json& params,
+                         const ipc::Caller& caller = {}) const {
     const nlohmann::json response =
-        nlohmann::json::parse(methods_.handle(ipc::make_request(7, method, params)));
+        nlohmann::json::parse(methods_.handle(ipc::make_request(7, method, params), caller));
     return response.contains("error") ? response.at("error").at("code").get<int>() : 0;
   }
 

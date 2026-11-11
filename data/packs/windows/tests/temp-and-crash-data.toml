@@ -23,8 +23,6 @@ path = 'C:\Users\owner\AppData\Local\Microsoft\Windows\WER\ReportQueue\AppHang_s
 [[entry]]
 path = 'C:\Users\owner\AppData\Local\Microsoft\Windows\WER\Temp\WER1A2B.tmp.xml'
 [[entry]]
-path = 'C:\Windows\LiveKernelReports\WATCHDOG\WATCHDOG-20250901-1200.dmp'
-[[entry]]
 path = 'C:\Users\owner\AppData\Local\Microsoft\Windows\Explorer\iconcache_32.db'
 [[entry]]
 path = 'C:\Users\owner\AppData\Local\Microsoft\Windows\Explorer\thumbcache_256.db'
@@ -54,12 +52,6 @@ match    = ['C:\Users\owner\AppData\Local\Microsoft\Windows\WER\ReportArchive\Ap
             'C:\Users\owner\AppData\Local\Microsoft\Windows\WER\ReportQueue\AppHang_steam.exe_9f8e7d']
 no_match = ['C:\Users\owner\AppData\Local\Microsoft\Windows\WER\Temp',
             'C:\Users\owner\AppData\Local\Microsoft\Windows\WER\ReportArchive']
-
-# The deny-list keeps %WINDIR%\LiveKernelReports (see clean.toml).
-[[expect]]
-kind     = "clean"
-case     = "live-kernel-reports"
-no_match = ['C:\Windows\LiveKernelReports\WATCHDOG']
 
 [[expect]]
 kind     = "clean"

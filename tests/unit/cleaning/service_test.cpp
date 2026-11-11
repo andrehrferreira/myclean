@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <format>
+#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -23,8 +24,10 @@
 #include "core/ipc/json_rpc.hpp"
 #include "core/model/units.hpp"
 #include "core/placement/settings.hpp"
+#include "core/safety/deny_list.hpp"
 #include "core/startup/impact.hpp"
 #include "core/store/database.hpp"
+#include "core/user_tasks/task.hpp"
 #include "scanall/scanall_fakes.hpp"
 
 namespace myclean::cleaning {
@@ -200,6 +203,7 @@ TEST_F(CleaningServiceTest, TrayOnlyMethodsRefuseEveryOtherCaller) {
   scan();
   const std::int64_t id = plan_titled("shader-caches").at("id").get<std::int64_t>();
   const std::vector<std::pair<std::string, Json>> calls = {
+      {"cleaning.scan", Json::object()},
       {"plans.approve", Json{{"id", id}, {"selection", {{"all", true}}}}},
       {"plans.reject", Json{{"id", id}}},
       {"plans.undo", Json{{"id", id}}},
@@ -399,6 +403,23 @@ TEST_F(CleaningServiceTest, ItemsAreNeverMovedOntoAnUnhealthyOverflowVolume) {
   EXPECT_TRUE(fs().exists(L"C:\\cache\\big.iso"));
   EXPECT_FALSE(fs().exists(L"L:\\.myclean-quarantine"));
   EXPECT_TRUE(logged(id, "apply", "skipped", "quarantine volume health degraded"));
+}
+
+// When the volumes cannot be read, the item's own volume may be the full one: nothing is
+// quarantined, each item is skipped with the reason, and it stays where it is.
+TEST_F(CleaningServiceTest, NothingIsQuarantinedWhileTheVolumesCannotBeRead) {
+  fs().add_file(L"C:\\cache\\big.iso", 4_MiB);
+  start();
+  scan();
+  const std::int64_t id = plan_titled("c-caches").at("id").get<std::int64_t>();
+  drives().fail_with(Error{.code = Errc::io_error, .message = "WMI did not answer"});
+  approve_all(id);
+  work();
+  EXPECT_TRUE(fs().exists(L"C:\\cache\\big.iso"));
+  EXPECT_FALSE(fs().exists(L"C:\\.myclean-quarantine"));
+  EXPECT_FALSE(fs().exists(L"L:\\.myclean-quarantine"));
+  EXPECT_TRUE(
+      logged(id, "apply", "skipped", "free space of the volumes unknown: WMI did not answer"));
 }
 
 TEST_F(CleaningServiceTest, HourlyAutoRunDeletesAutoItemsAndWritesItsManifest) {
@@ -770,6 +791,30 @@ TEST_F(CleaningServiceTest, ReportViewDeletionIsARecycleTaskOfTheTray) {
   ASSERT_EQ(task.at("items").size(), 1U);
   EXPECT_EQ(task.at("items")[0].at("path"), "F:\\big.iso");
   EXPECT_EQ(task.at("items")[0].at("file_id").get<std::string>().size(), 32U);
+
+  // The tray reads it as a recycle task, sends the file to the Recycle Bin and reports it.
+  const Result<user_tasks::UserTask> parsed = user_tasks::parse_task(task);
+  ASSERT_TRUE(parsed.has_value()) << parsed.error().message;
+  EXPECT_EQ(parsed->kind, user_tasks::TaskKind::recycle);
+  cleanup::testing::FakeRecycler recycler;
+  recycler.on_recycle = [&](const std::filesystem::path& file) { fs().erase(file); };
+  const safety::ProtectedLocations locations{.windows = LR"(C:\Windows)",
+                                             .profiles = LR"(C:\Users)",
+                                             .owner_profile = LR"(C:\Users\owner)",
+                                             .owner_known_folders = {},
+                                             .myclean = {}};
+  const user_tasks::TaskReport report = user_tasks::run(
+      *parsed,
+      user_tasks::Toolbox{.file_system = &fs(), .locations = &locations, .recycler = &recycler},
+      std::stop_token{});
+  EXPECT_EQ(report.state, PlanState::verified) << report.error;
+  EXPECT_EQ(recycler.sent, std::vector<std::filesystem::path>{LR"(F:\big.iso)"});
+  EXPECT_FALSE(fs().exists(L"F:\\big.iso"));
+  EXPECT_EQ(call("user_tasks.report",
+                 Json{{"id", recycled.at("plan")}, {"result", user_tasks::report_record(report)}})
+                .at("state"),
+            "verified");
+  EXPECT_EQ(get(recycled.at("plan").get<std::int64_t>()).at("state"), "verified");
 }
 
 // Owner-decisions spec: the cold folders of the owner's profile and the programs in uninstall

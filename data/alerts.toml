@@ -120,6 +120,25 @@ severity = "warning"
 above = 5
 unit = "hours"
 
+# MyClean's own use (NFR-PERF-1): the service and the tray together, averaged over the last hour
+# (svc::TelemetryMethods::self_facts; nothing is reported before the service has run an hour).
+# The entity is "myclean"; CPU is the share of the whole machine, memory the private working set.
+[[rule]]
+id = "self.cpu-high"
+title = "MyClean uses more CPU than its budget"
+metric = "self.cpu_hour"
+severity = "warning"
+above = 1
+unit = "%"
+
+[[rule]]
+id = "self.memory-high"
+title = "MyClean uses more memory than its budget"
+metric = "self.memory_hour_mb"
+severity = "warning"
+above = 150
+unit = "MB"
+
 # The newest backup is older than the owner's limit (backup spec, "Backup Age Alert";
 # core/backup): the value is its age in whole days (infinite when no backup exists), the entity
 # "newest", the detail names its source. The backup component checks once a day. Set `above` to

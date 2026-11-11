@@ -25,7 +25,9 @@ inline constexpr std::string_view metrics_latest_method = "metrics.latest";
 // 1-10000, default 1000).
 // {"metric", "entity", "resolution": "raw"|"minute"|"hour", "points": [{"time", "min", "max",
 // "mean", "count"}]}: the finest resolution whose retention covers `from`; when there are more
-// than max_points points, consecutive points are merged into max_points buckets. Fails with
+// than max_points points, consecutive points are merged into max_points buckets. A metric is
+// known when a telemetry collector measures it now, or when the store holds a series of it (such
+// as "disk.temperature" of disks.health, whose entity is the drive's "key"). Fails with
 // invalid_argument for an unknown metric or from >= to.
 inline constexpr std::string_view metrics_query_method = "metrics.query";
 

@@ -189,7 +189,8 @@ TEST_F(HealthCollectorTest, EveryDriveHasAReadingOrAnExplicitReasonWithItsSource
 
   ASSERT_EQ(measured->size(), 1U);
   EXPECT_EQ(measured->front().key.metric, metric_disk_temperature);
-  EXPECT_EQ(measured->front().key.entity, "3");
+  EXPECT_EQ(measured->front().key.entity, nvme.reading.drive);  // stable, not the disk number
+  EXPECT_TRUE(nvme.reading.drive.starts_with(nvme.reading.model + "#"));
   EXPECT_EQ(measured->front().value, 40.0);
 }
 

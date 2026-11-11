@@ -79,12 +79,13 @@ user_tasks::TaskReport run_user_task(const user_tasks::UserTask& task, const std
         std::make_unique<platform::Win32HandlerHost>(handler_scan_timeout, handler_purge_timeout);
   }
   std::unique_ptr<platform::Win32RecycleBin> recycle_bin;
-  if (task.kind == user_tasks::TaskKind::recycle_bin) {
+  if (task.kind == user_tasks::TaskKind::recycle_bin ||
+      task.kind == user_tasks::TaskKind::recycle) {
     recycle_bin = std::make_unique<platform::Win32RecycleBin>(recycle_bin_timeout);
   }
   const platform::Win32Usage usage;
   std::optional<safety::ProtectedLocations> locations;
-  if (task.kind == user_tasks::TaskKind::archive) {
+  if (task.kind == user_tasks::TaskKind::archive || task.kind == user_tasks::TaskKind::recycle) {
     if (Result<safety::ProtectedLocations> found = platform::protected_locations(nullptr); found) {
       locations = *std::move(found);
     }
@@ -106,7 +107,8 @@ user_tasks::TaskReport run_user_task(const user_tasks::UserTask& task, const std
                                   .usage = &usage,
                                   .locations = locations ? &*locations : nullptr,
                                   .launcher = &launcher,
-                                  .packages = &packages};
+                                  .packages = &packages,
+                                  .recycler = recycle_bin.get()};
   return user_tasks::run(task, tools, stop);
 }
 

@@ -1,5 +1,5 @@
 id          = "windows"
-version     = "1.4.0"
+version     = "1.5.0"
 title       = "Windows"
 description = "Windows' own temporary files, crash data and servicing areas (cleaned through Windows' cleanup handlers and DISM where Windows owns them), PowerToys' leftover update installers (cleaned), the system files and folders of a volume, MyClean's quarantine, the owner's folders, and what the Windows processes are."
 sources     = [

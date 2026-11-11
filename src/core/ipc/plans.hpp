@@ -53,12 +53,13 @@ namespace myclean::ipc {
 
 // ---- cleaning.* -------------------------------------------------------------------------------
 
-// No parameters. Starts a cleaning scan in the background (rules, developer artifacts, Windows
-// handler sizes) unless one runs or cleaning is unavailable. The scan stores its candidates,
-// creates an `awaiting_approval` plan per ask-tier group and records report-tier candidates as
-// findings; its auto-tier items are deleted at once, without approval. The scheduled auto run
-// (hourly with catch-up, skipped while the system volume is critically busy) scans and deletes
-// them too.
+// TRAY ONLY: a scan deletes its auto-tier items at once, so only the owner's tray may start one
+// early. No parameters. Starts a cleaning scan in the background (rules, developer artifacts,
+// Windows handler sizes) unless one runs or cleaning is unavailable. The scan stores its
+// candidates, creates an `awaiting_approval` plan per ask-tier group and records report-tier
+// candidates as findings; its auto-tier items are deleted at once, without approval. The
+// scheduled auto run (hourly with catch-up, skipped while the system volume is critically busy)
+// scans and deletes them too.
 //   {"started": bool}
 inline constexpr std::string_view cleaning_scan_method = "cleaning.scan";
 

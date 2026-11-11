@@ -74,6 +74,32 @@ TEST_F(EventRecorderTest, StoresEveryStartWithTheCommandLineHash) {
           std::to_string(command_line_hash("cmd.exe /c exit 3")), "Microsoft Windows"}));
 }
 
+TEST_F(EventRecorderTest, StoresEveryStopWithItsProcessAndExitCode) {
+  recorder().on_stop(ProcessStop{.process = ProcessKey{.pid = 200, .created = noon},
+                                 .exited = noon + 3s,
+                                 .exit_code = 3,
+                                 .image = "cmd.exe"});
+
+  EXPECT_EQ(store().rows("SELECT time, pid, process_time, exit_code, image FROM proc_stop"),
+            (Rows{{seconds(noon + 3s), "200", seconds(noon), "3", "cmd.exe"}}));
+}
+
+// The first start of an image the trust cache had not seen is stored without a signer; once the
+// image is verified, those starts get it, and a start that has one keeps it.
+TEST_F(EventRecorderTest, BackfillsTheSignerOnlyOfStartsWithoutOne) {
+  const std::string tool = R"(C:\Program Files\PowerToys\PowerToys.exe)";
+  recorder().on_start(start_of(100, noon, 4, tool));
+  recorder().on_start(start_of(101, noon + 1s, 4, R"(C:\Users\owner\editor.exe)"));
+  ProcessStart signed_start = start_of(102, noon + 2s, 4, tool);
+  signed_start.signer = "Earlier Signer";
+  recorder().on_start(signed_start);
+
+  recorder().backfill_signer(tool, "Microsoft Corporation");
+
+  EXPECT_EQ(store().rows("SELECT pid, signer FROM proc_start ORDER BY pid"),
+            (Rows{{"100", "Microsoft Corporation"}, {"101", "NULL"}, {"102", "Earlier Signer"}}));
+}
+
 TEST_F(EventRecorderTest, UploadOfTenMegabytesShowsInThatMinute) {
   NetworkTransfer chunk = transfer_of(100, noon + 3s, Direction::send, mib);
   chunk.process =
@@ -144,6 +170,12 @@ TEST_F(EventRecorderTest, RetentionKeepsTwoYearsOfStartsAndThirtyDaysOfMinutes) 
   ASSERT_TRUE(ok(add_event_retention(store().get())));
   recorder().on_start(start_of(1, noon - std::chrono::days{731}, 4, R"(C:\old.exe)"));
   recorder().on_start(start_of(2, noon - std::chrono::days{31}, 4, R"(C:\recent.exe)"));
+  recorder().on_stop(ProcessStop{.process = ProcessKey{.pid = 1, .created = noon},
+                                 .exited = noon - std::chrono::days{731},
+                                 .image = "old.exe"});
+  recorder().on_stop(ProcessStop{.process = ProcessKey{.pid = 2, .created = noon},
+                                 .exited = noon - std::chrono::days{31},
+                                 .image = "recent.exe"});
   recorder().on_network(transfer_of(1, noon - std::chrono::days{31}, Direction::send, 1));
   recorder().on_network(transfer_of(1, noon - std::chrono::days{29}, Direction::send, 1));
   recorder().close_all();
@@ -151,6 +183,7 @@ TEST_F(EventRecorderTest, RetentionKeepsTwoYearsOfStartsAndThirtyDaysOfMinutes) 
 
   ASSERT_TRUE(ok(store().get().run_retention()));
   EXPECT_EQ(store().rows("SELECT pid FROM proc_start"), (Rows{{"2"}}));
+  EXPECT_EQ(store().rows("SELECT pid FROM proc_stop"), (Rows{{"2"}}));
   EXPECT_EQ(store().rows("SELECT time FROM net_minute"),
             (Rows{{seconds(noon - std::chrono::days{29})}}));
 }

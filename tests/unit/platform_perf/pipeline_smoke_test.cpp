@@ -115,13 +115,26 @@ TEST(TelemetryPipeline, EveryCollectorRunsOnThisMachineAndReportsItsOverhead) {
     EXPECT_FALSE(registration.live.volumes->latest()->volumes.empty());
 
     const double processors = std::thread::hardware_concurrency();
+    const double machine_percent = 100.0 * cpu.count() / elapsed.count() / processors;
+    const double private_mb = private_megabytes();
     std::cout << "polls: " << polls << " in " << elapsed.count() << " s\n"
               << "collector CPU: " << 1000.0 * cpu.count() / elapsed.count()
               << " ms per second = " << 100.0 * cpu.count() / elapsed.count()
-              << " % of one logical processor = "
-              << 100.0 * cpu.count() / elapsed.count() / processors << " % of the machine\n"
-              << "private memory: " << private_megabytes() << " MB (+"
-              << private_megabytes() - memory_before << " MB since the collectors opened)\n";
+              << " % of one logical processor = " << machine_percent << " % of the machine\n"
+              << "private memory: " << private_mb << " MB (+" << private_mb - memory_before
+              << " MB since the collectors opened)\n";
+#if defined(NDEBUG) && !defined(__SANITIZE_ADDRESS__)
+    // The build that ships is held to the budget. The debug build runs unoptimized under
+    // AddressSanitizer: several times the CPU, and its shadow memory and the quarantine of freed
+    // blocks (up to 256 MB by default) count as private bytes, so its figures are only reported.
+    // NFR-PERF-1: the service and the tray together stay under 1 % of the machine's CPU and
+    // 150 MB of RAM. The collectors are the service's steady work, so they alone must fit.
+    constexpr double cpu_budget_percent = 1.0;
+    constexpr double memory_budget_mb = 150.0;
+    EXPECT_LT(machine_percent, cpu_budget_percent);
+    EXPECT_LT(private_mb - memory_before, memory_budget_mb);
+    EXPECT_LT(private_mb, memory_budget_mb);
+#endif
     ASSERT_TRUE((*store)->close().has_value());
   }
   std::error_code ignored;

@@ -235,5 +235,41 @@ TEST(Win32RecycleBin, DeletesARecycledItemPermanently) {
   EXPECT_FALSE(fs::exists(fs::path(std::u8string(item->id.begin(), item->id.end()))));
 }
 
+// A file of the test's own goes to the bin through the owner's recycle(), as the tray's "Send to
+// Recycle Bin" does, and is then deleted permanently through the shell.
+TEST(Win32RecycleBin, RecyclesAFileAndLeavesAMissingOneWithItsReason) {
+  if (!real_bin_allowed()) {
+    GTEST_SKIP() << "set MYCLEAN_TEST_RECYCLE_BIN=1 to recycle and delete a file of the test's own";
+  }
+  const fs::path file = fs::temp_directory_path() /
+                        std::format(L"myclean-recycler-test-{}-{}.txt", ::GetCurrentProcessId(),
+                                    std::chrono::steady_clock::now().time_since_epoch().count());
+  if (::GetDriveTypeW(file.root_path().c_str()) != DRIVE_FIXED) {
+    GTEST_SKIP() << "the temporary folder is not on a fixed volume";
+  }
+  write_file(file, {'b', 'i', 'n'});
+  const fs::path missing = file.parent_path() / L"myclean-recycler-test-missing.txt";
+  Win32RecycleBin bin(2min);
+
+  const std::vector<fs::path> files = {file, missing};
+  const Result<std::vector<cleanup::Skipped>> left = bin.recycle(files, {});
+
+  ASSERT_TRUE(left) << left.error().message;
+  ASSERT_EQ(left->size(), 1U);
+  EXPECT_NE(left->front().target.find("myclean-recycler-test-missing"), std::string::npos);
+  EXPECT_FALSE(fs::exists(file));
+  const Result<std::vector<cleanup::BinItem>> items = bin.items({});
+  ASSERT_TRUE(items) << items.error().message;
+  const std::string stem = file.stem().string();
+  std::vector<std::string> ours;
+  for (const cleanup::BinItem& item : *items) {
+    if (item.name.find(stem) != std::string::npos) {
+      ours.push_back(item.id);
+    }
+  }
+  EXPECT_EQ(ours.size(), 1U);  // recycled, not deleted permanently
+  EXPECT_TRUE(bin.remove(ours, {}).has_value());
+}
+
 }  // namespace
 }  // namespace myclean::platform

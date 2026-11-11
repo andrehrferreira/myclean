@@ -32,6 +32,7 @@
 #include "core/placement/relocation.hpp"
 #include "core/safety/paths.hpp"
 #include "core/user_tasks/archive.hpp"
+#include "core/user_tasks/recycle.hpp"
 #include "core/user_tasks/uninstall.hpp"
 
 namespace myclean::user_tasks {
@@ -97,6 +98,9 @@ std::optional<TaskKind> parse_kind(std::string_view text) {
   if (text == "uninstall") {
     return TaskKind::uninstall;
   }
+  if (text == "cleanup") {
+    return TaskKind::recycle;  // only as plans.recycle makes it: parse_task checks
+  }
   return std::nullopt;
 }
 
@@ -129,6 +133,8 @@ void parse_action(const Json& action, UserTask& task) {
     case TaskKind::archive:
       task.archive =
           Archive{.source = path_of(action.at("source")), .target = path_of(action.at("target"))};
+      break;
+    case TaskKind::recycle:  // parse_task checked the action
       break;
     case TaskKind::uninstall:
       if (action.contains("package")) {
@@ -179,6 +185,7 @@ struct Built {
   std::unique_ptr<Action> action;
   const cleanup::HandlerCleanup* handlers = nullptr;  // set for a handler task
   const cleanup::RecycleBinCleanup* bin = nullptr;    // set for a recycle_bin task
+  const RecycleItems* recycled = nullptr;             // set for a recycle task
 };
 
 // The action of an owner's one-click decision: an archive or an uninstall task.
@@ -251,6 +258,25 @@ Result<Built> build(const UserTask& task, const Toolbox& tools, const std::stop_
                          tools.placement, *tools.runner, *task.recipe, stop)};
       }
       break;
+    case TaskKind::recycle: {
+      if (tools.recycler == nullptr || tools.file_system == nullptr || tools.locations == nullptr) {
+        return fail(Errc::invalid_state, "the tray cannot send files to the Recycle Bin");
+      }
+      std::vector<RecycleItem> items;
+      items.reserve(task.items.size());
+      for (const TaskItem& item : task.items) {
+        items.push_back(RecycleItem{.id = PlanItemId{item.id},
+                                    .path = item.path,
+                                    .identity = item.identity,
+                                    .size = item.bytes});
+      }
+      auto action = std::make_unique<RecycleItems>(RecycleTools{.recycler = tools.recycler,
+                                                                .file_system = tools.file_system,
+                                                                .locations = tools.locations},
+                                                   std::move(items), stop);
+      const RecycleItems* recycled = action.get();
+      return Built{.action = std::move(action), .recycled = recycled};
+    }
     case TaskKind::archive:
     case TaskKind::uninstall:
       return build_decision(task, tools, stop);
@@ -273,7 +299,8 @@ Result<Preview> select(const UserTask& task, const Preview& preview) {
       return placement::same_path(approved.path, item.path);
     });
     if (match == task.items.end() &&
-        (task.kind == TaskKind::handler || task.kind == TaskKind::recycle_bin)) {
+        (task.kind == TaskKind::handler || task.kind == TaskKind::recycle_bin ||
+         task.kind == TaskKind::recycle)) {
       continue;
     }
     item.id = PlanItemId{match == task.items.end() ? task.items.front().id : match->id};
@@ -379,6 +406,10 @@ Result<UserTask> parse_task(const Json& task) {
       return fail(Errc::refused, "the tray does not run plans of kind \"" + kind + "\"");
     }
     parsed.kind = *known;
+    if (parsed.kind == TaskKind::recycle && task.at("action") != Json{{"recycle", true}}) {
+      return fail(Errc::refused,
+                  "the tray runs a cleanup plan only when it sends files to the Recycle Bin");
+    }
     parsed.operation = parse_text(task, "operation", &parse_operation);
     parsed.tier = parse_text(task, "tier", &parse_tier);
     for (const Json& item : task.at("items")) {
@@ -474,6 +505,9 @@ TaskReport run(const UserTask& task, const Toolbox& tools, const std::stop_token
   }
   if (built->bin != nullptr) {
     report.skipped = built->bin->skipped();
+  }
+  if (built->recycled != nullptr) {
+    report.skipped = built->recycled->skipped();
   }
   return report;
 }

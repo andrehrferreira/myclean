@@ -182,4 +182,28 @@ class FakeRecycleBin final : public IRecycleBin {
   std::vector<std::string> removed;
 };
 
+// Records the files sent to the Recycle Bin and hands each to `on_recycle` (a test takes it out
+// of its fake file system), unless it is in `failures`.
+class FakeRecycler final : public IRecycler {
+ public:
+  [[nodiscard]] Result<std::vector<Skipped>> recycle(std::span<const std::filesystem::path> files,
+                                                     const std::stop_token& /*stop*/) override {
+    std::vector<Skipped> left;
+    for (const std::filesystem::path& file : files) {
+      sent.push_back(file);
+      const std::u8string text = file.u8string();
+      if (const auto error = failures.find(file); error != failures.end()) {
+        left.push_back({.target = std::string(text.begin(), text.end()), .error = error->second});
+      } else if (on_recycle) {
+        on_recycle(file);
+      }
+    }
+    return left;
+  }
+
+  std::function<void(const std::filesystem::path&)> on_recycle;
+  std::map<std::filesystem::path, Error> failures;
+  std::vector<std::filesystem::path> sent;
+};
+
 }  // namespace myclean::cleanup::testing

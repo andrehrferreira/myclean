@@ -264,7 +264,8 @@ stored plans, so they too go through SafeRemove.
 apply the preview reconciled with the stored plan (stored item ids, rejected items dropped).
 Only the owner may undo a `verified` plan (`verified -> rolled_back`). `QuarantineItems` takes a
 `QuarantineRoot`: the cleaning executor sends items (files and folders) of a volume under 10 %
-free to the overflow volume (default `L:`) and skips them when that drive is not healthy. A
+free to the overflow volume (default `L:`) and skips them when that drive is not healthy, and
+skips every item while the volumes' free space cannot be read. A
 folder moves there all or nothing: SafeRemove copies every file, flushes the copies once, then
 removes the source through its guarded delete, and puts everything back when any step fails; a
 folder holding a junction, link or cloud placeholder stays where it is. Restore moves it back
@@ -295,8 +296,9 @@ started in this order (stopped in reverse), so that each starts after those it u
 
 The contracts of the cleaning methods are in `src/core/ipc/plans.hpp`, the governor's in
 `src/core/ipc/governor.hpp` (`governor.choose`, `.pause`, `.game_mode` and `.user_state` are
-tray-only). Approving, rejecting and
-undoing plans, the user tasks, recycling and quarantine restore are tray-only
+tray-only). Starting a cleaning scan (`cleaning.scan`, which deletes its auto tier at once),
+approving, rejecting and undoing plans, the user tasks, recycling, quarantine restore and
+snoozing or dismissing an alert are tray-only
 (`ipc::Access::tray`): the service checks each request's pipe client process
 (`GetNamedPipeClientProcessId`) and accepts it only from the configured `myclean-tray.exe`
 (`ServiceOptions::tray_image`) running as the owner in an interactive session. A console run

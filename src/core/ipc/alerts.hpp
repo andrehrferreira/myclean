@@ -21,15 +21,16 @@ inline constexpr std::string_view alerts_list_method = "alerts.list";
 // "warning"|"critical"}.
 inline constexpr std::string_view alerts_badge_method = "alerts.badge";
 
-// Parameters: rule (token, required), entity (token, required), minutes (integer 1-43200,
-// required). No toast and no badge for that alert for `minutes`; its occurrences are still
-// recorded. {"snoozed_until"}. Fails with not_found when no stored alert has that rule and
-// entity.
+// TRAY ONLY (silencing an alert is the owner's choice). Parameters: rule (token, required),
+// entity (token, required), minutes (integer 1-43200, required). No toast and no badge for that
+// alert for `minutes`; its occurrences are still recorded. {"snoozed_until"}. Fails with
+// not_found when no stored alert has that rule and entity.
 inline constexpr std::string_view alerts_snooze_method = "alerts.snooze";
 inline constexpr int max_snooze_minutes = 43'200;  // 30 days
 
-// Parameters: rule (token, required), entity (token, required). The owner has seen the alert:
-// it leaves the active set until it fires again. {} on success; not_found as for snooze.
+// TRAY ONLY. Parameters: rule (token, required), entity (token, required). The owner has seen
+// the alert: it leaves the active set until it fires again. {} on success; not_found as for
+// snooze.
 inline constexpr std::string_view alerts_dismiss_method = "alerts.dismiss";
 
 inline constexpr std::string_view badge_none = "none";

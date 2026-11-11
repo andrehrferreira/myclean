@@ -578,7 +578,12 @@ actions::QuarantineRoot Executor::quarantine_root() const {
   }
   Result<std::vector<placement::TargetVolume>> volumes = probes_.drives->volumes();
   if (!volumes) {
-    return {};  // free space unknown: every item stays on its own volume
+    // Free space unknown: an item's own volume may be the full one, so nothing is quarantined
+    // (each item is skipped with this reason and stays where it is) until the drives are read.
+    std::string why = "free space of the volumes unknown: " + volumes.error().message;
+    return [why = std::move(why)](const PlanItem&) -> tl::expected<fs::path, std::string> {
+      return tl::unexpected(why);
+    };
   }
   return [volumes = *std::move(volumes), overflow = options_.overflow_root](
              const PlanItem& item) -> tl::expected<fs::path, std::string> {

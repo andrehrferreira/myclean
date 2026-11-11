@@ -85,17 +85,16 @@ TEST(TaskWorkerTest, AnUnreadableTaskIsReportedAsFailedWithoutRunning) {
         return done(task);
       },
       [&] { finished.notify(); });
-  Json recycle = tray_model::testing::native_task_json();
-  recycle["kind"] = "cleanup";
-  recycle["action"] = {{"recycle", true}};
-  worker.start(recycle);
+  Json setting = tray_model::testing::native_task_json();
+  setting["kind"] = "system_setting";  // the service's own work, never the tray's
+  worker.start(setting);
   ASSERT_TRUE(finished.wait_for(1));
   EXPECT_FALSE(ran);
   ASSERT_TRUE(worker.report().has_value());
   const Report report = worker.report().value_or(Report{});
   EXPECT_EQ(report.plan, 8);
   EXPECT_EQ(report.result.at("state"), "failed");
-  EXPECT_NE(report.result.at("error").get<std::string>().find("cleanup"), std::string::npos);
+  EXPECT_NE(report.result.at("error").get<std::string>().find("system_setting"), std::string::npos);
 
   worker.delivered();
   worker.start(Json{{"title", "no plan id"}});

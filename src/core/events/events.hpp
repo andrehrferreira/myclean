@@ -7,6 +7,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
@@ -121,6 +123,13 @@ class ISignerLookup {
 
   // nullopt for an unsigned image or one whose signature could not be verified.
   [[nodiscard]] virtual std::optional<std::string> signer(std::string_view image) = 0;
+
+  // The images verified as signed since the last call, each with its signer, as given to
+  // signer(): the starts stored before their image was verified get their signer from these.
+  // Empty by default (a lookup that answers every image at once).
+  [[nodiscard]] virtual std::vector<std::pair<std::string, std::string>> take_resolved() {
+    return {};
+  }
 
  protected:
   ISignerLookup() = default;

@@ -124,6 +124,11 @@ TEST_F(TrustComponentTest, SignerLookupAnswersFromTheCacheAndVerifiesInTheBackgr
   }));
   EXPECT_EQ(trust().signer(editor), std::nullopt);  // unsigned
 
+  // The events component backfills the starts stored before: only the signed image, once.
+  EXPECT_EQ(trust().take_resolved(),
+            (std::vector<std::pair<std::string, std::string>>{{path, "Microsoft Corporation"}}));
+  EXPECT_TRUE(trust().take_resolved().empty());
+
   // A bare file name (a process seeded before events started) is never looked up.
   EXPECT_EQ(trust().signer("PowerToys.exe"), std::nullopt);
   const std::scoped_lock lock(inspector().mutex);

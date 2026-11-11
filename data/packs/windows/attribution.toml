@@ -88,7 +88,7 @@ id       = "live-kernel-reports"
 paths    = ['%WINDIR%\LiveKernelReports']
 category = "system"
 label    = "Kernel crash reports"
-reclaim  = { kind = "clean-rule", ref = "live-kernel-reports" }
+reclaim  = { kind = "manual-review", note = "Reports Windows writes when a driver hangs; a driver vendor may ask for them. MyClean cleans nothing in the Windows folder by hand and no cleanup handler covers this one: delete old ones yourself as an administrator once nothing needs them." }
 
 [[area]]
 id       = "memory-dump"

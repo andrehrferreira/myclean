@@ -78,8 +78,7 @@ Result<std::vector<telemetry::Measurement>> HealthCollector::collect(WallTime no
       keep(saved.error());
     }
     if (reading.temperature_c) {
-      measurements.push_back(telemetry::measure(metric_disk_temperature,
-                                                std::to_string(reading.disk_number),
+      measurements.push_back(telemetry::measure(metric_disk_temperature, reading.drive,
                                                 static_cast<double>(*reading.temperature_c)));
     }
     view.drives.push_back(DriveHealth{.reading = std::move(reading),

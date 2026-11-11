@@ -24,6 +24,7 @@ namespace myclean::svc {
 namespace {
 
 using Json = nlohmann::json;
+const ipc::Caller tray{.tray = true};
 using namespace std::chrono_literals;
 
 const WallTime noon = std::chrono::sys_days{std::chrono::October / 31 / 2026} + 12h;
@@ -42,8 +43,9 @@ class AlertsComponentTest : public ::testing::Test {
     alerts_.report(readings);
   }
 
-  [[nodiscard]] Json ok(std::string_view method, const Json& params = Json::object()) const {
-    Result<Json> result = harness_.call(method, params);
+  [[nodiscard]] Json ok(std::string_view method, const Json& params = Json::object(),
+                        const ipc::Caller& caller = {}) const {
+    Result<Json> result = harness_.call(method, params, caller);
     EXPECT_TRUE(result.has_value()) << result.error().message;
     return result.value_or(Json());
   }
@@ -106,7 +108,7 @@ TEST_F(AlertsComponentTest, SnoozeAndDismissResolveTheTokenEntity) {
 
   const Json snoozed =
       ok(ipc::alerts_snooze_method,
-         Json{{"rule", "disk.media-errors"}, {"entity", drive_token}, {"minutes", 60}});
+         Json{{"rule", "disk.media-errors"}, {"entity", drive_token}, {"minutes", 60}}, tray);
   EXPECT_EQ(snoozed, (Json{{"snoozed_until", noon_seconds + 3600}}));
   EXPECT_EQ(ok(ipc::alerts_badge_method), (Json{{"count", 1}, {"worst", "warning"}}));
   const Json list = ok(ipc::alerts_list_method);
@@ -115,20 +117,37 @@ TEST_F(AlertsComponentTest, SnoozeAndDismissResolveTheTokenEntity) {
               alert.at("rule") == "disk.media-errors" ? Json(noon_seconds + 3600) : Json(nullptr));
   }
 
-  EXPECT_EQ(
-      ok(ipc::alerts_dismiss_method, Json{{"rule", "volume.free-space-low"}, {"entity", "C"}}),
-      Json::object());
+  EXPECT_EQ(ok(ipc::alerts_dismiss_method, Json{{"rule", "volume.free-space-low"}, {"entity", "C"}},
+               tray),
+            Json::object());
   EXPECT_EQ(ok(ipc::alerts_badge_method), (Json{{"count", 0}, {"worst", "none"}}));
 
   // A dismissed alert can no longer be dismissed; an unknown one is not found.
   const Result<Json> again = harness().call(
-      ipc::alerts_dismiss_method, Json{{"rule", "volume.free-space-low"}, {"entity", "C"}});
+      ipc::alerts_dismiss_method, Json{{"rule", "volume.free-space-low"}, {"entity", "C"}}, tray);
   ASSERT_FALSE(again.has_value());
   EXPECT_EQ(again.error().code, Errc::not_found);
-  const Result<Json> unknown = harness().call(
-      ipc::alerts_snooze_method, Json{{"rule", "volume.fill-up"}, {"entity", "Z"}, {"minutes", 5}});
+  const Result<Json> unknown =
+      harness().call(ipc::alerts_snooze_method,
+                     Json{{"rule", "volume.fill-up"}, {"entity", "Z"}, {"minutes", 5}}, tray);
   ASSERT_FALSE(unknown.has_value());
   EXPECT_EQ(unknown.error().code, Errc::not_found);
+}
+
+// Silencing an alert is the owner's choice: any other pipe client (an AI client talking to the
+// pipe directly, the CLI) is refused and the alert stays.
+TEST_F(AlertsComponentTest, OnlyTheTrayMaySnoozeOrDismiss) {
+  report("volume.free_percent", "C:", 9.0);
+  const Result<Json> snoozed =
+      harness().call(ipc::alerts_snooze_method,
+                     Json{{"rule", "volume.free-space-low"}, {"entity", "C"}, {"minutes", 60}});
+  ASSERT_FALSE(snoozed.has_value());
+  EXPECT_EQ(snoozed.error().code, Errc::refused);
+  const Result<Json> dismissed = harness().call(
+      ipc::alerts_dismiss_method, Json{{"rule", "volume.free-space-low"}, {"entity", "C"}});
+  ASSERT_FALSE(dismissed.has_value());
+  EXPECT_EQ(dismissed.error().code, Errc::refused);
+  EXPECT_EQ(ok(ipc::alerts_badge_method), (Json{{"count", 1}, {"worst", "warning"}}));
 }
 
 TEST_F(AlertsComponentTest, RefusesBadSnoozesAndPathEntities) {
@@ -136,12 +155,12 @@ TEST_F(AlertsComponentTest, RefusesBadSnoozesAndPathEntities) {
   for (const std::int64_t minutes : {std::int64_t{0}, std::int64_t{ipc::max_snooze_minutes + 1}}) {
     const Result<Json> refused = harness().call(
         ipc::alerts_snooze_method,
-        Json{{"rule", "volume.free-space-low"}, {"entity", "C"}, {"minutes", minutes}});
+        Json{{"rule", "volume.free-space-low"}, {"entity", "C"}, {"minutes", minutes}}, tray);
     ASSERT_FALSE(refused.has_value());
     EXPECT_EQ(refused.error().code, Errc::invalid_argument);
   }
   EXPECT_EQ(harness().code(ipc::alerts_dismiss_method,
-                           Json{{"rule", "volume.free-space-low"}, {"entity", "C:\\"}}),
+                           Json{{"rule", "volume.free-space-low"}, {"entity", "C:\\"}}, tray),
             ipc::rpc_error::invalid_params);
   EXPECT_EQ(harness().code(ipc::alerts_list_method, Json{{"since", "yesterday"}}),
             ipc::rpc_error::invalid_params);

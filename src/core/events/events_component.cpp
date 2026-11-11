@@ -30,7 +30,11 @@ Error prefixed(std::string_view prefix, const Error& error) {
 
 EventsComponent::EventsComponent(IEventSource& source, IConnectionTable& connections,
                                  telemetry::IProcessTable& processes, ISignerLookup* signers)
-    : source_(&source), connection_table_(&connections), processes_(&processes), router_(signers) {}
+    : source_(&source),
+      connection_table_(&connections),
+      processes_(&processes),
+      signers_(signers),
+      router_(signers) {}
 
 EventsComponent::~EventsComponent() {
   stop();
@@ -111,6 +115,11 @@ std::vector<Error> EventsComponent::unavailable() const {
 void EventsComponent::tick() {
   const std::lock_guard lock(tick_mutex_);
   recorder_->close_minutes(clock_->now());
+  if (signers_ != nullptr) {
+    for (const auto& [image, signer] : signers_->take_resolved()) {
+      recorder_->backfill_signer(image, signer);
+    }
+  }
   const MonoTime now = clock_->monotonic();
   if (next_snapshot_ && now < *next_snapshot_) {
     return;

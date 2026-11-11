@@ -73,6 +73,8 @@ class TrustComponent final : public IComponent, public events::ISignerLookup {
 
   // events::ISignerLookup. Thread-safe; never blocks on a signature check.
   [[nodiscard]] std::optional<std::string> signer(std::string_view image) override;
+  // The images the worker verified as signed since the last call, as given to signer().
+  [[nodiscard]] std::vector<std::pair<std::string, std::string>> take_resolved() override;
 
  private:
   void run(const std::stop_token& stop);
@@ -85,9 +87,10 @@ class TrustComponent final : public IComponent, public events::ISignerLookup {
 
   std::mutex mutex_;  // guards the members below
   std::condition_variable_any wake_;
-  std::deque<std::filesystem::path> queue_;
+  std::deque<std::string> queue_;                              // images as given to signer()
   std::set<std::string> queued_;                               // by folded path
   std::map<std::string, std::optional<std::string>> signers_;  // by folded path
+  std::vector<std::pair<std::string, std::string>> resolved_;  // image, signer: take_resolved()
   std::jthread worker_;
 };
 

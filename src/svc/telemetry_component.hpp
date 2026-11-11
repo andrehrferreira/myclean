@@ -79,8 +79,8 @@ struct Collectors {
   std::vector<Error> unavailable;  // as telemetry::Registration::unavailable
 };
 
-// Adds the collectors of telemetry::register_collectors (same set, same intervals) to `pipeline`,
-// each behind a Tap. `sources` must outlive the pipeline.
+// Adds the collectors of telemetry::register_collectors to `pipeline`, each behind a Tap.
+// `sources` must outlive the pipeline.
 [[nodiscard]] Collectors add_collectors(telemetry::Pipeline& pipeline, TelemetrySources& sources);
 
 // The telemetry read methods (contracts in core/ipc/telemetry.hpp). Thread-safe: it reads only
@@ -105,8 +105,19 @@ class TelemetryMethods {
   // too little history), entity the volume entity; each detail starts with the entity ("C:").
   [[nodiscard]] Result<std::vector<alerts::Reading>> volume_facts() const;
 
+  // MyClean's own use over the last hour (NFR-PERF-1), the service and the tray together, from
+  // their self.cpu and self.memory samples: self.cpu_hour (% of the machine) and
+  // self.memory_hour_mb (private working set, MiB), entity "myclean". Empty until the service's
+  // samples span the hour, so that the work of its start is not taken for its steady use.
+  [[nodiscard]] std::vector<alerts::Reading> self_facts() const;
+
  private:
   [[nodiscard]] Result<nlohmann::json> volume_list() const;
+  // The series entity of `token` for `metric`: one a collector measures now, else one the store
+  // holds a series of (another component's, such as disk.temperature), else `token` as given.
+  // Fails with invalid_argument when neither measures nor stores `metric`.
+  [[nodiscard]] Result<std::string> series_entity(const std::string& metric,
+                                                  const std::string& token) const;
   // The fill projection of `entity` for the volume sample taken at `sampled`. It reads about 7
   // days of minute rows and metrics.latest is called every second, so it is computed once per
   // volume sample (every 60 s) and kept until the next.
@@ -137,7 +148,8 @@ class TelemetryMethods {
 // the read methods above. A collector this machine lacks is logged and reported as unavailable
 // in `status`; one that fails while sampling makes the component degraded until it has not
 // failed for failure_window. The first sample is taken in start(), so the methods have data from
-// the first request on. After every new volume sample, the volume facts go to `alerts`.
+// the first request on. After every new volume sample, the volume facts and MyClean's own hourly
+// use (self_facts) go to `alerts`.
 class TelemetryComponent final : public IComponent {
  public:
   static constexpr std::chrono::seconds failure_window{120};  // twice the longest interval

@@ -8,6 +8,7 @@ myclean_add_test(user_tasks
     appx_test.cpp
     archive_test.cpp
     drive_facts_test.cpp
+    recycle_test.cpp
     task_test.cpp
     uninstall_test.cpp
   DEPENDS

@@ -30,6 +30,8 @@
 #include "core/model/result.hpp"
 #include "core/model/series.hpp"
 #include "core/model/units.hpp"
+#include "core/store/database.hpp"
+#include "core/store/store.hpp"
 #include "core/store/time_series.hpp"
 #include "core/telemetry/collector.hpp"
 #include "core/telemetry/gpu_collector.hpp"
@@ -63,28 +65,6 @@ double percent(Bytes part, Bytes whole) {
   return whole.count() == 0
              ? 0.0
              : 100.0 * static_cast<double>(part.count()) / static_cast<double>(whole.count());
-}
-
-// Wraps `collector` in a Tap, adds it to the pipeline and returns the inner collector.
-template <typename T>
-T* add_tapped(telemetry::Pipeline& pipeline, Collectors& collectors, std::unique_ptr<T> collector) {
-  T* inner = collector.get();
-  auto tap = std::make_unique<Tap>(std::move(collector));
-  collectors.taps.push_back(tap.get());
-  pipeline.add(std::move(tap));
-  return inner;
-}
-
-// The same, or records why the collector is unavailable.
-template <typename T>
-T* add_tapped(telemetry::Pipeline& pipeline, Collectors& collectors, std::string_view name,
-              Result<std::unique_ptr<T>> opened) {
-  if (!opened) {
-    collectors.unavailable.push_back(Error{
-        .code = opened.error().code, .message = std::string(name) + ": " + opened.error().message});
-    return nullptr;
-  }
-  return add_tapped(pipeline, collectors, std::move(*opened));
 }
 
 // Natural order of logical processors "<group>,<number>" ("0,2" before "0,10" before "1,0").
@@ -156,6 +136,29 @@ std::vector<store::Aggregate> merge_points(const std::vector<store::Aggregate>& 
   return merged;
 }
 
+// The entities of the stored series of `metric`, such as the drives of disk.temperature, which
+// a component other than telemetry records; empty when the store has none.
+Result<std::vector<std::string>> stored_entities(store::Store& store, const std::string& metric) {
+  std::vector<std::string> entities;
+  Result<void> read = store.read([&](store::Database& database) -> Result<void> {
+    Result<store::Statement> query =
+        database.prepare("SELECT entity FROM series WHERE metric = ?1 ORDER BY entity");
+    if (!query) {
+      return tl::unexpected(query.error());
+    }
+    query->bind(1, std::string_view(metric));
+    Result<bool> row = query->step();
+    for (; row && *row; row = query->step()) {
+      entities.push_back(query->column_text(0));
+    }
+    return row ? Result<void>{} : tl::unexpected(row.error());
+  });
+  if (!read) {
+    return tl::unexpected(read.error());
+  }
+  return entities;
+}
+
 }  // namespace
 
 Result<std::vector<telemetry::Measurement>> Tap::collect(WallTime now, MonoTime monotonic) {
@@ -168,16 +171,16 @@ Result<std::vector<telemetry::Measurement>> Tap::collect(WallTime now, MonoTime 
 
 Collectors add_collectors(telemetry::Pipeline& pipeline, TelemetrySources& sources) {
   Collectors collectors;
-  collectors.live.processes = add_tapped(
-      pipeline, collectors, std::make_unique<telemetry::ProcessCollector>(*sources.processes));
-  add_tapped(pipeline, collectors, "cpu", telemetry::make_cpu_collector(*sources.counters));
-  add_tapped(pipeline, collectors, "memory",
-             telemetry::make_memory_collector(*sources.memory, *sources.counters));
-  add_tapped(pipeline, collectors, "disks", telemetry::make_disk_collector(*sources.counters));
-  collectors.live.gpu =
-      add_tapped(pipeline, collectors, "gpu", telemetry::GpuCollector::open(*sources.counters));
-  collectors.live.volumes = add_tapped(
-      pipeline, collectors, std::make_unique<telemetry::VolumeCollector>(*sources.volumes));
+  telemetry::Registration registration = telemetry::register_collectors(
+      pipeline, *sources.processes, *sources.counters, *sources.memory, *sources.volumes,
+      [&collectors](std::unique_ptr<telemetry::ICollector> collector)
+          -> std::unique_ptr<telemetry::ICollector> {
+        auto tap = std::make_unique<Tap>(std::move(collector));
+        collectors.taps.push_back(tap.get());
+        return tap;
+      });
+  collectors.live = registration.live;
+  collectors.unavailable = std::move(registration.unavailable);
   return collectors;
 }
 
@@ -314,29 +317,11 @@ Result<Json> TelemetryMethods::query(const Json& params) const {
                 "metrics.query: max_points must be 1 to " + std::to_string(max_points_limit));
   }
 
-  std::set<std::string> metrics;
-  std::optional<std::string> entity;
-  for (const Tap* tap : collectors_->taps) {
-    const std::shared_ptr<const Reading> reading = tap->latest();
-    for (const telemetry::Measurement& measurement :
-         reading ? reading->measurements : std::vector<telemetry::Measurement>{}) {
-      metrics.insert(measurement.key.metric);
-      if (!entity && measurement.key.metric == metric &&
-          ipc::entity_token(measurement.key.entity) == token) {
-        entity = measurement.key.entity;
-      }
-    }
+  Result<std::string> entity = series_entity(metric, token);
+  if (!entity) {
+    return tl::unexpected(entity.error());
   }
-  if (!metrics.contains(metric)) {
-    std::string known;
-    for (const std::string& name : metrics) {
-      known += (known.empty() ? "" : ", ") + name;
-    }
-    return fail(Errc::invalid_argument,
-                "metrics.query: unknown metric '" + metric + "'; known metrics: " + known);
-  }
-  // An entity not measured now (a disk unplugged since) is looked up as given.
-  const SeriesKey key{.metric = metric, .entity = entity.value_or(token)};
+  const SeriesKey key{.metric = metric, .entity = *std::move(entity)};
   const Result<telemetry::History> history =
       telemetry::query_history(*store_, key, WallTime{seconds{from}}, WallTime{seconds{to}}, now);
   if (!history) {
@@ -355,6 +340,42 @@ Result<Json> TelemetryMethods::query(const Json& params) const {
               {"entity", key.entity},
               {"resolution", telemetry::to_string(history->resolution)},
               {"points", std::move(points)}};
+}
+
+Result<std::string> TelemetryMethods::series_entity(const std::string& metric,
+                                                    const std::string& token) const {
+  std::set<std::string> metrics;
+  std::optional<std::string> entity;
+  for (const Tap* tap : collectors_->taps) {
+    const std::shared_ptr<const Reading> reading = tap->latest();
+    for (const telemetry::Measurement& measurement :
+         reading ? reading->measurements : std::vector<telemetry::Measurement>{}) {
+      metrics.insert(measurement.key.metric);
+      if (!entity && measurement.key.metric == metric &&
+          ipc::entity_token(measurement.key.entity) == token) {
+        entity = measurement.key.entity;
+      }
+    }
+  }
+  if (metrics.contains(metric)) {
+    // An entity not measured now (a disk unplugged since) is looked up as given.
+    return entity.value_or(token);
+  }
+  const Result<std::vector<std::string>> stored = stored_entities(*store_, metric);
+  if (!stored) {
+    return tl::unexpected(stored.error());
+  }
+  if (stored->empty()) {
+    std::string known;
+    for (const std::string& name : metrics) {
+      known += (known.empty() ? "" : ", ") + name;
+    }
+    return fail(Errc::invalid_argument,
+                "metrics.query: unknown metric '" + metric + "'; known metrics: " + known);
+  }
+  const auto match = std::ranges::find_if(
+      *stored, [&](const std::string& candidate) { return ipc::entity_token(candidate) == token; });
+  return match != stored->end() ? *match : token;
 }
 
 Result<Json> TelemetryMethods::top(const Json& params) const {
@@ -550,6 +571,44 @@ Result<std::vector<alerts::Reading>> TelemetryMethods::volume_facts() const {
   return facts;
 }
 
+std::vector<alerts::Reading> TelemetryMethods::self_facts() const {
+  constexpr std::chrono::minutes window{60};
+  constexpr std::chrono::minutes covered{59};  // the ring keeps samples a little under the hour
+  constexpr double mib = 1024.0 * 1024.0;
+  const WallTime now = clock_->now();
+  const auto mean = [&](std::string_view metric, std::string_view image) {
+    double sum = 0.0;
+    std::size_t count = 0;
+    for (const Sample& sample :
+         store_->raw({.metric = std::string(metric), .entity = std::string(image)})) {
+      if (now - sample.time <= window) {
+        sum += sample.value;
+        ++count;
+      }
+    }
+    return count == 0 ? 0.0 : sum / static_cast<double>(count);
+  };
+  const std::vector<Sample> service =
+      store_->raw({.metric = std::string(telemetry::metric::self_cpu), .entity = "myclean-svc"});
+  if (service.empty() || now - service.front().time < covered) {
+    return {};
+  }
+  double cpu = 0.0;
+  double memory = 0.0;
+  for (const std::string_view image :
+       {std::string_view("myclean-svc"), std::string_view("myclean-tray")}) {
+    cpu += mean(telemetry::metric::self_cpu, image);
+    memory += mean(telemetry::metric::self_memory, image) / mib;
+  }
+  const std::string detail =
+      std::format("service and tray over the last hour: {:.2f} % CPU, {:.0f} MB", cpu, memory);
+  return {
+      alerts::Reading{
+          .metric = "self.cpu_hour", .entity = "myclean", .value = cpu, .detail = detail},
+      alerts::Reading{
+          .metric = "self.memory_hour_mb", .entity = "myclean", .value = memory, .detail = detail}};
+}
+
 Result<Json> TelemetryMethods::volumes() const {
   const std::shared_ptr<const telemetry::VolumeView> view = collectors_->live.volumes->latest();
   return volume_list().transform([&](Json list) {
@@ -681,6 +740,7 @@ void TelemetryComponent::report_volumes() {
     return;
   }
   volumes_reported_ = view->time;
+  alerts_->report(methods_->self_facts());  // once a minute, with the volume sample
   Result<std::vector<alerts::Reading>> facts = methods_->volume_facts();
   if (!facts) {
     spdlog::warn("telemetry: volume alert facts: {}", facts.error().message);

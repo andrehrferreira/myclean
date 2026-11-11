@@ -19,7 +19,9 @@
 
 namespace myclean::health {
 
-// Series recorded at every read, entity the disk number ("3"), in °C.
+// Series recorded at every read, in °C. The entity is the drive's stable identity
+// (HealthReading::drive, "<model>#<serial hash>", as the alerts use it), not its disk number,
+// which can change when drives are added or removed.
 inline constexpr std::string_view metric_disk_temperature = "disk.temperature";
 
 // The current health of one drive.

@@ -23,6 +23,8 @@
 #include <wil/com.h>
 #include <wil/resource.h>
 #include <windows.h>
+#include <wrl/client.h>
+#include <wrl/implements.h>
 // clang-format off
 #include <knownfolders.h>  // after windows.h
 #include <propsys.h>
@@ -195,6 +197,123 @@ Result<void> delete_permanently(IShellItem& item) {
   BOOL aborted = FALSE;
   if (SUCCEEDED(operation->GetAnyOperationsAborted(&aborted)) && aborted != FALSE) {
     return fail(Errc::io_error, "the shell did not delete it");
+  }
+  return {};
+}
+
+// A progress sink that lets a delete run only when the shell recycles the item: PreDeleteItem
+// without TSF_DELETE_RECYCLE_IF_POSSIBLE (a volume without a Recycle Bin, an item too large for
+// it) is a permanent delete, which it refuses. Renames, moves, copies and new items, which a
+// delete never makes, are refused too.
+class RecycleOnly final : public Microsoft::WRL::RuntimeClass<
+                              Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,
+                              IFileOperationProgressSink> {
+ public:
+  HRESULT STDMETHODCALLTYPE StartOperations() override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE FinishOperations(HRESULT /*result*/) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE PreRenameItem(DWORD /*flags*/, IShellItem* /*item*/,
+                                          LPCWSTR /*name*/) override {
+    return E_ABORT;
+  }
+  HRESULT STDMETHODCALLTYPE PostRenameItem(DWORD /*flags*/, IShellItem* /*item*/, LPCWSTR /*name*/,
+                                           HRESULT /*result*/, IShellItem* /*renamed*/) override {
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE PreMoveItem(DWORD /*flags*/, IShellItem* /*item*/,
+                                        IShellItem* /*folder*/, LPCWSTR /*name*/) override {
+    return E_ABORT;
+  }
+  HRESULT STDMETHODCALLTYPE PostMoveItem(DWORD /*flags*/, IShellItem* /*item*/,
+                                         IShellItem* /*folder*/, LPCWSTR /*name*/,
+                                         HRESULT /*result*/, IShellItem* /*moved*/) override {
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE PreCopyItem(DWORD /*flags*/, IShellItem* /*item*/,
+                                        IShellItem* /*folder*/, LPCWSTR /*name*/) override {
+    return E_ABORT;
+  }
+  HRESULT STDMETHODCALLTYPE PostCopyItem(DWORD /*flags*/, IShellItem* /*item*/,
+                                         IShellItem* /*folder*/, LPCWSTR /*name*/,
+                                         HRESULT /*result*/, IShellItem* /*copied*/) override {
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE PreDeleteItem(DWORD flags, IShellItem* /*item*/) override {
+    if ((flags & TSF_DELETE_RECYCLE_IF_POSSIBLE) == 0) {
+      permanent_ = true;
+      return E_ABORT;
+    }
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE PostDeleteItem(DWORD /*flags*/, IShellItem* /*item*/, HRESULT result,
+                                           IShellItem* /*recycled*/) override {
+    recycled_ = SUCCEEDED(result);
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE PreNewItem(DWORD /*flags*/, IShellItem* /*folder*/,
+                                       LPCWSTR /*name*/) override {
+    return E_ABORT;
+  }
+  HRESULT STDMETHODCALLTYPE PostNewItem(DWORD /*flags*/, IShellItem* /*folder*/, LPCWSTR /*name*/,
+                                        LPCWSTR /*source*/, DWORD /*attributes*/,
+                                        HRESULT /*result*/, IShellItem* /*item*/) override {
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE UpdateProgress(UINT /*total*/, UINT /*done*/) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE ResetTimer() override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE PauseTimer() override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE ResumeTimer() override { return S_OK; }
+
+  [[nodiscard]] bool permanent() const { return permanent_; }
+  [[nodiscard]] bool recycled() const { return recycled_; }
+
+ private:
+  bool permanent_ = false;
+  bool recycled_ = false;
+};
+
+// Sends `file` to the Recycle Bin of its volume: FOF_NO_UI | FOF_ALLOWUNDO | FOFX_RECYCLEONDELETE,
+// with RecycleOnly watching, so that nothing is ever deleted permanently.
+Result<void> send_to_bin(const fs::path& file) {
+  wil::com_ptr_nothrow<IShellItem> item;
+  if (const HRESULT parsed =
+          ::SHCreateItemFromParsingName(file.c_str(), nullptr, IID_PPV_ARGS(item.put()));
+      FAILED(parsed)) {
+    Error error = hresult_error("SHCreateItemFromParsingName", parsed);
+    if (parsed == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) ||
+        parsed == HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND)) {
+      error.code = Errc::not_found;
+    }
+    return tl::unexpected(std::move(error));
+  }
+  wil::com_ptr_nothrow<IFileOperation> operation;
+  if (const HRESULT created = ::CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_INPROC_SERVER,
+                                                 IID_PPV_ARGS(operation.put()));
+      FAILED(created)) {
+    return tl::unexpected(hresult_error("CoCreateInstance FileOperation", created));
+  }
+  if (const HRESULT flags = operation->SetOperationFlags(
+          static_cast<DWORD>(FOF_NO_UI | FOF_ALLOWUNDO | FOFX_RECYCLEONDELETE));
+      FAILED(flags)) {
+    return tl::unexpected(hresult_error("IFileOperation::SetOperationFlags", flags));
+  }
+  const Microsoft::WRL::ComPtr<RecycleOnly> sink = Microsoft::WRL::Make<RecycleOnly>();
+  if (sink.Get() == nullptr) {
+    return fail(Errc::io_error, "out of memory for the progress sink");
+  }
+  if (const HRESULT queued = operation->DeleteItem(item.get(), sink.Get()); FAILED(queued)) {
+    return tl::unexpected(hresult_error("IFileOperation::DeleteItem", queued));
+  }
+  const HRESULT performed = operation->PerformOperations();
+  if (sink->permanent()) {
+    return fail(Errc::refused, "the Recycle Bin of its volume cannot take it, so it stays");
+  }
+  if (FAILED(performed)) {
+    return tl::unexpected(hresult_error("IFileOperation::PerformOperations", performed));
+  }
+  BOOL aborted = FALSE;
+  if ((SUCCEEDED(operation->GetAnyOperationsAborted(&aborted)) && aborted != FALSE) ||
+      !sink->recycled()) {
+    return fail(Errc::io_error, "the shell did not recycle it");
   }
   return {};
 }
@@ -378,6 +497,26 @@ Result<std::vector<cleanup::Skipped>> Win32RecycleBin::remove(std::span<const st
           left.push_back(
               {.target = id,
                .error = {.code = Errc::not_found, .message = "no longer in the Recycle Bin"}});
+        }
+        return left;
+      });
+}
+
+Result<std::vector<cleanup::Skipped>> Win32RecycleBin::recycle(std::span<const fs::path> files,
+                                                               const std::stop_token& stop) {
+  return isolated<std::vector<cleanup::Skipped>>(
+      desktop_, timeout_, stop,
+      [wanted = std::vector<fs::path>(files.begin(), files.end())](
+          const std::atomic<bool>& abort) -> Result<std::vector<cleanup::Skipped>> {
+        std::vector<cleanup::Skipped> left;
+        for (const fs::path& file : wanted) {
+          const std::string target = narrow(file.wstring());
+          if (abort) {
+            left.push_back(
+                {.target = target, .error = {.code = Errc::refused, .message = "cancelled"}});
+          } else if (const Result<void> sent = send_to_bin(file); !sent) {
+            left.push_back({.target = target, .error = sent.error()});
+          }
         }
         return left;
       });

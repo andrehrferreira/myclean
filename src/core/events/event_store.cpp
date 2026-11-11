@@ -29,6 +29,12 @@ constexpr std::string_view insert_start = R"sql(
 INSERT INTO proc_start(time, pid, parent_pid, parent_time, session, image, command_line_hash, signer)
 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8))sql";
 
+constexpr std::string_view insert_stop = R"sql(
+INSERT INTO proc_stop(time, pid, process_time, exit_code, image) VALUES(?1, ?2, ?3, ?4, ?5))sql";
+
+constexpr std::string_view backfill = R"sql(
+UPDATE proc_start SET signer = ?1 WHERE image = ?2 AND signer IS NULL)sql";
+
 constexpr std::string_view insert_minute = R"sql(
 INSERT INTO net_minute(time, pid, process_time, image, protocol, remote_address, remote_port, sent,
                        received, first_seen, last_seen)
@@ -82,15 +88,29 @@ CREATE TABLE net_minute(
   last_seen INTEGER NOT NULL);
 CREATE INDEX net_minute_time ON net_minute(time);
 )sql"},
+          {.version = 2, .name = "proc_stop", .sql = R"sql(
+CREATE TABLE proc_stop(
+  time INTEGER NOT NULL,
+  pid INTEGER NOT NULL,
+  process_time INTEGER NOT NULL,
+  exit_code INTEGER NOT NULL,
+  image TEXT NOT NULL);
+CREATE INDEX proc_stop_time ON proc_stop(time);
+CREATE INDEX proc_start_image ON proc_start(image) WHERE signer IS NULL;
+)sql"},
       }};
   return set;
 }
 
 Result<void> add_event_retention(store::Store& store) {
-  Result<void> added = store.add_retention(
-      {.table = "proc_start", .time_column = "time", .max_age = store::Store::history_retention});
-  if (!added) {
-    return added;
+  for (const std::string_view table :
+       {std::string_view("proc_start"), std::string_view("proc_stop")}) {
+    Result<void> added = store.add_retention({.table = std::string(table),
+                                              .time_column = "time",
+                                              .max_age = store::Store::history_retention});
+    if (!added) {
+      return added;
+    }
   }
   return store.add_retention(
       {.table = "net_minute", .time_column = "time", .max_age = store::Store::minute_retention});
@@ -121,7 +141,16 @@ void EventRecorder::on_start(const ProcessStart& event) {
                    value_of(event.signer)});
 }
 
-void EventRecorder::on_stop(const ProcessStop& /*event*/) {}
+void EventRecorder::on_stop(const ProcessStop& event) {
+  store_->enqueue(
+      std::string(insert_stop),
+      {store::to_unix_seconds(event.exited), std::int64_t{event.process.pid},
+       store::to_unix_seconds(event.process.created), std::int64_t{event.exit_code}, event.image});
+}
+
+void EventRecorder::backfill_signer(std::string_view image, std::string_view signer) {
+  store_->enqueue(std::string(backfill), {std::string(signer), std::string(image)});
+}
 
 void EventRecorder::on_network(const NetworkTransfer& transfer) {
   const MinuteKey key{.minute = minute_of(transfer.time),

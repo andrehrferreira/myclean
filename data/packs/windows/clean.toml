@@ -47,17 +47,6 @@ targets  = ['%LOCALAPPDATA%\Microsoft\Windows\WER\ReportArchive\*',
             '%LOCALAPPDATA%\Microsoft\Windows\WER\ReportQueue\*']
 require  = { min_age_days = 7, not_in_use = true }
 
-# The deny-list protects %WINDIR% except Temp, so the engine drops these items with
-# "deny_list:windir" until the deny-list allows this folder; no Windows handler covers it.
-[[rule]]
-id       = "live-kernel-reports"
-category = "windows"
-tier     = "ask"
-scope    = "system"
-strategy = "delete"
-targets  = ['%WINDIR%\LiveKernelReports\*']
-require  = { min_age_days = 7, not_in_use = true }
-
 # PowerToys downloads each update's installer into Updates and never removes it (observed on
 # reference machine: six powertoyssetup-<version>-x64.exe, 0.99.0 to 0.102.3001). An installer
 # two weeks old is installed or superseded; PowerToys downloads the next one itself.

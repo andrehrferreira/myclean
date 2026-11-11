@@ -18,6 +18,7 @@
 #include "core/ipc/status.hpp"
 #include "core/ipc/telemetry.hpp"
 #include "core/model/result.hpp"
+#include "core/model/series.hpp"
 #include "core/store/database.hpp"
 #include "core/store/migrations.hpp"
 #include "core/store/store.hpp"
@@ -300,6 +301,31 @@ TEST_F(TelemetryMethodsTest, QueryResolvesEntityTokensAndMergesPoints) {
   }
 }
 
+// The disk temperature is recorded by disk_health, not by a telemetry collector, under the
+// drive's stable key (model and serial hash): its stored history is still queryable by that key.
+TEST_F(TelemetryMethodsTest, QueryReadsTheStoredHistoryOfAnotherComponentsSeries) {
+  poll();
+  const SeriesKey key{.metric = "disk.temperature", .entity = "Samsung SSD 990 PRO 2TB#5f3a9c"};
+  store().record(key, Sample{.time = clock().now(), .value = 41.0});
+  for (int minute = 1; minute <= 2; ++minute) {
+    advance(60s);  // the minute closes and is flushed
+  }
+  const std::int64_t now = unix_seconds(clock().now());
+
+  const Json history =
+      ok(ipc::metrics_query_method, Json{{"metric", "disk.temperature"},
+                                         {"entity", "Samsung_SSD_990_PRO_2TB_5f3a9c"},
+                                         {"from", now - 600}});
+  EXPECT_EQ(history.at("entity"), key.entity);
+  ASSERT_EQ(history.at("points").size(), 1U);
+  EXPECT_EQ(history.at("points")[0].at("mean"), 41.0);
+
+  const Result<Json> unknown =
+      call(ipc::metrics_query_method, Json{{"metric", "disk.wear"}, {"from", now - 600}});
+  ASSERT_FALSE(unknown.has_value());
+  EXPECT_EQ(unknown.error().code, Errc::invalid_argument);
+}
+
 TEST_F(TelemetryMethodsTest, RefusesPathsAndUndeclaredParameters) {
   poll();
   for (const Json& params : {Json{{"metric", "volume.free"}, {"entity", "C:\\"}, {"from", 0}},
@@ -372,6 +398,34 @@ TEST_F(TelemetryMethodsTest, TheFillProjectionIsComputedOncePerVolumeSample) {
   advance(59s);
   EXPECT_EQ(ok(ipc::metrics_latest_method).at("volumes").at(0).at("fill").at("state"),
             "not_filling");
+}
+
+// NFR-PERF-1: MyClean's own use averaged over the hour, service and tray together, only once the
+// service has been sampled for the whole hour.
+TEST_F(TelemetryMethodsTest, SelfFactsAverageTheServiceAndTrayOverTheLastHour) {
+  const auto record = [&](std::string_view metric, std::string entity, double value) {
+    store().record({.metric = std::string(metric), .entity = std::move(entity)},
+                   Sample{.time = clock().now(), .value = value});
+  };
+  for (int second = 0; second < 3600; ++second) {
+    record("self.cpu", "myclean-svc", second < 1800 ? 1.0 : 2.0);
+    record("self.memory", "myclean-svc", static_cast<double>((160_MiB).count()));
+    record("self.cpu", "myclean-tray", 0.5);
+    record("self.memory", "myclean-tray", static_cast<double>((20_MiB).count()));
+    if (second == 600) {
+      EXPECT_TRUE(methods().self_facts().empty());  // ten minutes are no hour
+    }
+    clock().advance(1s);
+  }
+
+  const std::vector<alerts::Reading> facts = methods().self_facts();
+  ASSERT_EQ(facts.size(), 2U);
+  EXPECT_EQ(facts[0].metric, "self.cpu_hour");
+  EXPECT_EQ(facts[0].entity, "myclean");
+  EXPECT_NEAR(facts[0].value, 2.0, 0.01);  // 1.5 % on average for the service, 0.5 % the tray
+  EXPECT_EQ(facts[1].metric, "self.memory_hour_mb");
+  EXPECT_NEAR(facts[1].value, 180.0, 0.01);
+  EXPECT_NE(facts[1].detail.find("180 MB"), std::string::npos) << facts[1].detail;
 }
 
 // The component inside a running service, over the pipe.

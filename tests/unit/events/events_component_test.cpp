@@ -2,7 +2,10 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -29,6 +32,19 @@ using Rows = std::vector<std::vector<std::string>>;
 std::string seconds(WallTime time) {
   return std::to_string(store::to_unix_seconds(time));
 }
+
+// Answers nothing at first, like the trust cache, and hands out what it "verified" since.
+class LateSigner final : public ISignerLookup {
+ public:
+  [[nodiscard]] std::optional<std::string> signer(std::string_view /*image*/) override {
+    return std::nullopt;
+  }
+  [[nodiscard]] std::vector<std::pair<std::string, std::string>> take_resolved() override {
+    return std::exchange(resolved, {});
+  }
+
+  std::vector<std::pair<std::string, std::string>> resolved;
+};
 
 class EventsComponentTest : public ::testing::Test {
  protected:
@@ -78,6 +94,30 @@ TEST_F(EventsComponentTest, ShortLivedProcessIsDeliveredAndStored) {
   component().stop();
   EXPECT_EQ(source().stops(), 1);
   component().router().unsubscribe(governor);
+}
+
+TEST(EventsComponent, TheTickGivesStartsTheSignerVerifiedAfterThey) {
+  const fakes::FakeClock clock{noon};
+  TempStore store{clock};
+  testing::FakeEventSource source;
+  testing::FakeConnectionTable connections;
+  testing::FakeProcessTable processes;
+  LateSigner signers;
+  EventsComponent component{source, connections, processes, &signers};
+  ASSERT_TRUE(ok(component.start(store.get(), clock)));
+  const std::string tool = R"(C:\Program Files\PowerToys\PowerToys.exe)";
+  source.sink()->on_start(start_of(1234, noon + 1s, 4, tool));
+  source.sink()->on_stop(ProcessStop{.process = ProcessKey{.pid = 1234, .created = noon + 1s},
+                                     .exited = noon + 2s,
+                                     .image = "PowerToys.exe"});
+
+  signers.resolved = {{tool, "Microsoft Corporation"}};
+  component.tick();
+  component.stop();
+
+  EXPECT_EQ(store.rows("SELECT pid, signer FROM proc_start"),
+            (Rows{{"1234", "Microsoft Corporation"}}));
+  EXPECT_EQ(store.rows("SELECT pid, image FROM proc_stop"), (Rows{{"1234", "PowerToys.exe"}}));
 }
 
 TEST_F(EventsComponentTest, NetworkMinutesAreWrittenByTheTickAndOnStop) {

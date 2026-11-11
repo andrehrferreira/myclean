@@ -127,6 +127,28 @@ class IRecycleBin {
   IRecycleBin() = default;
 };
 
+// Sends files to the Recycle Bin of their volume, as Explorer's Delete does, with no UI
+// (the owner's "Send to Recycle Bin" of report-view items, user_tasks::RecycleItems).
+// Implemented by platform/cleanup (Win32RecycleBin) and by test fakes.
+class IRecycler {
+ public:
+  virtual ~IRecycler() = default;
+  IRecycler(const IRecycler&) = delete;
+  IRecycler& operator=(const IRecycler&) = delete;
+  IRecycler(IRecycler&&) = delete;
+  IRecycler& operator=(IRecycler&&) = delete;
+
+  // Recycles each of `files` and never deletes one permanently: a file the Recycle Bin cannot
+  // take (too large, a volume without one) stays where it is. What was left where it was, by
+  // UTF-8 path: refused or not recyclable, and every file not reached once `stop` is requested.
+  // Fails when the shell cannot be used at all.
+  [[nodiscard]] virtual Result<std::vector<Skipped>> recycle(
+      std::span<const std::filesystem::path> files, const std::stop_token& stop) = 0;
+
+ protected:
+  IRecycler() = default;
+};
+
 // Deletes the Recycle Bin items the owner deleted at least `days` days ago, permanently, in the
 // owner's context (the tray). Not reversible. Every reference must outlive the action.
 class RecycleBinCleanup final : public Action {

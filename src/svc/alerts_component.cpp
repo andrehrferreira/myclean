@@ -74,17 +74,19 @@ Result<void> AlertsComponent::start(const Context& context) {
                            [this](const Json&) { return badge(); });
       })
       .and_then([&] {
-        return methods.add(std::string(ipc::alerts_snooze_method),
-                           {Param{.name = "rule", .type = ParamType::token, .required = true},
-                            Param{.name = "entity", .type = ParamType::token, .required = true},
-                            Param{.name = "minutes", .type = ParamType::integer, .required = true}},
-                           [this](const Json& params) { return snooze(params); });
+        return methods.add(
+            std::string(ipc::alerts_snooze_method),
+            {Param{.name = "rule", .type = ParamType::token, .required = true},
+             Param{.name = "entity", .type = ParamType::token, .required = true},
+             Param{.name = "minutes", .type = ParamType::integer, .required = true}},
+            [this](const Json& params) { return snooze(params); }, ipc::Access::tray);
       })
       .and_then([&] {
-        return methods.add(std::string(ipc::alerts_dismiss_method),
-                           {Param{.name = "rule", .type = ParamType::token, .required = true},
-                            Param{.name = "entity", .type = ParamType::token, .required = true}},
-                           [this](const Json& params) { return dismiss(params); });
+        return methods.add(
+            std::string(ipc::alerts_dismiss_method),
+            {Param{.name = "rule", .type = ParamType::token, .required = true},
+             Param{.name = "entity", .type = ParamType::token, .required = true}},
+            [this](const Json& params) { return dismiss(params); }, ipc::Access::tray);
       });
 }
 

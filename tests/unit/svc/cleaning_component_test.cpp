@@ -80,7 +80,9 @@ TEST(CleaningComponentTest, ScansOnItsOwnThreadAndRegistersThePlanMethods) {
     const Result<Json> status = harness.call("cleaning.status");
     return status && status->at("unavailable").is_null();
   }));
-  EXPECT_EQ(harness.call("cleaning.scan").value(), (Json{{"started", true}}));
+  EXPECT_EQ(harness.code("cleaning.scan", Json::object()), ipc::rpc_error::server_error);
+  EXPECT_EQ(harness.call("cleaning.scan", Json::object(), ipc::Caller{.tray = true}).value(),
+            (Json{{"started", true}}));
   ASSERT_TRUE(testing::eventually([&] {
     const Result<Json> plans = harness.call("plans.list");
     return plans && plans->at("plans").size() == 1;

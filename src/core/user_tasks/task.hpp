@@ -38,14 +38,15 @@
 // user_tasks.report (contracts in core/ipc/plans.hpp).
 namespace myclean::user_tasks {
 
-enum class TaskKind { native, handler, relocate, recycle_bin, archive, uninstall };
+enum class TaskKind { native, handler, relocate, recycle_bin, archive, uninstall, recycle };
 enum class Operation { apply, undo };
 
 // One plan item the task may act on.
 struct TaskItem {
   std::int64_t id = 0;
   // "native:<command>", "handler:<name>", "relocate:<cache>", "relocate:<pack>/<case>[:<name>]",
-  // "recycle-bin:deleted-<days>-days-ago", a folder to archive, "uninstall:<name>"
+  // "recycle-bin:deleted-<days>-days-ago", a folder to archive, "uninstall:<name>", a file to
+  // send to the Recycle Bin
   std::filesystem::path path;
   Bytes bytes;
   std::optional<FileIdentity> identity;  // what the service recorded; nullopt for non-files
@@ -76,14 +77,15 @@ struct UserTask {
 // is still reported.
 [[nodiscard]] Result<std::int64_t> task_plan(const nlohmann::json& task);
 // A task: {"plan", "title",
-// "kind": "native"|"handler"|"relocate"|"recycle_bin"|"archive"|"uninstall",
+// "kind": "native"|"handler"|"relocate"|"recycle_bin"|"archive"|"uninstall"|"cleanup",
 // "operation": "apply"|"undo", "tier", "items": [{"id", "path", "bytes", "approved",
 // "volume_serial", "file_id"}], "action": {"command"} | {"volume", "handlers"} |
 // {"cache", "target", "content"} | {"recipe": placement::recipe_json(), "instance", "target",
 // "content"} | {"deleted_days"} | {"source", "target"} (archive) | {"key", "name"} or
-// {"package", "name"} (uninstall),
+// {"package", "name"} (uninstall) | {"recycle": true} (cleanup: TaskKind::recycle),
 // "undo": {"not_reversible", "items": [{"item", "data"}]} (undo only)}. Items the owner
-// rejected (approved false) are dropped. Any other kind (a Recycle Bin "cleanup") is refused.
+// rejected (approved false) are dropped. A "cleanup" task is read only as plans.recycle makes it
+// (action {"recycle": true}); any other cleanup, and any other kind, is refused.
 [[nodiscard]] Result<UserTask> parse_task(const nlohmann::json& task);
 
 // The handlers that read the caller's own profile and so run in the tray (rule scope "user",
@@ -117,7 +119,8 @@ struct TaskReport {
 // for one that is not a recycle_bin task. A recipe relocation also runs its commands with
 // `runner` and reads placement.registry and placement.processes. An archive task needs `usage`
 // and `locations` (and placement's copier, file system and drives), an uninstall task
-// placement.registry and `launcher`; without them the task fails, running nothing.
+// placement.registry and `launcher`, a recycle task `recycler`, `file_system` and `locations`;
+// without them the task fails, running nothing.
 struct Toolbox {
   cleanup::ICommandRunner* runner = nullptr;
   cleanup::IHandlerHost* handlers = nullptr;
@@ -129,14 +132,15 @@ struct Toolbox {
   const safety::ProtectedLocations* locations = nullptr;  // archive: the deny-list's places
   IUninstallLauncher* launcher = nullptr;                 // uninstall
   IPackageRemover* packages = nullptr;                    // uninstall of an Appx package
+  cleanup::IRecycler* recycler = nullptr;                 // recycle; with file_system and locations
 };
 
 // Runs `task` to its end, never throwing:
 //   apply  builds the action (refused, running nothing, when its command, handler or cache is
 //          not one the tray allows, or the Recycle Bin items are younger than
 //          cleanup::min_bin_days), previews it, keeps the items not rejected (a native command
-//          and a relocation act whole; handlers and the Recycle Bin by item), applies and
-//          verifies; a worse result is undone when the action can undo it;
+//          and a relocation act whole; handlers, the Recycle Bin and recycled files by item),
+//          applies and verifies; a worse result is undone when the action can undo it;
 //   undo   reverses the change with the task's undo data.
 // `stop` cancels a command or handler in progress (the task then fails); a relocation that is
 // copying runs to its end.

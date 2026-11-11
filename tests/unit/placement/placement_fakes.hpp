@@ -199,9 +199,16 @@ class FakeTreeCopier final : public ITreeCopier {
 
 class FakeDriveFacts final : public IDriveFacts {
  public:
-  [[nodiscard]] Result<std::vector<TargetVolume>> volumes() const override { return volumes_; }
+  [[nodiscard]] Result<std::vector<TargetVolume>> volumes() const override {
+    if (failure_) {
+      return tl::unexpected(*failure_);
+    }
+    return volumes_;
+  }
 
   std::vector<TargetVolume>& list() { return volumes_; }
+  // Makes every later volumes() fail with `error`: the volumes cannot be read.
+  void fail_with(Error error) { failure_ = std::move(error); }
   TargetVolume& at(std::wstring_view root) {
     return *std::ranges::find_if(volumes_,
                                  [&](const TargetVolume& volume) { return volume.root == root; });
@@ -209,6 +216,7 @@ class FakeDriveFacts final : public IDriveFacts {
 
  private:
   std::vector<TargetVolume> volumes_;
+  std::optional<Error> failure_;
 };
 
 // Volumes like the owner's machine (docs/analysis/myclean-planning/01-context-and-measurements.md).

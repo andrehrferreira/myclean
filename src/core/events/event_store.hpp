@@ -22,18 +22,20 @@ namespace myclean::events {
 //    thousands of compilers with long command lines a day, and two years of their text would
 //    cost gigabytes; the full text travels with the live event.
 //  - net_minute: bytes sent and received per process, protocol and remote endpoint, per minute.
+//  - proc_stop: one row per process exit (the process, when it exited, its exit code and image
+//    file name), so that a start can be matched with its end (migration 2, additive).
 [[nodiscard]] const store::MigrationSet& event_migrations();
 
-// Retention: proc_start like every event table (Store::history_retention), net_minute like
-// minute aggregates (Store::minute_retention).
+// Retention: proc_start and proc_stop like every event table (Store::history_retention),
+// net_minute like minute aggregates (Store::minute_retention).
 [[nodiscard]] Result<void> add_event_retention(store::Store& store);
 
 // 64-bit FNV-1a of the UTF-8 text, as stored in proc_start.command_line_hash.
 [[nodiscard]] std::int64_t command_line_hash(std::string_view command_line);
 
 // Persists events through the store's batched writes (Store::enqueue): every process start goes
-// to proc_start; network transfers are summed in memory per minute and written once the minute
-// is closed. Thread-safe.
+// to proc_start, every exit to proc_stop; network transfers are summed in memory per minute and
+// written once the minute is closed. Thread-safe.
 class EventRecorder final : public IEventSink {
  public:
   // `store` must outlive the recorder.
@@ -42,6 +44,10 @@ class EventRecorder final : public IEventSink {
   void on_start(const ProcessStart& event) override;
   void on_stop(const ProcessStop& event) override;
   void on_network(const NetworkTransfer& transfer) override;
+
+  // Sets the signer of the stored starts of `image` that have none: the image was verified only
+  // after they were stored (ISignerLookup::take_resolved).
+  void backfill_signer(std::string_view image, std::string_view signer);
 
   // Writes the minutes that ended at least Store::close_delay before `now`. A transfer that
   // arrives for a minute already written adds a second row for it; readers sum the rows.

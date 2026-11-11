@@ -138,13 +138,21 @@ TEST(ParseTaskTest, ReadsANativeTaskAndDropsOnlyRejectedItems) {
 }
 
 TEST(ParseTaskTest, RefusesKindsTheTrayDoesNotRunAndUnreadableTasks) {
+  // A cleanup plan reaches the tray only as plans.recycle makes it.
   Json recycle = tray_model::testing::native_task_json();
   recycle["kind"] = "cleanup";
   recycle["action"] = {{"recycle", true}};
+  const Result<UserTask> read = parse_task(recycle);
+  ASSERT_TRUE(read.has_value()) << read.error().message;
+  EXPECT_EQ(read->kind, TaskKind::recycle);
+  recycle["action"] = {{"recycle", false}};
   const Result<UserTask> refused = parse_task(recycle);
   ASSERT_FALSE(refused.has_value());
   EXPECT_EQ(refused.error().code, Errc::refused);
   EXPECT_EQ(task_plan(recycle).value(), 8);
+  Json other = tray_model::testing::native_task_json();
+  other["kind"] = "system_setting";
+  EXPECT_EQ(parse_task(other).error().code, Errc::refused);
 
   Json broken = tray_model::testing::native_task_json();
   broken["action"].erase("command");

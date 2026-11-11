@@ -129,12 +129,10 @@ TEST_F(RuleEngineTest, ShaderCacheItemsAreAuto) {
 
 // A candidate SafeRemove's deny-list would refuse is never proposed.
 TEST_F(RuleEngineTest, DenyListedItemsAreDroppedWithTheEntryName) {
-  tree().add_file(R"(C:\Windows\LiveKernelReports\WATCHDOG.dmp)", 1_GiB, days_ago(30));
   tree().add_file(R"(C:\Windows\Temp\setup.log)", 1_MiB, days_ago(30));
   tree().add_file(R"(C:\Program Files (x86)\Steam\appcache\httpcache\00\a)", 1_MiB, days_ago(30));
 
-  for (const char* id :
-       {"windows/live-kernel-reports", "windows/temp-system", "games/steam-httpcache"}) {
+  for (const char* id : {"windows/temp-system", "games/steam-httpcache"}) {
     SCOPED_TRACE(id);
     const Evaluation evaluation = evaluate(shipped_rule(id));
     if (std::string(id) == "windows/temp-system") {
