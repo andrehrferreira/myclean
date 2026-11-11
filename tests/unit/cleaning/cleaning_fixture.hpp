@@ -22,6 +22,7 @@
 #include "core/actions/audit_log.hpp"
 #include "core/actions/schema.hpp"
 #include "core/alerts/engine.hpp"
+#include "core/apps/apps.hpp"
 #include "core/clean/probes.hpp"
 #include "core/cleaning/records.hpp"
 #include "core/cleaning/service.hpp"
@@ -273,6 +274,24 @@ class AlertRecorder final : public health::IAlertSink {
   std::vector<alerts::Reading> readings;
 };
 
+// The owner's Appx packages and app usage as a test sets them.
+class FakeAppSystem final : public apps::IAppSystem {
+ public:
+  std::vector<apps::AppxPackage> packages;
+  std::vector<apps::RunRecord> records;  // returned as Prefetch's
+  std::string maker = "Board Maker";
+
+  [[nodiscard]] Result<std::vector<apps::AppxPackage>> appx() const override { return packages; }
+  [[nodiscard]] Result<std::vector<apps::RunRecord>> user_assist() const override {
+    return std::vector<apps::RunRecord>{};
+  }
+  [[nodiscard]] Result<std::vector<apps::RunRecord>> prefetch() const override { return records; }
+  [[nodiscard]] Result<std::vector<apps::RunRecord>> bam() const override {
+    return std::vector<apps::RunRecord>{};
+  }
+  [[nodiscard]] Result<std::string> manufacturer() const override { return maker; }
+};
+
 class CleaningFixture : public ::testing::Test {
  protected:
   CleaningFixture() {
@@ -327,7 +346,8 @@ class CleaningFixture : public ::testing::Test {
                   .images = &images_,
                   .dev_drive = &dev_drive_},
         .busy = [this] { return busy_; },
-        .diagnostics = &diagnostics_};
+        .diagnostics = &diagnostics_,
+        .apps = &apps_};
     service_ = std::make_unique<CleaningService>(std::move(sources), std::move(settings));
     ASSERT_TRUE(service_->start(*methods_).has_value());
   }
@@ -409,6 +429,7 @@ class CleaningFixture : public ::testing::Test {
   vhdx::testing::FakeWsl& wsl() { return wsl_; }
   vhdx::testing::FakeVirtualDisks& disks() { return disks_; }
   startup::testing::FakeDiagnosticsLog& diagnostics() { return diagnostics_; }
+  FakeAppSystem& apps_system() { return apps_; }
   indexer::testing::FakeScope& indexer() { return indexer_; }
   AlertRecorder& alerts() { return alerts_; }
   // The pauses of guided freeze elimination the executor runs PauseSuspect plans with; set
@@ -455,6 +476,7 @@ class CleaningFixture : public ::testing::Test {
   placement::testing::FakeDriveFacts drives_;
   startup::testing::FakeStartupSystem startup_;
   startup::testing::FakeDiagnosticsLog diagnostics_;
+  FakeAppSystem apps_;
   indexer::testing::FakeScope indexer_;
   AlertRecorder alerts_;
   elimination::IPauses* pauses_ = nullptr;

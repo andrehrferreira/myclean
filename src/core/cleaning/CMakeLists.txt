@@ -18,6 +18,7 @@ myclean_add_library(cleaning
   DEPENDS
     myclean::actions
     myclean::alerts
+    myclean::apps
     myclean::clean
     myclean::cleanup
     myclean::devdrive

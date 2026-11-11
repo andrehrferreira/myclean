@@ -25,6 +25,7 @@
 #include "core/placement/recipe.hpp"
 #include "core/placement/relocation.hpp"
 #include "core/safety/deny_list.hpp"
+#include "core/user_tasks/appx.hpp"
 #include "core/user_tasks/archive.hpp"
 #include "core/user_tasks/uninstall.hpp"
 
@@ -67,7 +68,8 @@ struct UserTask {
   Archive archive;                                    // archive: the folder and its target
   std::string program_key;   // uninstall: the program's Uninstall entry (scanall::uninstall_roots)
   std::string program_name;  // uninstall: its DisplayName
-  Undo undo;                 // undo: the stored undo data, pieces joined
+  std::string program_package;  // uninstall of an Appx package: its full name (no key then)
+  Undo undo;                    // undo: the stored undo data, pieces joined
 };
 
 // The plan id of a task, readable even when the rest is not, so that a task the tray cannot read
@@ -78,7 +80,8 @@ struct UserTask {
 // "operation": "apply"|"undo", "tier", "items": [{"id", "path", "bytes", "approved",
 // "volume_serial", "file_id"}], "action": {"command"} | {"volume", "handlers"} |
 // {"cache", "target", "content"} | {"recipe": placement::recipe_json(), "instance", "target",
-// "content"} | {"deleted_days"} | {"source", "target"} (archive) | {"key", "name"} (uninstall),
+// "content"} | {"deleted_days"} | {"source", "target"} (archive) | {"key", "name"} or
+// {"package", "name"} (uninstall),
 // "undo": {"not_reversible", "items": [{"item", "data"}]} (undo only)}. Items the owner
 // rejected (approved false) are dropped. Any other kind (a Recycle Bin "cleanup") is refused.
 [[nodiscard]] Result<UserTask> parse_task(const nlohmann::json& task);
@@ -125,6 +128,7 @@ struct Toolbox {
   const clean::IUsage* usage = nullptr;                   // archive: folders of running programs
   const safety::ProtectedLocations* locations = nullptr;  // archive: the deny-list's places
   IUninstallLauncher* launcher = nullptr;                 // uninstall
+  IPackageRemover* packages = nullptr;                    // uninstall of an Appx package
 };
 
 // Runs `task` to its end, never throwing:

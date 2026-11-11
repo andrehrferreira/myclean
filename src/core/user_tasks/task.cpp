@@ -131,7 +131,11 @@ void parse_action(const Json& action, UserTask& task) {
           Archive{.source = path_of(action.at("source")), .target = path_of(action.at("target"))};
       break;
     case TaskKind::uninstall:
-      task.program_key = action.at("key").get<std::string>();
+      if (action.contains("package")) {
+        task.program_package = action.at("package").get<std::string>();
+      } else {
+        task.program_key = action.at("key").get<std::string>();
+      }
       task.program_name = action.at("name").get<std::string>();
       break;
     case TaskKind::relocate:
@@ -180,13 +184,20 @@ struct Built {
 // The action of an owner's one-click decision: an archive or an uninstall task.
 Result<Built> build_decision(const UserTask& task, const Toolbox& tools,
                              const std::stop_token& stop) {
+  if (task.kind == TaskKind::uninstall && !task.program_package.empty()) {
+    if (tools.packages == nullptr) {
+      return fail(Errc::invalid_state, "the tray cannot remove app packages");
+    }
+    return Built{.action = std::make_unique<AppxRemoval>(*tools.packages, task.program_package,
+                                                         task.program_name, stop)};
+  }
   if (task.kind == TaskKind::uninstall) {
     if (tools.placement.registry == nullptr || tools.launcher == nullptr) {
       return fail(Errc::invalid_state, "the tray cannot start uninstallers");
     }
-    return Built{.action =
-                     std::make_unique<UninstallAction>(*tools.placement.registry, *tools.launcher,
-                                                       task.program_key, task.program_name, stop)};
+    return Built{.action = std::make_unique<UninstallAction>(
+                     *tools.placement.registry, *tools.launcher, task.program_key,
+                     task.program_name, stop, tools.file_system)};
   }
   if (tools.usage == nullptr || tools.locations == nullptr) {
     return fail(Errc::invalid_state, "the tray cannot check the folder to archive");

@@ -17,6 +17,7 @@
 #include "core/actions/policy.hpp"
 #include "core/actions/quarantine.hpp"
 #include "core/alerts/engine.hpp"
+#include "core/apps/apps.hpp"
 #include "core/clean/probes.hpp"
 #include "core/clean/workspaces.hpp"
 #include "core/cleaning/progress.hpp"
@@ -225,6 +226,16 @@ class Executor {
   // already_exists while a pause plan of the same suspect is open.
   [[nodiscard]] Result<Plan> propose_pause(std::int64_t suspect, std::chrono::hours period,
                                            const Actor& proposer);
+  // An approval-only plan that uninstalls installed app `app` (apps spec, "Uninstall Through The
+  // App's Own Uninstaller After Approval"): action "UninstallProgram", kind uninstall, scope user
+  // (the tray runs it as the owner), one item "uninstall:<name>". A Win32 app: params {"key",
+  // "name"}, its command the UninstallString (else QuietUninstallString) read from the owner's
+  // registry now; an Appx package: params {"package", "name"}, removed through
+  // PackageManager.RemovePackageAsync. A keep or unknown verdict is a warning with its reason.
+  // Fails with invalid_argument ("no uninstaller registered") for a Win32 app without one,
+  // not_found when its Uninstall entry is gone or names another app, invalid_state without the
+  // owner's registry.
+  [[nodiscard]] Result<Plan> propose_uninstall(const apps::App& app, const Actor& proposer);
   // When the system volume has less than low_space_ratio free: automatic plans (approved at once,
   // run by the service, undoable) that reduce full hibernation and that keep a 4096 MB page file
   // on the system volume for crash dumps while a system-managed one goes to the best healthy

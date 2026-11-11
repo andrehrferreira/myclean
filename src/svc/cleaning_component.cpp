@@ -52,6 +52,9 @@ Result<void> CleaningComponent::start(const Context& context) {
   if (sources_.startup && !context.owner_sid().empty()) {
     startup_ = sources_.startup(context.owner_sid());
   }
+  if (sources_.apps && !context.owner_sid().empty()) {
+    apps_ = sources_.apps(context.owner_sid());
+  }
   cleaning::ServiceSources sources{
       .store = &context.store(),
       .clock = &context.clock(),
@@ -89,7 +92,8 @@ Result<void> CleaningComponent::start(const Context& context) {
                 .images = sources_.images.get(),
                 .dev_drive = sources_.dev_drive.get()},
       .busy = sources_.busy,
-      .diagnostics = sources_.diagnostics.get()};
+      .diagnostics = sources_.diagnostics.get(),
+      .apps = apps_.get()};
   service_ = std::make_unique<cleaning::CleaningService>(std::move(sources), std::move(settings));
   service_->on_work([this] { wake(); });
   if (Result<void> started = service_->start(context.methods()); !started) {

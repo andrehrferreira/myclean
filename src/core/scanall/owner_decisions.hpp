@@ -51,14 +51,16 @@ struct UninstallEntry {
   std::string publisher;
   std::string version;             // DisplayVersion
   std::filesystem::path location;  // InstallLocation; empty when the entry has none
-  std::string uninstall;           // UninstallString: the program's own interactive uninstaller
-  Bytes estimated;                 // EstimatedSize (stored in KiB); zero when absent
+  // UninstallString (the program's own interactive uninstaller), else QuietUninstallString
+  std::string uninstall;
+  Bytes estimated;  // EstimatedSize (stored in KiB); zero when absent
 
   friend bool operator==(const UninstallEntry&, const UninstallEntry&) = default;
 };
 
 // The entry at `key` (one of uninstall_roots' subkeys); nullopt when the key, its DisplayName or
-// its UninstallString is missing (the program is not installed, or cannot be uninstalled).
+// both its UninstallString and QuietUninstallString are missing (the program is not installed, or
+// cannot be uninstalled).
 [[nodiscard]] Result<std::optional<UninstallEntry>> uninstall_entry(
     const placement::IRegistry& registry, std::string_view key);
 

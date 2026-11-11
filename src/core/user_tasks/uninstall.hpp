@@ -9,6 +9,7 @@
 
 #include "core/model/action.hpp"
 #include "core/model/result.hpp"
+#include "core/os/file_system.hpp"
 #include "core/placement/settings.hpp"
 
 // Launch the uninstaller (owner-decisions spec): the tray runs an installed program's own
@@ -63,15 +64,19 @@ struct CommandLine {
 //            cannot be undone (reinstalling needs the program's installer);
 //   verify   metric "uninstall_entry": better when the entry is gone; while it is still there it
 //            fails with "launched ...; finish in the uninstaller", so the plan stays applied and
-//            its log says what was launched;
+//            its log says what was launched. When the entry is gone but its InstallLocation is
+//            still there (with `files`), it fails naming that folder: MyClean reports a leftover
+//            folder and never deletes it;
 //   undo     fails with not_reversible.
 class UninstallAction final : public Action {
  public:
   // Every reference must outlive the action.
   UninstallAction(const placement::IRegistry& registry, IUninstallLauncher& launcher,
-                  std::string key, std::string name, std::stop_token stop)
+                  std::string key, std::string name, std::stop_token stop,
+                  const os::IFileSystem* files = nullptr)
       : registry_(&registry),
         launcher_(&launcher),
+        files_(files),
         key_(std::move(key)),
         name_(std::move(name)),
         stop_(std::move(stop)) {}
@@ -85,6 +90,7 @@ class UninstallAction final : public Action {
  private:
   const placement::IRegistry* registry_;
   IUninstallLauncher* launcher_;
+  const os::IFileSystem* files_;  // may be null: no leftover folder check
   std::string key_;
   std::string name_;
   std::stop_token stop_;

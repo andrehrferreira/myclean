@@ -19,6 +19,8 @@ myclean_add_library(tray
     inbox_ui.hpp
     instance.cpp
     instance.hpp
+    package_remover.cpp
+    package_remover.hpp
     pipe_link.cpp
     pipe_link.hpp
     poll_thread.cpp
@@ -57,7 +59,12 @@ myclean_add_library(tray
     gdi32
     ole32
     shell32
-    user32)
+    user32
+    windowsapp)
+
+# The C++/WinRT headers pull in DirectXMath, whose intrinsics path needs <cpuid.h>, which the
+# clang-tidy of Visual Studio does not ship; nothing here uses DirectXMath.
+set_source_files_properties(package_remover.cpp PROPERTIES COMPILE_DEFINITIONS _XM_NO_INTRINSICS_)
 
 add_executable(myclean-tray WIN32 main.cpp myclean-tray.manifest
                             ${PROJECT_SOURCE_DIR}/src/resources/myclean.rc)

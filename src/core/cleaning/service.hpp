@@ -21,6 +21,7 @@
 #include "core/actions/policy.hpp"
 #include "core/actions/quarantine.hpp"
 #include "core/actions/store_plan_source.hpp"
+#include "core/apps/apps.hpp"
 #include "core/clean/probes.hpp"
 #include "core/cleaning/executor.hpp"
 #include "core/cleaning/tray_tasks.hpp"
@@ -111,6 +112,9 @@ struct ServiceSources {
   // Windows' boot measurements: the startup impact shown before MyClean has measured a logon,
   // and the boot and logon durations. Null: none.
   const startup::IDiagnosticsLog* diagnostics = nullptr;
+  // The owner's Appx packages, app usage records and the computer's maker; null: apps.list and
+  // plans.propose_uninstall fail.
+  const apps::IAppSystem* apps = nullptr;
 };
 
 struct ServiceSettings {
@@ -203,6 +207,11 @@ class CleaningService {
   // plans.propose_startup: the items of the latest startup.list answer named by "id".
   [[nodiscard]] Result<nlohmann::json> propose_startup(const nlohmann::json& params,
                                                        const Actor& proposer);
+  // apps.list: the installed apps read now; remembers the app of each "id".
+  [[nodiscard]] Result<nlohmann::json> apps_list(const nlohmann::json& params);
+  // plans.propose_uninstall: the app of the latest apps.list answer named by "app".
+  [[nodiscard]] Result<nlohmann::json> propose_uninstall(const nlohmann::json& params,
+                                                         const Actor& proposer);
   [[nodiscard]] Result<nlohmann::json> space_answer(const std::string& key, bool refresh);
   [[nodiscard]] Result<nlohmann::json> analyze(const std::string& key, const std::stop_token& stop);
   [[nodiscard]] Result<space::ScanResult> scan_folder(const std::filesystem::path& root,
@@ -284,12 +293,17 @@ class CleaningService {
   std::vector<ipc::PackStatus> pack_status_;
   std::vector<PlanId> purges_;  // runs to purge early, oldest request first; the first runs now
   std::vector<std::string> startup_items_;  // startup::Item::id of each id of startup.list, 1..n
+  std::vector<rules::KbEntry> kb_;          // of registry_: the knowledge base
   bool scan_requested_ = false;
   bool scanning_ = false;
   double progress_ = 0.0;
   std::optional<WallTime> last_completed_;
   std::map<std::string, SpaceEntry, std::less<>> space_;
   std::deque<std::string> space_queue_;
+
+  std::mutex apps_mutex_;          // guards the members below; held while apps.list reads
+  apps::ProcessHistory history_;   // proc_start, read up to its newest row
+  std::vector<apps::App> listed_;  // the apps of the latest apps.list answer, ids 1..n
 };
 
 }  // namespace myclean::cleaning

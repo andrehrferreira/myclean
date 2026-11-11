@@ -613,4 +613,62 @@ std::string map(const Json& map) {
   return out;
 }
 
+std::string backups(const Json& check) {
+  if (!check.contains("sources")) {
+    return "The backup check has not finished yet (" + text_of(check, "state") +
+           "); run it again in a minute.\n";
+  }
+  std::string out =
+      std::format("Backups, checked {}: {}\n", utc(check, "checked_at"), text_of(check, "summary"));
+  for (const Json& source : check.value("sources", Json::array())) {
+    std::string line = std::format("  {}: {}", text_of(source, "name"), text_of(source, "status"));
+    if (source.value("location", Json()).is_string()) {
+      line += ", " + text_of(source, "location");
+    }
+    if (source.value("newest", Json()).is_number()) {
+      line += ", newest " + utc(source, "newest");
+    }
+    if (source.value("detail", Json()).is_string()) {
+      line += " (" + text_of(source, "detail") + ")";
+    }
+    out += line + "\n";
+  }
+  const Json& repositories = check.value("repositories", Json());
+  if (repositories.is_object()) {
+    out += std::format("Repositories with work that exists nowhere else ({} checked):\n",
+                       fixed(number(repositories, "checked"), 0));
+    if (repositories.value("unprotected", Json::array()).empty()) {
+      out += "  none\n";
+    }
+    for (const Json& repository : repositories.value("unprotected", Json::array())) {
+      out += std::format("  {}: {}\n", text_of(repository, "path"), text_of(repository, "text"));
+    }
+  }
+  if (const Json& advice = check.value("recommendation", Json()); advice.is_object()) {
+    out += "Recommendation: " + text_of(advice, "text") + "\n";
+  }
+  return out;
+}
+
+std::string installed_apps(const Json& list) {
+  const Json& apps = list.value("apps", Json::array());
+  std::string out =
+      std::format("Installed apps ({} shown of {}; MyClean's history covers {} days):\n",
+                  apps.size(), fixed(number(list, "count"), 0),
+                  fixed(number(list.value("history", Json::object()), "days"), 0));
+  for (const Json& app : apps) {
+    out += std::format("  {:>3} [{}] {}{}: last used {}\n", fixed(number(app, "id"), 0),
+                       text_of(app, "verdict"), text_of(app, "name"),
+                       app.value("publisher", Json()).is_string()
+                           ? " (" + text_of(app, "publisher") + ")"
+                           : std::string{},
+                       text_of(app.value("last_used", Json::object()), "text"));
+    out += std::format("      {}; {}\n", text_of(app, "description"), text_of(app, "reason"));
+  }
+  for (const Json& problem : list.value("problems", Json::array())) {
+    out += "  could not read " + problem.get<std::string>() + "\n";
+  }
+  return out;
+}
+
 }  // namespace myclean::cli::text

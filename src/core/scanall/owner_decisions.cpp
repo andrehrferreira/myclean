@@ -170,6 +170,13 @@ Result<std::optional<UninstallEntry>> uninstall_entry(const placement::IRegistry
     }
     *field = *std::move(value);
   }
+  if (entry.uninstall.empty()) {
+    Result<std::string> quiet = text_value(registry, key, "QuietUninstallString");
+    if (!quiet) {
+      return tl::unexpected(quiet.error());
+    }
+    entry.uninstall = *std::move(quiet);
+  }
   if (entry.name.empty() || entry.uninstall.empty()) {
     return std::optional<UninstallEntry>{};
   }

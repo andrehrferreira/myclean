@@ -38,6 +38,7 @@ myclean_add_library(svc
   DEPENDS
     myclean::actions
     myclean::alerts
+    myclean::apps
     myclean::backup
     myclean::cleaning
     myclean::elimination
@@ -48,6 +49,7 @@ myclean_add_library(svc
     myclean::ipc
     myclean::os
     myclean::packs
+    myclean::platform_apps
     myclean::platform_backup
     myclean::platform_clean
     myclean::platform_fs

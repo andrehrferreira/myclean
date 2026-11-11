@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 
 #include "core/ipc/alerts.hpp"
+#include "core/ipc/apps.hpp"
 #include "core/ipc/backup.hpp"
 #include "core/ipc/disk_health.hpp"
 #include "core/ipc/input.hpp"
@@ -480,6 +481,35 @@ const Json& tool_list() {
            "background: while 'state' is 'checking', call again in a minute. Reads only; it "
            "sets nothing up.",
            object_schema({{"refresh", refresh_property()}})),
+      tool("list_installed_apps",
+           "Every installed app: the entries of Settings > Apps (Uninstall keys of HKLM 64-bit, "
+           "32-bit and the owner's HKCU) and the owner's Microsoft Store (Appx) packages, each "
+           "with publisher, version, install date, size, the knowledge-base description "
+           "('unknown' when MyClean does not know it: never invent one), when it was last used "
+           "with the source of that date (UserAssist, Prefetch, BAM or MyClean process history) "
+           "and a confidence ('no usage recorded' is not a date: report it with its confidence "
+           "and the span of MyClean's history), and a verdict: removable (the knowledge base "
+           "marks it safe to remove), keep (with its reason: came with the computer, runtime or "
+           "framework, driver, Windows system app) or unknown. With unused_days only the apps "
+           "not used in that many days and those with no usage recorded. The 'id' values are "
+           "what propose_uninstall takes. Reads only.",
+           object_schema({{"unused_days",
+                           {{"type", "integer"},
+                            {"minimum", 1},
+                            {"maximum", 3650},
+                            {"description", "Only apps not used in this many days, e.g. 180"}}}})),
+      proposal_tool(
+          "propose_uninstall",
+          "Proposes uninstalling one app with its own uninstaller (the UninstallString MyClean "
+          "reads from the registry, or Windows' package removal for a Store app). It only "
+          "creates a plan in state 'awaiting_approval' and notifies the owner: nothing is "
+          "uninstalled until the owner approves it in the MyClean tray, and it cannot be undone "
+          "except by installing the app again. An app whose verdict is keep carries that reason "
+          "in the plan. Takes only an 'id' of the latest list_installed_apps answer.",
+          object_schema(
+              {{"app_id",
+                {{"type", "integer"}, {"description", "An 'id' from list_installed_apps"}}}},
+              Json::array({"app_id"}))),
   });
   return list;
 }
@@ -659,8 +689,22 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
     return ServiceCall{.method = ipc::plans_propose_optimization_method,
                        .params = std::move(proposal)};
   }
+  return std::nullopt;
+}
+
+// The service method and parameters of a backup or installed-app tool; nullopt for the others.
+std::optional<ServiceCall> guard_call(std::string_view tool, const Json& arguments,
+                                      const std::string& client) {
   if (tool == "check_backups") {
-    return ServiceCall{.method = ipc::backups_check_method, .params = refresh};
+    return ServiceCall{.method = ipc::backups_check_method,
+                       .params = Json{{"refresh", arguments.value("refresh", false)}}};
+  }
+  if (tool == "list_installed_apps") {
+    return ServiceCall{.method = ipc::apps_list_method, .params = arguments};
+  }
+  if (tool == "propose_uninstall") {
+    return ServiceCall{.method = ipc::plans_propose_uninstall_method,
+                       .params = Json{{"app", arguments.at("app_id")}, {"client", client}}};
   }
   return std::nullopt;
 }
@@ -809,8 +853,11 @@ tl::expected<Json, std::string> Server::call_tool(const Json& params) const {
 
   const auto& tool_name = name->get_ref<const std::string&>();
   Reply reply;
-  if (const std::optional<ServiceCall> mapped = space_or_plan_call(tool_name, arguments, client_);
-      mapped) {
+  std::optional<ServiceCall> mapped = space_or_plan_call(tool_name, arguments, client_);
+  if (!mapped) {
+    mapped = guard_call(tool_name, arguments, client_);
+  }
+  if (mapped) {
     reply = call_(mapped->method, mapped->params);
   } else if (tool_name == "health_snapshot") {
     reply = health_snapshot(call_);

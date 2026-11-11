@@ -27,6 +27,8 @@
 #include "cli/security_command.hpp"
 #include "cli/text.hpp"
 #include "core/ipc/alerts.hpp"
+#include "core/ipc/apps.hpp"
+#include "core/ipc/backup.hpp"
 #include "core/ipc/disk_health.hpp"
 #include "core/ipc/governor.hpp"
 #include "core/ipc/input.hpp"
@@ -65,8 +67,9 @@ const std::string* find_option(const CommandLine& line, std::string_view name) {
 }
 
 Result<CommandLine> parse(std::span<const std::string> args) {
-  constexpr std::array<std::string_view, 9> valued{
-      "pipe", "sort", "limit", "entity", "hours", "max-points", "min-gb", "depth", "data"};
+  constexpr std::array<std::string_view, 10> valued{"pipe",  "sort",       "limit",  "entity",
+                                                    "hours", "max-points", "min-gb", "depth",
+                                                    "data",  "unused-days"};
   CommandLine line;
   for (std::size_t index = 0; index < args.size(); ++index) {
     const std::string& arg = args[index];
@@ -186,13 +189,14 @@ struct PlainCommand {
   std::string (*render)(const Json&);
 };
 
-constexpr std::array<PlainCommand, 5> plain_commands{
+constexpr std::array<PlainCommand, 6> plain_commands{
     PlainCommand{.name = "volumes", .method = ipc::volumes_list_method, .render = &render_volumes},
     PlainCommand{.name = "disks", .method = ipc::disks_health_method, .render = &text::disks},
     PlainCommand{.name = "alerts", .method = ipc::alerts_list_method, .render = &text::alerts},
     PlainCommand{.name = "freezes", .method = ipc::input_summary_method, .render = &text::freezes},
     PlainCommand{
-        .name = "governor", .method = ipc::governor_status_method, .render = &text::governor}};
+        .name = "governor", .method = ipc::governor_status_method, .render = &text::governor},
+    PlainCommand{.name = "backups", .method = ipc::backups_check_method, .render = &text::backups}};
 
 // explain <pid>
 int explain(const CommandLine& line, const mcp::Caller& call, std::ostream& out,
@@ -207,6 +211,36 @@ int explain(const CommandLine& line, const mcp::Caller& call, std::ostream& out,
   }
   return show(call(ipc::processes_explain_method, Json{{"pid", pid}}), line.json, out, err,
               &text::explain);
+}
+
+// processes [--sort cpu|memory] [--limit <n>]
+int processes(const CommandLine& line, const mcp::Caller& call, std::ostream& out,
+              std::ostream& err) {
+  const Result<std::optional<std::int64_t>> limit = option<std::int64_t>(line, "limit");
+  if (!limit) {
+    err << "myclean: " << limit.error().message << '\n';
+    return exit_usage;
+  }
+  Json params{{"limit", limit->value_or(10)}};
+  if (const std::string* sort = find_option(line, "sort"); sort != nullptr) {
+    params["sort"] = *sort;
+  }
+  return show(call(ipc::processes_top_method, params), line.json, out, err, &text::trees);
+}
+
+// apps [--unused-days <n>]
+int installed_apps(const CommandLine& line, const mcp::Caller& call, std::ostream& out,
+                   std::ostream& err) {
+  const Result<std::optional<std::int64_t>> days = option<std::int64_t>(line, "unused-days");
+  if (!days) {
+    err << "myclean: " << days.error().message << '\n';
+    return exit_usage;
+  }
+  Json params = Json::object();
+  if (*days) {
+    params["unused_days"] = **days;
+  }
+  return show(call(ipc::apps_list_method, params), line.json, out, err, &text::installed_apps);
 }
 
 // map [<volume-or-path>] [--min-gb <n>] [--depth <n>] [--data <dir>]
@@ -250,16 +284,10 @@ int dispatch(const CommandLine& line, const mcp::Caller& call, const os::IClock&
     }
   }
   if (command == "processes" && words.size() == 1) {
-    const Result<std::optional<std::int64_t>> limit = option<std::int64_t>(line, "limit");
-    if (!limit) {
-      err << "myclean: " << limit.error().message << '\n';
-      return exit_usage;
-    }
-    Json params{{"limit", limit->value_or(10)}};
-    if (const std::string* sort = find_option(line, "sort"); sort != nullptr) {
-      params["sort"] = *sort;
-    }
-    return show(call(ipc::processes_top_method, params), line.json, out, err, &text::trees);
+    return processes(line, call, out, err);
+  }
+  if (command == "apps" && words.size() == 1) {
+    return installed_apps(line, call, out, err);
   }
   if (command == "explain" && words.size() == 2) {
     return explain(line, call, out, err);
@@ -298,6 +326,10 @@ std::string_view usage() {
          "  governor                    the resource governor: mode, pressure, game mode, jobs,\n"
          "                              steps in effect and recent events\n"
          "  volumes                     volumes with free space and days until full\n"
+         "  backups                     every backup source, the last-backup age and the git\n"
+         "                              repositories with work that exists nowhere else\n"
+         "  apps [--unused-days <n>]    installed apps with last use (source, confidence),\n"
+         "                              description and keep/remove verdict\n"
          "  metrics latest              the newest CPU, memory, disk and GPU values\n"
          "  metrics query <metric> [--entity <entity>] [--hours <n>] [--max-points <n>]\n"
          "                              history of one metric over the last hours\n"

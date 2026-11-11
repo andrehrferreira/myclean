@@ -296,6 +296,8 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   | `volumes.list` | none | telemetry |
   | `disks.health` | none | disk_health |
   | `backups.check` | refresh | backup |
+  | `apps.list` | unused_days | cleaning |
+  | `plans.propose_uninstall` | app, client | cleaning |
   | `alerts.list` | since | alerts |
   | `alerts.badge` | none | alerts |
   | `alerts.snooze` | rule, entity, minutes | alerts |
@@ -347,12 +349,10 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   `memory_trend`, `find_indexed_build_folders` and the intruder scan's `scan_suspicious`,
   `list_browser_extensions` and `list_network_processes`. Proposal tools (`propose_cleanup`,
   `propose_optimization`, `propose_disable_startup`, `propose_index_exclusion`,
-  `propose_compact_vhdx`, `propose_pause`;
-  `propose_uninstall`
-  arrives later) create plans in the `awaiting_approval` state, which
+  `propose_compact_vhdx`, `propose_pause`, `propose_uninstall`) create plans in the `awaiting_approval` state, which
   triggers a tray notification. They name what they propose only by the
   numbers a read tool returned (candidate ids, startup item ids, folder ids, disk ids, suspect
-  ids), never by
+  ids, app ids), never by
   a path or registry name, so no client string reaches an OS API.
 
 **Backup check (B1, `core/backup`, `svc::BackupComponent`):** `backups.check` reports every
@@ -369,6 +369,23 @@ only healthy drives of this machine and MyClean sets nothing up. The git reposit
 roots of `data/workspaces.toml` are checked as the owner with `remote`, `rev-list --branches --not
 --remotes` and `status --porcelain`: local refs only, nothing is fetched. MCP `check_backups` reads
 it.
+
+**Installed apps (A1–A2, `core/apps`, the cleaning component):** `apps.list` reads every entry of
+the Uninstall keys (HKLM 64-bit and 32-bit, the owner's HKCU) that Settings > Apps shows and the
+owner's Appx packages (`PackageManager.FindPackagesForUser`, main packages only) with publisher,
+version, install date, size and the knowledge-base description ("unknown" when no entry matches
+its programs). Last use is the newest run among UserAssist, Prefetch (decompressed with
+`RtlDecompressBufferEx`), BAM and MyClean's own `proc_start` history, named with its source and a
+confidence; with no run anywhere it is "no usage recorded" and states how far MyClean's history
+reaches. The verdict is `keep` for system Appx packages, runtimes and frameworks, drivers and the
+apps of the computer's maker (the SMBIOS manufacturer `Win32_ComputerSystem` reports),
+`removable` only when a knowledge-base entry marks the app safe to remove, `unknown` otherwise.
+`plans.propose_uninstall` names an app only by its id in the latest answer and creates an
+`awaiting_approval` plan of kind `uninstall` that the tray runs as the owner once approved: the
+UninstallString (or QuietUninstallString) the tray reads again from the registry, or
+`PackageManager.RemovePackageAsync` for an Appx package. A `keep` verdict travels with the plan as a
+warning; MyClean never deletes a program folder or registry entry itself and reports a folder the
+uninstaller left behind. MCP `list_installed_apps` and `propose_uninstall` map to these methods.
 
 **Guided freeze elimination (I3, `core/elimination`, `svc::EliminationComponent`):** once the
 first freeze incident is 7 days old, `input.pauses` offers the highest-ranked running suspect

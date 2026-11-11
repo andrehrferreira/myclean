@@ -23,6 +23,7 @@
 #include "core/actions/item_action.hpp"
 #include "core/actions/policy.hpp"
 #include "core/actions/quarantine.hpp"
+#include "core/apps/apps.hpp"
 #include "core/clean/workspaces.hpp"
 #include "core/cleaning/executor.hpp"
 #include "core/cleaning/records.hpp"
@@ -30,6 +31,7 @@
 #include "core/devdrive/advisor.hpp"
 #include "core/elimination/pause_action.hpp"
 #include "core/indexer/folders.hpp"
+#include "core/ipc/apps.hpp"
 #include "core/ipc/frame.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/plans.hpp"
@@ -346,6 +348,7 @@ void CleaningService::reload_packs() {
       [](const rules::CleaningRule& rule) { return rule.project_marker.has_value(); });
   const std::scoped_lock lock(mutex_);
   recipes_ = registry_.relocate;
+  kb_ = registry_.kb;
   uninstall_areas_ = std::move(uninstall_areas);
   dev_cache_areas_ = std::move(dev_cache_areas);
   vm_disk_areas_ = std::move(vm_disk_areas);
@@ -946,6 +949,59 @@ Result<Json> CleaningService::propose_startup(const Json& params, const Actor& p
   const bool enable = params.value("enable", false);
   return on_executor([&](Executor& executor) {
     return plan_answer(executor.propose_startup(chosen, enable, proposer));
+  });
+}
+
+Result<Json> CleaningService::apps_list(const Json& params) {
+  std::optional<int> unused_days;
+  if (params.contains("unused_days")) {
+    const std::int64_t days = params.at("unused_days").get<std::int64_t>();
+    if (days < 1 || days > ipc::apps_max_unused_days) {
+      return fail(Errc::invalid_argument,
+                  "unused_days must be 1 to " + std::to_string(ipc::apps_max_unused_days));
+    }
+    unused_days = static_cast<int>(days);
+  }
+  if (sources_.apps == nullptr) {
+    return fail(Errc::invalid_state, "the installed apps cannot be read here");
+  }
+  // The owner context (the owner's registry) exists once the executor does.
+  if (executor() == nullptr || !owner_->tools || owner_->tools->registry == nullptr) {
+    return fail(Errc::invalid_state, "the owner's registry cannot be read yet");
+  }
+  std::vector<rules::KbEntry> kb;
+  {
+    const std::scoped_lock lock(mutex_);
+    kb = kb_;
+  }
+  const std::scoped_lock lock(apps_mutex_);
+  apps::Facts facts = apps::read_facts(*owner_->tools->registry, *sources_.apps);
+  if (Result<void> updated = history_.update(*sources_.store); !updated) {
+    facts.problems.push_back("MyClean process history: " + updated.error().message);
+  }
+  const WallTime now = sources_.clock->now();
+  listed_ = apps::inventory(facts, history_, kb, now);
+  return apps::apps_json(listed_, facts, history_, unused_days, now);
+}
+
+Result<Json> CleaningService::propose_uninstall(const Json& params, const Actor& proposer) {
+  const std::int64_t id = params.at("app").get<std::int64_t>();
+  apps::App app;
+  {
+    const std::scoped_lock lock(apps_mutex_);
+    if (id < 1 || std::cmp_greater(id, listed_.size())) {
+      return fail(Errc::not_found,
+                  "no app " + std::to_string(id) + " in the latest apps.list answer");
+    }
+    app = listed_[static_cast<std::size_t>(id - 1)];
+  }
+  return on_executor([&](Executor& executor) -> Result<Json> {
+    Result<Json> answer = plan_answer(executor.propose_uninstall(app, proposer));
+    if (answer) {
+      (*answer)["verdict"] = apps::to_string(app.verdict);
+      (*answer)["reason"] = app.reason;
+    }
+    return answer;
   });
 }
 
@@ -1669,6 +1725,15 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
                              }));
   added.push_back(
       add(ipc::startup_list_method, {}, [this](const Json& /*params*/) { return startup_list(); }));
+  added.push_back(add(ipc::apps_list_method,
+                      {Param{.name = "unused_days", .type = ParamType::integer}},
+                      [this](const Json& params) { return apps_list(params); }));
+  added.push_back(methods.add_for_caller(
+      std::string(ipc::plans_propose_uninstall_method),
+      {Param{.name = "app", .type = ParamType::integer, .required = true}, client},
+      [this](const Json& params, const ipc::Caller& caller) {
+        return propose_uninstall(params, proposer_of(params, caller));
+      }));
   added.push_back(add(ipc::startup_boot_times_method, {},
                       [this](const Json& /*params*/) { return boot_times(); }));
   added.push_back(methods.add_for_caller(

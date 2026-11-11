@@ -156,6 +156,19 @@ TEST(OwnerDecisionsTest, AnEntryWithoutANameOrUninstallerIsNotAProgramToUninstal
   EXPECT_TRUE(program.location.empty());
 }
 
+// Apps spec, "Uninstall Through The App's Own Uninstaller": QuietUninstallString serves when
+// there is no UninstallString.
+TEST(OwnerDecisionsTest, AQuietUninstallerAloneMakesAnEntry) {
+  placement::testing::FakeRegistry registry;
+  const std::string key = std::string(machine) + R"(\Quiet)";
+  registry.put(key, "DisplayName", text("Quiet"));
+  const std::string quiet = R"("C:\Program Files\Q\unins.exe" /S)";
+  registry.put(key, "QuietUninstallString", text(quiet));
+  const Result<std::optional<UninstallEntry>> entry = uninstall_entry(registry, key);
+  ASSERT_TRUE(entry.has_value());
+  EXPECT_EQ(entry.value_or(std::nullopt).value_or(UninstallEntry{}).uninstall, quiet);
+}
+
 TEST(OwnerDecisionsTest, ProgramsInUninstallAreasAreReviewedWithTheAreasNote) {
   clean::testing::FakeEnvironment environment;
   environment.set(L"ProgramFiles", LR"(C:\Program Files)");

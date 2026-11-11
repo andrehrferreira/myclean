@@ -868,6 +868,100 @@ reclaim  = { kind = "uninstall", note = "Uninstall games you no longer play." }
             "not_found");
 }
 
+// Apps spec, "Prompt 4 Answerable Through MCP" and "MCP Proposals Cannot Approve": apps.list
+// fuses the Uninstall keys, the Appx packages and the usage sources, and an uninstall proposed by
+// an MCP client by its id waits for the tray with the keep reason; nothing is uninstalled.
+TEST_F(CleaningServiceTest, InstalledAppsAreListedAndAnUninstallWaitsForTheTray) {
+  const std::string root = R"(HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall)";
+  placement::testing::FakeRegistry& registry = owner_registry();
+  const auto add = [&](const std::string& subkey, const std::string& name,
+                       const std::string& publisher, const std::string& location,
+                       const std::string& uninstall) {
+    const std::string key = root + "\\" + subkey;
+    registry.put(key, "DisplayName", placement::RegistryValue{.text = name});
+    registry.put(key, "Publisher", placement::RegistryValue{.text = publisher});
+    registry.put(key, "InstallLocation", placement::RegistryValue{.text = location});
+    if (!uninstall.empty()) {
+      registry.put(key, "UninstallString", placement::RegistryValue{.text = uninstall});
+    }
+  };
+  add("Tool", "Old Tool", "Tools Ltd", R"(C:\Program Files\Old Tool)",
+      R"("C:\Program Files\Old Tool\unins000.exe")");
+  add("Util", "Board Utility", "ASUSTeK COMPUTER INC.", R"(C:\Program Files\ASUS\Util)",
+      R"(C:\Program Files\ASUS\Util\uninstall.exe)");
+  add("VC", "Microsoft Visual C++ 2015-2022 Redistributable (x64)", "Microsoft Corporation",
+      R"(C:\ProgramData\Package Cache\{X})", R"("C:\ProgramData\Package Cache\{X}\vc.exe" /u)");
+  add("Bare", "No Uninstaller", "Bare Inc", R"(C:\Program Files\Bare)", "");
+  apps_system().maker = "ASUS";
+  apps_system().records = {apps::RunRecord{.source = apps::UsageSource::prefetch,
+                                           .path = R"(C:\PROGRAM FILES\OLD TOOL\TOOL.EXE)",
+                                           .last_run = testing::noon - std::chrono::days{200}}};
+  start();
+  work();
+
+  const Json all = call("apps.list", Json::object(), false);
+  ASSERT_EQ(all.at("apps").size(), 4U) << all.dump();
+  EXPECT_EQ(all.at("manufacturer"), "ASUS");
+  const auto app = [&](const Json& list, const std::string& name) {
+    for (const Json& entry : list.at("apps")) {
+      if (entry.at("name").get<std::string>() == name) {
+        return entry;
+      }
+    }
+    return Json();
+  };
+  EXPECT_EQ(app(all, "Board Utility").at("verdict"), "keep");
+  EXPECT_EQ(app(all, "Board Utility").at("reason"), "came with the computer (OEM)");
+  const Json runtime = app(all, "Microsoft Visual C++ 2015-2022 Redistributable (x64)");
+  EXPECT_EQ(runtime.at("reason"), "runtime or framework");
+  const Json tool = app(all, "Old Tool");
+  EXPECT_EQ(tool.at("description"), "unknown");
+  EXPECT_EQ(tool.at("last_used").at("source"), "Prefetch");
+  EXPECT_EQ(tool.at("verdict"), "unknown");
+  EXPECT_FALSE(app(all, "No Uninstaller").at("uninstaller").get<bool>());
+
+  const Json unused = call("apps.list", Json{{"unused_days", 180}}, false);
+  EXPECT_EQ(unused.at("apps").size(), 4U);  // the tool ran 200 days ago; the others never
+  EXPECT_EQ(error_of("apps.list", Json{{"unused_days", 0}}, false).at("data").at("errc"),
+            "invalid_argument");
+
+  // Spec "MCP proposal waits for the tray" and "Keep reason travels with the proposal".
+  const Json proposed = call("plans.propose_uninstall",
+                             Json{{"app", runtime.at("id")}, {"client", "claude-code"}}, false);
+  EXPECT_EQ(proposed.at("state"), "awaiting_approval");
+  EXPECT_EQ(proposed.at("verdict"), "keep");
+  const std::int64_t id = proposed.at("plan").get<std::int64_t>();
+  const Json plan = get(id);
+  EXPECT_EQ(plan.at("proposer"), "mcp:claude-code");
+  EXPECT_EQ(plan.at("kind"), "uninstall");
+  EXPECT_EQ(plan.at("scope"), "user");
+  const std::string vc_uninstall = R"("C:\ProgramData\Package Cache\{X}\vc.exe" /u)";
+  EXPECT_EQ(plan.at("commands"), Json::array({vc_uninstall}));
+  EXPECT_NE(plan.at("warnings").dump().find("keep: runtime or framework"), std::string::npos)
+      << plan.dump();
+  EXPECT_FALSE(
+      error_of("plans.approve", Json{{"id", id}, {"selection", {{"all", true}}}}, false).is_null());
+  EXPECT_EQ(get(id).at("state"), "awaiting_approval");
+  EXPECT_TRUE(call("user_tasks.next").at("task").is_null());  // nothing to run before approval
+
+  // Spec "App without an uninstaller": no plan, the reason returned.
+  const Json refused = error_of("plans.propose_uninstall",
+                                Json{{"app", app(all, "No Uninstaller").at("id")}}, false);
+  EXPECT_EQ(refused.at("data").at("errc"), "invalid_argument");
+  EXPECT_NE(refused.at("message").get<std::string>().find("no uninstaller registered"),
+            std::string::npos);
+  EXPECT_EQ(error_of("plans.propose_uninstall", Json{{"app", 99}}, false).at("data").at("errc"),
+            "not_found");
+
+  // Once the owner approves it, the tray gets the task naming the registry key MyClean read.
+  call("plans.approve", Json{{"id", id}, {"selection", {{"all", true}}}});
+  const Json task = call("user_tasks.next").at("task");
+  EXPECT_EQ(task.at("kind"), "uninstall");
+  EXPECT_EQ(task.at("action"),
+            (Json{{"key", root + "\\VC"},
+                  {"name", "Microsoft Visual C++ 2015-2022 Redistributable (x64)"}}));
+}
+
 TEST_F(CleaningServiceTest, OwnerDecisionsSayWhatCouldNotBeJudged) {
   reader().listings[path(L"C:\\Users\\owner")] = {};
   start();

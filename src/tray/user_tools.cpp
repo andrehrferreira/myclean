@@ -25,6 +25,7 @@
 #include "platform/settings/registry.hpp"
 #include "platform/settings/tree_copier.hpp"
 #include "platform/settings/user_settings.hpp"
+#include "tray/package_remover.hpp"
 #include "tray/poll_thread.hpp"
 #include "tray/uninstall_launcher.hpp"
 
@@ -89,6 +90,7 @@ user_tasks::TaskReport run_user_task(const user_tasks::UserTask& task, const std
     }
   }
   Win32UninstallLauncher launcher;
+  Win32PackageRemover packages;
   const user_tasks::Toolbox tools{.runner = &runner,
                                   .handlers = handlers.get(),
                                   .recycle_bin = recycle_bin.get(),
@@ -103,7 +105,8 @@ user_tasks::TaskReport run_user_task(const user_tasks::UserTask& task, const std
                                                 .processes = &processes},
                                   .usage = &usage,
                                   .locations = locations ? &*locations : nullptr,
-                                  .launcher = &launcher};
+                                  .launcher = &launcher,
+                                  .packages = &packages};
   return user_tasks::run(task, tools, stop);
 }
 

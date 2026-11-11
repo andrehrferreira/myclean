@@ -13,6 +13,7 @@
 #include "core/model/action.hpp"
 #include "core/model/plan.hpp"
 #include "core/model/result.hpp"
+#include "core/model/text.hpp"
 #include "core/scanall/owner_decisions.hpp"
 
 namespace myclean::user_tasks {
@@ -44,6 +45,16 @@ bool ends_exe(std::string_view text, std::size_t at) {
   }
   const std::size_t end = at + exe.size();
   return end == text.size() || text[end] == ' ' || text[end] == '\t';
+}
+
+// The InstallLocation `undo` records; empty when it records none.
+std::filesystem::path location_of(const Undo& undo) {
+  if (undo.items.empty()) {
+    return {};
+  }
+  const Json json = Json::parse(undo.items.front().data, nullptr, false);
+  return json.is_object() ? from_utf8(json.value("location", std::string{}))
+                          : std::filesystem::path{};
 }
 
 // The command `undo` records; the launched UninstallString.
@@ -129,11 +140,13 @@ Result<Undo> UninstallAction::apply(const Preview& preview) {
                 "starting `" + program.uninstall + "` failed: " + launched.error().message);
   }
   launched_ = program.uninstall;
-  return Undo{
-      .items = {UndoItem{
-          .item = preview.items.front().id,
-          .data = Json{{"key", key_}, {"name", name_}, {"command", program.uninstall}}.dump()}},
-      .not_reversible = "an uninstalled program comes back only with its installer"};
+  return Undo{.items = {UndoItem{.item = preview.items.front().id,
+                                 .data = Json{{"key", key_},
+                                              {"name", name_},
+                                              {"command", program.uninstall},
+                                              {"location", utf8_text(program.location)}}
+                                             .dump()}},
+              .not_reversible = "an uninstalled program comes back only with its installer"};
 }
 
 Result<Verification> UninstallAction::verify(const Undo& undo) {
@@ -145,6 +158,12 @@ Result<Verification> UninstallAction::verify(const Undo& undo) {
     const std::string command = launched_.empty() ? launched_of(undo) : launched_;
     return fail(Errc::invalid_state, "launched `" + command + "`; finish in the uninstaller (" +
                                          name_ + " is still installed)");
+  }
+  if (const std::filesystem::path folder = location_of(undo);
+      files_ != nullptr && !folder.empty() && files_->stat(folder).has_value()) {
+    return fail(Errc::invalid_state, name_ + " is uninstalled, but its folder " +
+                                         utf8_text(folder) +
+                                         " was left behind; MyClean does not delete it");
   }
   return Verification{
       .metric = "uninstall_entry", .before = 1.0, .after = 0.0, .effect = Effect::better};

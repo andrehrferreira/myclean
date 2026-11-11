@@ -29,6 +29,7 @@
 #include "core/packs/loader.hpp"
 #include "core/placement/drives.hpp"
 #include "core/telemetry/metrics.hpp"
+#include "platform/apps/win32_apps.hpp"
 #include "platform/backup/win32_backup.hpp"
 #include "platform/clean/win32_probes.hpp"
 #include "platform/cleanup/win32_command_runner.hpp"
@@ -197,6 +198,9 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
       },
       .startup = [](std::string_view owner) -> std::unique_ptr<myclean::startup::IStartupSystem> {
         return std::make_unique<platform::Win32StartupSystem>(std::string(owner));
+      },
+      .apps = [](std::string_view owner) -> std::unique_ptr<myclean::apps::IAppSystem> {
+        return std::make_unique<platform::Win32AppSystem>(std::string(owner));
       },
       .diagnostics = std::make_unique<platform::Win32DiagnosticsLog>(),
       .indexer = std::make_unique<platform::Win32IndexerScope>(),

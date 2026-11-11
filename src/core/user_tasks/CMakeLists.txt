@@ -4,6 +4,8 @@
 # one-click decisions: a folder moved to the HDD archive, a program's own uninstaller.
 myclean_add_library(user_tasks
   SOURCES
+    appx.cpp
+    appx.hpp
     archive.cpp
     archive.hpp
     drive_facts.cpp

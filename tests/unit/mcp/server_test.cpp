@@ -196,7 +196,9 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
                                              "propose_disable_startup",
                                              "freeze_elimination",
                                              "propose_pause",
-                                             "check_backups"}));
+                                             "check_backups",
+                                             "list_installed_apps",
+                                             "propose_uninstall"}));
   // No tool approves, rejects, executes, undoes, restores or deletes anything.
   for (const std::string& name : names) {
     for (const char* verb :
@@ -350,6 +352,29 @@ TEST_F(ServerTest, CheckBackupsReadsTheBackupCheck) {
   EXPECT_EQ(calls()[1].params, (Json{{"refresh", true}}));
   EXPECT_TRUE(text(call_tool("check_backups", {{"path", "C:\\"}}), true).find("unknown argument") !=
               std::string::npos);
+}
+
+// Apps spec, "Prompt 4 Answerable Through MCP" and "MCP Proposals Cannot Approve": the list reads
+// apps.list and the proposal names the app by its id only, as the MCP client.
+TEST_F(ServerTest, InstalledAppToolsListAndProposeByIdOnly) {
+  static_cast<void>(send(Json{{"jsonrpc", "2.0"},
+                              {"id", 1},
+                              {"method", "initialize"},
+                              {"params", {{"clientInfo", {{"name", "claude code"}}}}}}));
+  static_cast<void>(text(call_tool("list_installed_apps"), false));
+  static_cast<void>(text(call_tool("list_installed_apps", {{"unused_days", 180}}), false));
+  static_cast<void>(text(call_tool("propose_uninstall", {{"app_id", 7}}), false));
+  ASSERT_EQ(calls().size(), 3U);
+  EXPECT_EQ(calls()[0].method, "apps.list");
+  EXPECT_EQ(calls()[0].params, Json::object());
+  EXPECT_EQ(calls()[1].params, (Json{{"unused_days", 180}}));
+  EXPECT_EQ(calls()[2].method, "plans.propose_uninstall");
+  EXPECT_EQ(calls()[2].params, (Json{{"app", 7}, {"client", "claude-code"}}));
+  EXPECT_NE(text(call_tool("propose_uninstall", {{"app_id", "C:\\Program Files\\App"}}), true)
+                .find("must be of type integer"),
+            std::string::npos);
+  EXPECT_NE(text(call_tool("list_installed_apps", {{"unused_days", 0}}), true).find("out of range"),
+            std::string::npos);
 }
 
 TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
@@ -508,7 +533,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 34U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 36U);
 }
 
 }  // namespace

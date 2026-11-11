@@ -10,6 +10,7 @@
 #include <thread>
 #include <vector>
 
+#include "core/apps/apps.hpp"
 #include "core/clean/probes.hpp"
 #include "core/cleaning/executor.hpp"
 #include "core/cleaning/service.hpp"
@@ -72,6 +73,8 @@ struct CleaningSources {
   std::function<std::unique_ptr<cleanup::IBinRecords>(std::string_view owner_sid)> bin;
   // The startup items of the owner with this SID and of the machine; empty: no startup items.
   std::function<std::unique_ptr<startup::IStartupSystem>(std::string_view owner_sid)> startup;
+  // The Appx packages and app usage of the owner with this SID; empty: no installed-app list.
+  std::function<std::unique_ptr<apps::IAppSystem>(std::string_view owner_sid)> apps;
   // Windows' Diagnostics-Performance boot events; null: none.
   std::unique_ptr<startup::IDiagnosticsLog> diagnostics;
   // The Windows Search crawl scope; null: no indexer-scope check.
@@ -125,6 +128,7 @@ class CleaningComponent final : public IComponent {
   std::unique_ptr<packs::IMachine> machine_;
   std::unique_ptr<cleanup::IBinRecords> bin_;
   std::unique_ptr<startup::IStartupSystem> startup_;
+  std::unique_ptr<apps::IAppSystem> apps_;
   CleaningMode mode_;
   std::unique_ptr<cleaning::CleaningService> service_;
   std::mutex mutex_;

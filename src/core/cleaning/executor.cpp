@@ -30,6 +30,7 @@
 #include "core/actions/policy.hpp"
 #include "core/actions/quarantine.hpp"
 #include "core/alerts/engine.hpp"
+#include "core/apps/apps.hpp"
 #include "core/clean/engine.hpp"
 #include "core/cleaning/records.hpp"
 #include "core/cleanup/dism_cleanup.hpp"
@@ -1201,6 +1202,54 @@ Result<Plan> Executor::owner_action(std::int64_t id) {
   return approved_by_owner(
       *engine_, submit(*engine_, *environment_.store, std::move(built->first), built->second, notes,
                        actions::AutomationLevel::suggest));
+}
+
+Result<Plan> Executor::propose_uninstall(const apps::App& app, const Actor& proposer) {
+  std::vector<std::string> warnings;
+  if (app.verdict == apps::Verdict::keep) {
+    warnings.push_back("MyClean's verdict is keep: " + app.reason);
+  } else if (app.verdict == apps::Verdict::unknown) {
+    warnings.push_back("MyClean does not know whether it is safe to remove: " + app.reason);
+  }
+  warnings.emplace_back(
+      "it cannot be undone: only installing it again brings it back; MyClean deletes no folder "
+      "or registry entry the uninstaller leaves behind");
+  Plan plan{.action = "UninstallProgram",
+            .proposer = proposer,
+            .created_at = environment_.clock->now(),
+            .items = {PlanItem{.path = from_utf8("uninstall:" + app.name),
+                               .size = app.size.value_or(Bytes{})}}};
+  PlanSpec spec{.kind = PlanKind::uninstall,
+                .tier = Tier::ask,
+                .scope = ExecutionContext::user,
+                .title = "Uninstall " + app.name,
+                .undo = "not possible: install it again with its installer"};
+  if (app.kind == apps::Kind::appx) {
+    spec.commands = {"remove the app package " + app.key + " (PackageManager.RemovePackageAsync)"};
+    spec.params = Json{{"package", app.key}, {"name", app.name}};
+  } else {
+    if (app.uninstall.empty()) {
+      return fail(Errc::invalid_argument, app.name + ": no uninstaller registered");
+    }
+    if (probes_.owner_tools == nullptr || probes_.owner_tools->registry == nullptr) {
+      return fail(Errc::invalid_state, "the owner's registry cannot be read here");
+    }
+    // The command comes from the registry now, never from the request.
+    Result<std::optional<scanall::UninstallEntry>> entry =
+        scanall::uninstall_entry(*probes_.owner_tools->registry, app.key);
+    if (!entry) {
+      return tl::unexpected(entry.error());
+    }
+    if (!*entry || (*entry)->name != app.name) {
+      return fail(Errc::not_found, app.name + " is not installed any more; list the apps again");
+    }
+    spec.commands = {(*entry)->uninstall};
+    spec.params = Json{{"key", app.key}, {"name", app.name}};
+    warnings.emplace_back("the program's own uninstaller opens on your desktop; finish it there");
+  }
+  spec.warnings = std::move(warnings);
+  return submit(*engine_, *environment_.store, std::move(plan), spec, {},
+                actions::AutomationLevel::suggest);
 }
 
 Result<Plan> Executor::submit_setting(Action& action, const std::string& name, const PlanSpec& spec,

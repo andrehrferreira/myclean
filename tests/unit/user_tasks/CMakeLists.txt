@@ -5,6 +5,7 @@
 # started through a fake launcher that starts nothing.
 myclean_add_test(user_tasks
   SOURCES
+    appx_test.cpp
     archive_test.cpp
     drive_facts_test.cpp
     task_test.cpp
