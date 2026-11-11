@@ -189,3 +189,50 @@ top level.
 7. **Prompt 6 Answerable Through MCP** — the CLI (`--json`, non-elevated)
    can't produce restore points or shadow copies itself. It must ask the
    service, or label those sources "needs service".
+
+## Re-check on 2026-11-11 (B1 implementation)
+
+Same machine, non-elevated, a 32-bit pwsh again (`[Environment]::Is64BitProcess` False, so
+registry reads went through `OpenBaseKey(..., 'Registry64')`), read-only.
+
+| Source | Observed now |
+|---|---|
+| File History | still never configured: no `%LOCALAPPDATA%\Microsoft\Windows\FileHistory`, `fhsvc` Manual/Stopped, `HKLM\SYSTEM\CurrentControlSet\Services\fhsvc\Parameters\Configs` exists with **no value** |
+| OneDrive | `Accounts\Personal\UserFolder` = `%USERPROFILE%\OneDrive`; Desktop, Documents and Pictures in `User Shell Folders` are `%USERPROFILE%\…` (not under it); `SignInErrorStateStartTimestamp` = 1760809494 (Unix seconds, 2025-10-18); OneDrive not running |
+| System restore | `HKLM\…\Windows NT\CurrentVersion\SystemRestore` (64-bit view): `SRInitDone=1`, `RPSessionInterval=1`, **`LastIndex=40`** (35 on 10-31: five restore points were made since). CIM `SystemRestore` still access denied |
+| Shadow copies | CIM `Win32_ShadowCopy` "Falha de inicialização" non-elevated |
+| `WindowsBackup` key | present, 0 values, 0 subkeys |
+| Uninstall keys | 819 keys, 755 with a DisplayName, 596 of them `SystemComponent=1`; 161 visible entries, none a backup product |
+| Manufacturer | `Win32_ComputerSystem.Manufacturer` = `ASUS` (not "ASUSTeK COMPUTER INC."); ASUS entries publish as `ASUSTeK COMPUTER INC.`, `ASUSTek Computer Inc.`, `ASUS` |
+| K:, L: | unchanged top level; newest dated copy still `L:\Backup-24-09-2026` (48 days old today) |
+
+### What B1 uses (`src/core/backup`, `src/platform/backup`)
+
+- **File History:** configured when the owner's
+  `%LOCALAPPDATA%\Microsoft\Windows\FileHistory\Configuration\Config1.xml` exists. Its target
+  is the text of its `<TargetUrl>` element, and the newest copy is the newest last-write time
+  of the files in that `Configuration` folder (File History rewrites its catalog there after
+  each run). Neither could be verified here (File History is off), so a configured File
+  History whose `TargetUrl` cannot be read is reported as found with the target unknown, and
+  one with no file time as found with the newest copy unknown, never as a date.
+- **System images:** `wbadmin get versions` is run by the SYSTEM service and judged only by its
+  exit code (0: versions exist; any other code: could not be checked, with the code; its text
+  is localized and never parsed). The dates come from the `WindowsImageBackup\<computer>`
+  folder times on every volume root, which non-elevated reads see too.
+- **Restore points and shadow copies:** CIM `root\default:SystemRestore` (`CreationTime`) and
+  `root\cimv2:Win32_ShadowCopy` (`InstallDate`, `VolumeName`), read by the service; an error
+  is "could not be checked" with the WMI code. Listed, never counted as a backup.
+- **OneDrive folder backup:** on when Desktop, Documents or Pictures (`User Shell Folders`,
+  expanded) lies under an account's `UserFolder`; a sign-in error
+  (`SignInErrorStateStartTimestamp`) is reported with it. There is no copy time: "continuous
+  sync (time unknown)".
+- **Third-party tools:** Uninstall `DisplayName` against a fixed product list (Macrium
+  Reflect, Veeam Agent, Acronis, Backblaze, Duplicati, AOMEI Backupper, EaseUS Todo Backup,
+  Paragon Backup, Cobian, Carbonite, IDrive, Arq, Kopia, Duplicacy, UrBackup).
+- **Backup volumes:** discovered at runtime as the volumes whose label contains "backup" (K:
+  "Backup 1", L: "Backup 2" here). A walk of depth 3 that never enters a reparse point and
+  never opens a file finds `.mrimg`, `.vbk`, `.tibx`, `WindowsImageBackup` and `FileHistory`
+  folders and, following implication 4, the manual copies this owner makes: a top-level folder
+  whose name holds "backup" and a date (dated by the date in its name, else its creation time;
+  never entered) and dump files (`*.dump`, `*_gitlab_backup.tar`, `*.bak`). `.vhdx` and `.wim`
+  are not artifacts.
