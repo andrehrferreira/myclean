@@ -16,6 +16,7 @@ enum class Reason {
   pressure_cleared,   // steps 1-3 rolled back after the clear hysteresis
   joined_tree,        // a process that joined a throttled tree got the tree's steps
   protected_process,  // "protected": a throttled process became protected (foreground, ...)
+  telemetry_stalled,  // no process table or system metric for Governor::stall_limit: 1-3 undone
   // The owner's choices (actor `owner`).
   allow_once,
   always_allow,
@@ -25,6 +26,7 @@ enum class Reason {
   // Service life cycle and crash recovery.
   stop,
   orphaned_suspend,
+  orphaned_state,  // a priority, memory priority or EcoQoS a crashed run left, restored
   untrusted_job,
   policy,  // a re-adopted job's limits set to the current policy, or lifted
   // Orphaned polling loops.

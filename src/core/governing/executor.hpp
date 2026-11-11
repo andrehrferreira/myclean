@@ -4,6 +4,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <span>
 #include <vector>
 
 #include "core/governing/job_book.hpp"
@@ -13,6 +14,7 @@
 #include "core/governor/policy.hpp"
 #include "core/governor/reason.hpp"
 #include "core/governor/recovery.hpp"
+#include "core/model/result.hpp"
 #include "core/os/clock.hpp"
 #include "core/os/process_control.hpp"
 #include "core/store/store.hpp"
@@ -39,7 +41,9 @@ class Executor {
 
   // Runs one apply_step, roll_back, persist_suspend, resume or kill command:
   //  - priority: BELOW_NORMAL and MEMORY_PRIORITY_LOW; ecoqos: EcoQoS on. The state before the
-  //    first change of each process is saved, and roll_back restores it.
+  //    first change of each process is read and saved in governor_saved before anything is
+  //    changed (a process whose state cannot be read or saved is left as it is), and roll_back
+  //    restores it.
   //  - cap_job: a root in a MyClean tree job has that job tightened to the cap (CPU and commit,
   //    whichever is lower); any other tree gets a cap job of its own, root first. roll_back
   //    restores the tree job's limits or lifts and releases the cap job.
@@ -57,6 +61,28 @@ class Executor {
 
   // Suspends this executor applied to the process and has not undone.
   [[nodiscard]] int suspends(const governor::ProcessKey& process) const;
+  // The processes whose resume Windows refused (not because they exited) since the last call:
+  // they stay suspended, and counted.
+  [[nodiscard]] std::vector<governor::ProcessKey> take_failed_resumes();
+
+  // A process placed in a tree job runs at BELOW_NORMAL (governor spec, "Proactive Build and Test
+  // Jobs"): its priority before is saved in governor_saved first (an error, and nothing changed,
+  // when it cannot be), then it is lowered. A process already placed is left as it is.
+  [[nodiscard]] Result<void> lower_placed(const governor::ProcessKey& process);
+  // Fail-open, after every ladder step was rolled back and every job released: every state still
+  // saved is restored (the priority before placement included) and governor_saved is emptied.
+  // Recorded as a roll_back with `reason`.
+  void restore_all(governor::Reason reason);
+  // Crash recovery, the governor_saved rows of an earlier run: a process of a job adopted again
+  // (its PID in `adopted`) stays at BELOW_NORMAL and its priority before placement is kept saved;
+  // every other value is restored and its row forgotten, each living process recorded as a
+  // roll_back with `reason`. A value that could not be restored stays saved for the stop or the
+  // next start.
+  void restore_persisted(const std::vector<SavedState>& states,
+                         const std::set<std::uint32_t>& adopted, governor::Reason reason);
+  // The process exited (or was killed): what was saved of it and its suspend record are
+  // forgotten.
+  void forget(const governor::ProcessKey& process);
 
   // Forgets the saved states (after the clean stop).
   void clear();
@@ -70,6 +96,8 @@ class Executor {
   };
 
   [[nodiscard]] std::string apply(const governor::Command& command);
+  // Steps 1 and 2.
+  [[nodiscard]] std::string throttle(const governor::Command& command);
   [[nodiscard]] std::string apply_cap(const governor::Command& command);
   [[nodiscard]] static std::string tighten(TrackedJob& job, const governor::JobLimits& cap);
   [[nodiscard]] std::string roll_back(const governor::Command& command);
@@ -79,6 +107,16 @@ class Executor {
   [[nodiscard]] std::string resume(const governor::Command& command);
   [[nodiscard]] std::string kill(const governor::Command& command);
   void record(const governor::Command& command, std::string detail);
+  // Writes governor_saved for these processes from saved_ and placed_; a process with nothing
+  // saved loses its row.
+  [[nodiscard]] Result<void> save(std::span<const governor::ProcessKey> processes);
+  // Sets the process back to what saved_ and placed_ hold of it (placed_ wins for the priority).
+  [[nodiscard]] Result<void> restore(const governor::ProcessKey& process);
+  // Sets each value given; the first failure.
+  [[nodiscard]] Result<void> set_state(const governor::ProcessKey& process,
+                                       std::optional<os::PriorityClass> priority,
+                                       std::optional<os::MemoryPriority> memory,
+                                       std::optional<os::EcoQos> eco_qos);
 
   os::IProcessControl* control_;
   JobBook* jobs_;
@@ -87,8 +125,10 @@ class Executor {
   const os::IClock* clock_;
   governor::GovernorMode mode_ = governor::GovernorMode::observe;
   std::map<governor::ProcessKey, Saved> saved_;
+  std::map<governor::ProcessKey, os::PriorityClass> placed_;  // the priority before placement
   std::map<governor::ProcessKey, int> suspended_;
   std::set<governor::ProcessKey> persisted_;  // written by the latest persist_suspend
+  std::vector<governor::ProcessKey> failed_resumes_;
 };
 
 }  // namespace myclean::governing

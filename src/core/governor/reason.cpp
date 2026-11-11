@@ -10,13 +10,25 @@ namespace myclean::governor {
 
 namespace {
 
-constexpr std::array<std::string_view, 17> reason_names = {
-    "cpu",         "available_memory", "commit",
-    "hard_faults", "pressure_cleared", "joined_tree",
-    "protected",   "allow_once",       "always_allow",
-    "resume",      "owner_kill",       "pause",
-    "stop",        "orphaned_suspend", "untrusted_job",
-    "policy",      "orphaned_loop"};
+constexpr std::array<std::string_view, 19> reason_names = {"cpu",
+                                                           "available_memory",
+                                                           "commit",
+                                                           "hard_faults",
+                                                           "pressure_cleared",
+                                                           "joined_tree",
+                                                           "protected",
+                                                           "telemetry_stalled",
+                                                           "allow_once",
+                                                           "always_allow",
+                                                           "resume",
+                                                           "owner_kill",
+                                                           "pause",
+                                                           "stop",
+                                                           "orphaned_suspend",
+                                                           "orphaned_state",
+                                                           "untrusted_job",
+                                                           "policy",
+                                                           "orphaned_loop"};
 
 }  // namespace
 

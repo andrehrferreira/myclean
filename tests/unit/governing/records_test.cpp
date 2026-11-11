@@ -21,6 +21,7 @@
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/jobs.hpp"
+#include "core/os/process_control.hpp"
 #include "core/rules/schema.hpp"
 #include "core/store/migrations.hpp"
 #include "governing_test_support.hpp"
@@ -116,6 +117,25 @@ TEST(GovernorRecords, SuspendsAreCountedPerProcessInstance) {
   EXPECT_EQ((*suspends)[0].count, 1);
   ASSERT_TRUE(forget_suspend(machine.store(), first));
   EXPECT_TRUE(load_suspends(machine.store())->empty());
+}
+
+TEST(GovernorRecords, SavedStatesRoundTripAndAnEmptyOneIsRemoved) {
+  Machine machine;
+  const SavedState placed{.process = {.pid = 100, .created = testing::noon},
+                          .placed = os::PriorityClass::above_normal};
+  const SavedState throttled{.process = {.pid = 200, .created = testing::noon},
+                             .priority = os::PriorityClass::below_normal,
+                             .memory = os::MemoryPriority::normal,
+                             .eco_qos = os::EcoQos::off};
+  ASSERT_TRUE(save_states(machine.store(), std::vector<SavedState>{placed, throttled}));
+  EXPECT_EQ(load_states(machine.store()).value_or(std::vector<SavedState>{}),
+            (std::vector<SavedState>{placed, throttled}));
+
+  ASSERT_TRUE(save_states(machine.store(), std::vector<SavedState>{{.process = placed.process}}));
+  EXPECT_EQ(load_states(machine.store()).value_or(std::vector<SavedState>{}),
+            std::vector<SavedState>{throttled});
+  ASSERT_TRUE(forget_states(machine.store()));
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_saved"), 0);
 }
 
 TEST(GovernorRecords, JobsAndAllowListPersist) {

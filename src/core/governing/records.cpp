@@ -25,6 +25,7 @@
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/jobs.hpp"
+#include "core/os/process_control.hpp"
 #include "core/rules/schema.hpp"
 #include "core/store/database.hpp"
 #include "core/store/migrations.hpp"
@@ -52,6 +53,10 @@ constexpr std::array<std::string_view, 18> kind_names = {"apply_step",
                                                          "game_mode",
                                                          "orphan_loops",
                                                          "orphan_rule"};
+
+constexpr std::array<std::string_view, 6> priority_names = {
+    "idle", "below_normal", "normal", "above_normal", "high", "realtime"};
+constexpr std::array<std::string_view, 3> eco_qos_names = {"automatic", "on", "off"};
 
 // The action_log event of every governor intervention (docs/architecture.md section 6).
 constexpr std::string_view governor_step_event = "GovernorStep";
@@ -197,6 +202,22 @@ Result<void> run_keyed(store::Database& db, std::string_view sql,
   return statement->bind(1, process.pid).bind(2, to_nanoseconds(process.created)).run();
 }
 
+void bind_priority(store::Statement& statement, int column,
+                   const std::optional<os::PriorityClass>& priority) {
+  if (priority) {
+    statement.bind(column, detail::enum_name(priority_names, *priority));
+  } else {
+    statement.bind(column, nullptr);
+  }
+}
+
+std::optional<os::PriorityClass> priority_column(const store::Statement& row, int column) {
+  if (row.is_null(column)) {
+    return std::nullopt;
+  }
+  return detail::enum_from_name<os::PriorityClass>(priority_names, row.column_text(column));
+}
+
 }  // namespace
 
 const store::MigrationSet& governor_migrations() {
@@ -248,6 +269,21 @@ CREATE TABLE governor_orphan_rule(
   image TEXT NOT NULL DEFAULT '',
   rule TEXT NOT NULL,
   decided INTEGER NOT NULL);
+)sql"},
+                     {.version = 3, .name = "governor_saved", .sql = R"sql(
+CREATE TABLE governor_saved(
+  pid INTEGER NOT NULL,
+  created_ns INTEGER NOT NULL,
+  placed TEXT,
+  priority TEXT,
+  memory_priority INTEGER,
+  eco_qos TEXT,
+  PRIMARY KEY(pid, created_ns));
+)sql"},
+                     {.version = 4, .name = "governor_pause", .sql = R"sql(
+CREATE TABLE governor_pause(
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  until INTEGER NOT NULL);
 )sql"}}};
   return set;
 }
@@ -458,6 +494,116 @@ Result<std::vector<governor::PersistedSuspend>> load_suspends(store::Store& stor
     return tl::unexpected(read.error());
   }
   return suspends;
+}
+
+Result<void> save_states(store::Store& store, std::span<const SavedState> states) {
+  return store.write([&](store::Database& db) -> Result<void> {
+    for (const SavedState& state : states) {
+      if (state.empty()) {
+        if (Result<void> forgotten = run_keyed(
+                db, "DELETE FROM governor_saved WHERE pid = ?1 AND created_ns = ?2", state.process);
+            !forgotten) {
+          return forgotten;
+        }
+        continue;
+      }
+      Result<store::Statement> statement = db.prepare(
+          "INSERT OR REPLACE INTO governor_saved(pid, created_ns, placed, priority, "
+          "memory_priority, eco_qos) VALUES(?1, ?2, ?3, ?4, ?5, ?6)");
+      if (!statement) {
+        return tl::unexpected(statement.error());
+      }
+      statement->bind(1, state.process.pid).bind(2, to_nanoseconds(state.process.created));
+      bind_priority(*statement, 3, state.placed);
+      bind_priority(*statement, 4, state.priority);
+      if (state.memory) {
+        statement->bind(5, static_cast<int>(*state.memory));
+      } else {
+        statement->bind(5, nullptr);
+      }
+      if (state.eco_qos) {
+        statement->bind(6, detail::enum_name(eco_qos_names, *state.eco_qos));
+      } else {
+        statement->bind(6, nullptr);
+      }
+      if (Result<void> written = statement->run(); !written) {
+        return written;
+      }
+    }
+    return {};
+  });
+}
+
+Result<void> forget_states(store::Store& store) {
+  return store.write([](store::Database& db) { return db.exec("DELETE FROM governor_saved"); });
+}
+
+Result<std::vector<SavedState>> load_states(store::Store& store) {
+  std::vector<SavedState> states;
+  Result<void> read = store.read([&](store::Database& db) -> Result<void> {
+    Result<store::Statement> query = db.prepare(
+        "SELECT pid, created_ns, placed, priority, memory_priority, eco_qos FROM governor_saved "
+        "ORDER BY pid, created_ns");
+    if (!query) {
+      return tl::unexpected(query.error());
+    }
+    Result<bool> row = query->step();
+    for (; row && *row; row = query->step()) {
+      SavedState state{.process = {.pid = static_cast<std::uint32_t>(query->column_int(0)),
+                                   .created = from_nanoseconds(query->column_int(1))},
+                       .placed = priority_column(*query, 2),
+                       .priority = priority_column(*query, 3)};
+      if (!query->is_null(4)) {
+        const std::int64_t memory = query->column_int(4);
+        if (memory >= static_cast<int>(os::MemoryPriority::very_low) &&
+            memory <= static_cast<int>(os::MemoryPriority::normal)) {
+          state.memory = static_cast<os::MemoryPriority>(memory);
+        }
+      }
+      if (!query->is_null(5)) {
+        state.eco_qos = detail::enum_from_name<os::EcoQos>(eco_qos_names, query->column_text(5));
+      }
+      states.push_back(state);
+    }
+    return row.transform([](bool) {});
+  });
+  if (!read) {
+    return tl::unexpected(read.error());
+  }
+  return states;
+}
+
+Result<void> save_pause(store::Store& store, const std::optional<WallTime>& until) {
+  return store.write([&](store::Database& db) -> Result<void> {
+    if (!until) {
+      return db.exec("DELETE FROM governor_pause");
+    }
+    Result<store::Statement> statement =
+        db.prepare("INSERT OR REPLACE INTO governor_pause(id, until) VALUES(1, ?1)");
+    if (!statement) {
+      return tl::unexpected(statement.error());
+    }
+    return statement->bind(1, store::to_unix_seconds(*until)).run();
+  });
+}
+
+Result<std::optional<WallTime>> load_pause(store::Store& store) {
+  std::optional<WallTime> until;
+  Result<void> read = store.read([&](store::Database& db) -> Result<void> {
+    Result<store::Statement> query = db.prepare("SELECT until FROM governor_pause WHERE id = 1");
+    if (!query) {
+      return tl::unexpected(query.error());
+    }
+    return query->step().transform([&](bool found) {
+      if (found) {
+        until = store::from_unix_seconds(query->column_int(0));
+      }
+    });
+  });
+  if (!read) {
+    return tl::unexpected(read.error());
+  }
+  return until;
 }
 
 Result<void> add_allowed(store::Store& store, std::string_view image, WallTime now) {

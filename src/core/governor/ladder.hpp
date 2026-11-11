@@ -6,6 +6,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -65,6 +66,8 @@ enum class OwnerChoice { resume, kill, allow_once, always_allow };
 //     cap-job step while its root is within the Resume block. When the chosen
 //     tree had a step less than the cooldown ago (game mode: game_cooldown), nothing happens this
 //     second: the ladder waits for it rather than moving on.
+// A tree's processes keep what the governor did to them when they move to other trees (its root
+// exited, say): the owner's choice for the old root then acts on the trees they are in now.
 // Steps: priority, ecoqos and cap_job each with one apply_step (cap_job with its limits); suspend
 // as persist_suspend then apply_step; kill only for a class in LadderPolicy::kill. Every step is
 // followed by a notify the NotificationLimiter allows; the suspend's notify is always sent.
@@ -77,7 +80,8 @@ class LadderEngine {
 
   [[nodiscard]] std::vector<Command> tick(LadderInput input);
 
-  // The owner's choice for the tree whose root is `root` (actor `owner`):
+  // The owner's choice for the tree whose root is `root`, and for the trees its processes moved
+  // to since (actor `owner`):
   //  - resume: resume the suspended processes; no suspend of that tree for
   //    resume_blocks_suspend; steps 1-3 stay and the ladder goes on.
   //  - kill: terminate the tree.
@@ -86,9 +90,22 @@ class LadderEngine {
   [[nodiscard]] std::vector<Command> choose(const ProcessKey& root, OwnerChoice choice,
                                             MonoTime now);
 
+  // The OS refused to resume these processes: they stay marked suspended in the trees they are
+  // in, so the owner's Resume (or a retry) can still reach them.
+  void resume_failed(std::span<const ProcessKey> processes);
+
+  // Whether the tree whose root is `root`, or a tree its processes moved to, still has a step in
+  // effect (holds) or a suspended process (suspends).
+  [[nodiscard]] bool holds(const ProcessKey& root) const;
+  [[nodiscard]] bool suspends(const ProcessKey& root) const;
+
   // Pause for `duration` (actor `owner`): every step is rolled back and every suspended process
   // resumed now; no step until the pause expires, then the ladder starts again by itself.
-  [[nodiscard]] std::vector<Command> pause(MonoTime now, std::chrono::minutes duration);
+  [[nodiscard]] std::vector<Command> pause(MonoTime now, std::chrono::seconds duration);
+
+  // Telemetry stalled, so the ladder gets no snapshot: steps 1-3 of every tree are rolled back
+  // (reason telemetry_stalled); suspended processes stay suspended until the owner acts.
+  [[nodiscard]] std::vector<Command> stall();
 
   // Clean stop: roll back and resume everything (reason stop).
   [[nodiscard]] std::vector<Command> stop();
@@ -117,6 +134,8 @@ class LadderEngine {
     std::string image;  // the root's
     rules::ProcessClass process_class = rules::ProcessClass::normal;
     bool in_myclean_job = false;
+    // The roots (and their images) of earlier trees whose processes moved into this one.
+    std::map<ProcessKey, std::string> origins;
   };
 
   static constexpr std::size_t no_tree = static_cast<std::size_t>(-1);
@@ -143,6 +162,8 @@ class LadderEngine {
                                 Step step, Reason reason) const;
   [[nodiscard]] std::vector<ProcessKey> member_keys(const Tree& tree) const;
   [[nodiscard]] bool exempt(const Tree& tree) const;
+  // `root` when it has a state or is a tree root now, and every tree that came from it.
+  [[nodiscard]] std::vector<ProcessKey> trees_from(const ProcessKey& root) const;
 
   LadderPolicy policy_;
   NotificationLimiter notifications_;

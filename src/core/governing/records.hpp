@@ -20,6 +20,7 @@
 #include "core/model/units.hpp"
 #include "core/os/clock.hpp"
 #include "core/os/jobs.hpp"
+#include "core/os/process_control.hpp"
 #include "core/rules/schema.hpp"
 #include "core/store/migrations.hpp"
 #include "core/store/store.hpp"
@@ -32,9 +33,13 @@
 //                     service restarted after a crash finds it again
 //   governor_suspend  (pid, creation time, count) of the suspends the governor applied, each
 //                     written before the suspend is applied
+//   governor_saved    (pid, creation time) of each process whose priority, memory priority or
+//                     EcoQoS the governor changed, with what it was before, written before the
+//                     change, so that a service restarted after a crash restores it
 //   governor_allow    the owner's Always-allow images
 //   governor_orphan_rule  the owner's rules for patterns of orphaned polling loops: always end,
 //                     or ignore
+//   governor_pause    the time the owner's pause ends, while there is one
 // Every intervention and rollback also goes to action_log as a GovernorStep entry (plan 0).
 // Creation times are stored in nanoseconds since the Unix epoch (keys.hpp), other times in Unix
 // seconds.
@@ -121,6 +126,32 @@ struct JobRecord {
                                            int times);
 [[nodiscard]] Result<void> forget_suspend(store::Store& store, const governor::ProcessKey& process);
 [[nodiscard]] Result<std::vector<governor::PersistedSuspend>> load_suspends(store::Store& store);
+
+// One governor_saved row: what a process was before the governor changed it. `placed`: its
+// priority before it was placed in a tree job at BELOW_NORMAL; the others: before ladder steps 1
+// and 2. Stored as text (memory priority as its number, 1-5).
+struct SavedState {
+  governor::ProcessKey process;
+  std::optional<os::PriorityClass> placed;
+  std::optional<os::PriorityClass> priority;
+  std::optional<os::MemoryPriority> memory;
+  std::optional<os::EcoQos> eco_qos;
+
+  [[nodiscard]] bool empty() const { return !placed && !priority && !memory && !eco_qos; }
+  friend bool operator==(const SavedState&, const SavedState&) = default;
+};
+
+// Writes the states in one transaction, each replacing the process's row; an empty one removes
+// it.
+[[nodiscard]] Result<void> save_states(store::Store& store, std::span<const SavedState> states);
+// Every row, by PID and creation time. A value that no longer parses reads as absent.
+[[nodiscard]] Result<std::vector<SavedState>> load_states(store::Store& store);
+// Removes every row (the clean stop restored them all).
+[[nodiscard]] Result<void> forget_states(store::Store& store);
+
+// The owner's pause: `until` is when it ends; none removes it.
+[[nodiscard]] Result<void> save_pause(store::Store& store, const std::optional<WallTime>& until);
+[[nodiscard]] Result<std::optional<WallTime>> load_pause(store::Store& store);
 
 // Adds `image` (a file name; case is ignored) to the owner's allow list.
 [[nodiscard]] Result<void> add_allowed(store::Store& store, std::string_view image, WallTime now);

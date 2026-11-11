@@ -6,6 +6,7 @@
 #include <format>
 #include <iterator>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <utility>
@@ -78,6 +79,16 @@ Result<void> as_void(const Result<T>& result) {
   return {};
 }
 
+// Keeps a value that was read in `slot`.
+template <typename T>
+Result<void> read_into(std::optional<T>& slot, const Result<T>& value) {
+  if (!value) {
+    return tl::unexpected(value.error());
+  }
+  slot = *value;
+  return {};
+}
+
 // The first failure of two results.
 Result<void> both(const Result<void>& first, const Result<void>& second) {
   return first ? second : first;
@@ -126,40 +137,58 @@ void Executor::execute(const governor::Command& command) {
 }
 
 std::string Executor::apply(const governor::Command& command) {
-  Tally tally(command.members.size());
+  const Tally tally(command.members.size());
   switch (command.step) {
     case governor::Step::priority:
-      for (const governor::ProcessKey& key : command.members) {
-        const Result<os::PriorityClass> priority =
-            control_->set_priority(to_os(key), os::PriorityClass::below_normal);
-        const Result<os::MemoryPriority> memory =
-            control_->set_memory_priority(to_os(key), os::MemoryPriority::low);
-        Saved& saved = saved_[key];
-        if (priority && !saved.priority) {
-          saved.priority = *priority;
-        }
-        if (memory && !saved.memory) {
-          saved.memory = *memory;
-        }
-        tally.add(key.pid, both(as_void(priority), as_void(memory)));
-      }
-      return tally.text();
     case governor::Step::ecoqos:
-      for (const governor::ProcessKey& key : command.members) {
-        const Result<os::EcoQos> eco_qos = control_->set_eco_qos(to_os(key), os::EcoQos::on);
-        Saved& saved = saved_[key];
-        if (eco_qos && !saved.eco_qos) {
-          saved.eco_qos = *eco_qos;
-        }
-        tally.add(key.pid, as_void(eco_qos));
-      }
-      return tally.text();
+      return throttle(command);
     case governor::Step::cap_job:
       return apply_cap(command);
     case governor::Step::suspend:
       return suspend(command);
     case governor::Step::kill:
       return kill(command);
+  }
+  return tally.text();
+}
+
+std::string Executor::throttle(const governor::Command& command) {
+  const bool priority = command.step == governor::Step::priority;
+  Tally tally(command.members.size());
+  // What each process is before the first change, saved before anything changes, so that a
+  // crash does not lose it.
+  std::vector<governor::ProcessKey> ready;
+  ready.reserve(command.members.size());
+  for (const governor::ProcessKey& key : command.members) {
+    Saved& saved = saved_[key];
+    Result<void> read;
+    if (priority) {
+      if (!saved.priority) {
+        read = read_into(saved.priority, control_->priority(to_os(key)));
+      }
+      if (read && !saved.memory) {
+        read = read_into(saved.memory, control_->memory_priority(to_os(key)));
+      }
+    } else if (!saved.eco_qos) {
+      read = read_into(saved.eco_qos, control_->eco_qos(to_os(key)));
+    }
+    if (read) {
+      ready.push_back(key);
+    } else {
+      tally.add(key.pid, read);
+    }
+  }
+  if (Result<void> written = save(ready); !written) {
+    return "not applied: the state before it was not saved: " + written.error().message;
+  }
+  for (const governor::ProcessKey& key : ready) {
+    if (priority) {
+      tally.add(key.pid,
+                both(as_void(control_->set_priority(to_os(key), os::PriorityClass::below_normal)),
+                     as_void(control_->set_memory_priority(to_os(key), os::MemoryPriority::low))));
+    } else {
+      tally.add(key.pid, as_void(control_->set_eco_qos(to_os(key), os::EcoQos::on)));
+    }
   }
   return tally.text();
 }
@@ -230,6 +259,7 @@ std::string Executor::tighten(TrackedJob& job, const governor::JobLimits& cap) {
 
 std::string Executor::roll_back(const governor::Command& command) {
   Tally tally(command.members.size());
+  std::vector<governor::ProcessKey> restored_keys;
   for (const governor::ProcessKey& key : command.members) {
     const auto found = saved_.find(key);
     if (found == saved_.end()) {
@@ -237,6 +267,7 @@ std::string Executor::roll_back(const governor::Command& command) {
     }
     const Saved saved = found->second;
     saved_.erase(found);
+    restored_keys.push_back(key);
     Result<void> restored;
     if (saved.priority) {
       restored = both(restored, as_void(control_->set_priority(to_os(key), *saved.priority)));
@@ -248,6 +279,9 @@ std::string Executor::roll_back(const governor::Command& command) {
       restored = both(restored, as_void(control_->set_eco_qos(to_os(key), *saved.eco_qos)));
     }
     tally.add(key.pid, restored);
+  }
+  if (Result<void> written = save(restored_keys); !written) {
+    spdlog::error("governor: saved states: {}", written.error().message);
   }
   std::string text = tally.text();
   if (command.step == governor::Step::cap_job) {
@@ -314,7 +348,8 @@ std::string Executor::resume(const governor::Command& command) {
     const Result<void> resumed = control_->resume(to_os(key));
     tally.add(key.pid, resumed);
     if (!resumed && resumed.error().code != Errc::not_found) {
-      continue;  // still suspended: keep the record for the stop or the next start
+      failed_resumes_.push_back(key);
+      continue;  // still suspended: keep the record for a retry, the stop or the next start
     }
     if (--found->second == 0) {
       suspended_.erase(found);
@@ -334,12 +369,7 @@ std::string Executor::kill(const governor::Command& command) {
     if (!killed && killed.error().code != Errc::not_found) {
       continue;
     }
-    saved_.erase(key);
-    if (suspended_.erase(key) > 0) {
-      if (Result<void> forgotten = forget_suspend(*store_, key); !forgotten) {
-        spdlog::error("governor: suspend record of pid {}: {}", key.pid, forgotten.error().message);
-      }
-    }
+    forget(key);
   }
   return tally.text();
 }
@@ -369,6 +399,183 @@ void Executor::resume_persisted(const governor::PersistedSuspend& suspend,
                     true);
 }
 
+Result<void> Executor::lower_placed(const governor::ProcessKey& process) {
+  if (placed_.contains(process)) {
+    return {};
+  }
+  // A ladder step that came first saved the priority before any change: that is the one the
+  // process gets back when it leaves the job, and rolling the step back now returns it to
+  // BELOW_NORMAL.
+  const auto ladder = saved_.find(process);
+  const bool ladder_first = ladder != saved_.end() && ladder->second.priority.has_value();
+  os::PriorityClass before = os::PriorityClass::normal;
+  if (ladder_first) {
+    before = *ladder->second.priority;
+  } else {
+    const Result<os::PriorityClass> read = control_->priority(to_os(process));
+    if (!read) {
+      return tl::unexpected(read.error());
+    }
+    before = *read;
+  }
+  placed_[process] = before;
+  if (ladder_first) {
+    ladder->second.priority = os::PriorityClass::below_normal;
+  }
+  if (Result<void> written = save(std::span(&process, 1)); !written) {
+    placed_.erase(process);
+    if (ladder_first) {
+      ladder->second.priority = before;
+    }
+    return fail(written.error().code,
+                "the priority before was not saved: " + written.error().message);
+  }
+  return as_void(control_->set_priority(to_os(process), os::PriorityClass::below_normal));
+}
+
+Result<void> Executor::restore(const governor::ProcessKey& process) {
+  Saved saved;
+  if (const auto found = saved_.find(process); found != saved_.end()) {
+    saved = found->second;
+  }
+  if (const auto placed = placed_.find(process); placed != placed_.end()) {
+    saved.priority = placed->second;
+  }
+  return set_state(process, saved.priority, saved.memory, saved.eco_qos);
+}
+
+Result<void> Executor::set_state(const governor::ProcessKey& process,
+                                 std::optional<os::PriorityClass> priority,
+                                 std::optional<os::MemoryPriority> memory,
+                                 std::optional<os::EcoQos> eco_qos) {
+  Result<void> set;
+  if (memory) {
+    set = both(set, as_void(control_->set_memory_priority(to_os(process), *memory)));
+  }
+  if (eco_qos) {
+    set = both(set, as_void(control_->set_eco_qos(to_os(process), *eco_qos)));
+  }
+  if (priority) {
+    set = both(set, as_void(control_->set_priority(to_os(process), *priority)));
+  }
+  return set;
+}
+
+void Executor::restore_all(governor::Reason reason) {
+  std::vector<governor::ProcessKey> keys;
+  keys.reserve(saved_.size() + placed_.size());
+  for (const auto& [key, saved] : saved_) {
+    keys.push_back(key);
+  }
+  for (const auto& [key, priority] : placed_) {
+    if (!saved_.contains(key)) {
+      keys.push_back(key);
+    }
+  }
+  Tally tally(keys.size());
+  for (const governor::ProcessKey& key : keys) {
+    tally.add(key.pid, restore(key));
+  }
+  saved_.clear();
+  placed_.clear();
+  if (Result<void> forgotten = forget_states(*store_); !forgotten) {
+    spdlog::error("governor: saved states: {}", forgotten.error().message);
+  }
+  if (!keys.empty()) {
+    recorder_->record(
+        GovernorEvent{.kind = EventKind::roll_back,
+                      .step = governor::Step::priority,
+                      .reason = reason,
+                      .members = keys.size(),
+                      .detail = "priority before job placement restored: " + tally.text()},
+        true);
+  }
+}
+
+void Executor::restore_persisted(const std::vector<SavedState>& states,
+                                 const std::set<std::uint32_t>& adopted, governor::Reason reason) {
+  for (const SavedState& state : states) {
+    const governor::ProcessKey& key = state.process;
+    // A member of a job adopted again keeps BELOW_NORMAL, as the policy calls for.
+    const bool in_job = state.placed && adopted.contains(key.pid);
+    std::optional<os::PriorityClass> priority = state.placed ? state.placed : state.priority;
+    if (in_job) {
+      priority.reset();
+    }
+    const Result<void> restored = set_state(key, priority, state.memory, state.eco_qos);
+    const bool gone = !restored && restored.error().code == Errc::not_found;
+    if (restored && in_job) {
+      placed_[key] = *state.placed;
+    } else if (!restored && !gone) {
+      // Kept for the stop or the next start.
+      saved_[key] =
+          Saved{.priority = state.priority, .memory = state.memory, .eco_qos = state.eco_qos};
+      if (state.placed) {
+        placed_[key] = *state.placed;
+      }
+    }
+    if (Result<void> written = save(std::span(&key, 1)); !written) {
+      spdlog::error("governor: saved state of pid {}: {}", key.pid, written.error().message);
+    }
+    if (gone) {
+      continue;
+    }
+    Tally tally(1);
+    tally.add(key.pid, restored);
+    recorder_->record(
+        GovernorEvent{.kind = EventKind::roll_back,
+                      .root = key,
+                      .step = state.eco_qos ? governor::Step::ecoqos : governor::Step::priority,
+                      .reason = reason,
+                      .members = 1,
+                      .detail = std::string(in_job ? "restored as saved before the restart, at "
+                                                     "below normal in its adopted job: "
+                                                   : "restored as saved before the restart: ") +
+                                tally.text()},
+        true);
+  }
+}
+
+void Executor::forget(const governor::ProcessKey& process) {
+  if (suspended_.erase(process) > 0) {
+    if (Result<void> forgotten = forget_suspend(*store_, process); !forgotten) {
+      spdlog::error("governor: suspend record of pid {}: {}", process.pid,
+                    forgotten.error().message);
+    }
+  }
+  if (saved_.erase(process) + placed_.erase(process) == 0) {
+    return;
+  }
+  if (Result<void> written = save(std::span(&process, 1)); !written) {
+    spdlog::error("governor: saved state of pid {}: {}", process.pid, written.error().message);
+  }
+}
+
+Result<void> Executor::save(std::span<const governor::ProcessKey> processes) {
+  if (processes.empty()) {
+    return {};
+  }
+  std::vector<SavedState> states;
+  states.reserve(processes.size());
+  for (const governor::ProcessKey& key : processes) {
+    SavedState state{.process = key};
+    if (const auto placed = placed_.find(key); placed != placed_.end()) {
+      state.placed = placed->second;
+    }
+    if (const auto saved = saved_.find(key); saved != saved_.end()) {
+      state.priority = saved->second.priority;
+      state.memory = saved->second.memory;
+      state.eco_qos = saved->second.eco_qos;
+    }
+    states.push_back(state);
+  }
+  return save_states(*store_, states);
+}
+
+std::vector<governor::ProcessKey> Executor::take_failed_resumes() {
+  return std::exchange(failed_resumes_, {});
+}
+
 int Executor::suspends(const governor::ProcessKey& process) const {
   const auto found = suspended_.find(process);
   return found == suspended_.end() ? 0 : found->second;
@@ -376,6 +583,8 @@ int Executor::suspends(const governor::ProcessKey& process) const {
 
 void Executor::clear() {
   saved_.clear();
+  placed_.clear();
+  failed_resumes_.clear();
   suspended_.clear();
   persisted_.clear();
 }

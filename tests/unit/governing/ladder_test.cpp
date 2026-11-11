@@ -4,10 +4,13 @@
 
 #include "core/governor/ladder.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <format>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -19,9 +22,12 @@
 #include "core/governor/policy.hpp"
 #include "core/governor/reason.hpp"
 #include "core/governor/recovery.hpp"
+#include "core/ipc/governor.hpp"
+#include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/jobs.hpp"
 #include "core/os/process_control.hpp"
+#include "core/store/database.hpp"
 #include "core/telemetry/metrics.hpp"
 #include "governing_test_support.hpp"
 
@@ -258,6 +264,9 @@ TEST(GovernorLadder, StopLiftsEveryCapAndResumesEverySuspend) {
   }
   EXPECT_TRUE(machine.process(cargo).alive);
   EXPECT_EQ(machine.process(cargo).suspend_count, 0U);
+  // Audit risk 5: the priority set when cargo was placed in its tree job is restored too.
+  EXPECT_EQ(machine.process(cargo).priority, os::PriorityClass::normal);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_saved"), 0);
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_job"), 0);
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_suspend"), 0);
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_event WHERE kind = 'resume' AND "
@@ -435,6 +444,241 @@ TEST(GovernorLadder, KillWhenEnabledForTheClass) {
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM action_log WHERE outcome = 'kill' AND reason = "
                           "'commit' AND metrics LIKE 'cpu=95.0%'"),
             1);
+}
+
+bool has_problem(Machine& machine, std::string_view text) {
+  return std::ranges::any_of(machine.governor().problems(), [&](const std::string& problem) {
+    return problem.find(text) != std::string::npos;
+  });
+}
+
+// Audit risk 4: a metric goes missing, so the ladder gets no snapshot. After
+// Governor::stall_limit its steps 1-3 are rolled back and the owner is told; the suspend waits
+// for the owner, as when pressure clears.
+TEST(GovernorLadder, MissingMetricRollsBackStepsAfterTheStallLimitButKeepsSuspends) {
+  Machine machine;
+  machine.start();
+  const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
+  const ProcessKey other =
+      machine.spawn(400, R"(C:\Tools\other.exe)", std::nullopt, true, 10.0, 1_GiB);
+  memory_pressure(machine);
+  machine.seconds(45);  // bigjob up to its suspend, then other's first step
+  ASSERT_EQ(machine.process(bigjob).suspend_count, 1U);
+  ASSERT_EQ(machine.process(other).priority, os::PriorityClass::below_normal);
+  ASSERT_EQ(jobs_of(machine.store(), JobRole::cap_job).size(), 1U);
+
+  machine.metrics().erase(std::string(telemetry::metric::memory_commit));
+  machine.seconds(static_cast<int>(Governor::stall_limit.count()) - 1);
+  EXPECT_EQ(machine.process(other).priority, os::PriorityClass::below_normal);
+  EXPECT_FALSE(has_problem(machine, "telemetry stalled"));
+  machine.second();
+  EXPECT_EQ(machine.process(other).priority, os::PriorityClass::normal);
+  EXPECT_EQ(machine.process(other).memory_priority, os::MemoryPriority::normal);
+  EXPECT_EQ(machine.process(bigjob).priority, os::PriorityClass::normal);
+  EXPECT_EQ(machine.process(bigjob).eco_qos, os::EcoQos::automatic);
+  EXPECT_TRUE(jobs_of(machine.store(), JobRole::cap_job).empty());
+  EXPECT_EQ(machine.process(bigjob).suspend_count, 1U);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_event WHERE kind = 'roll_back' AND "
+                          "reason = 'telemetry_stalled'"),
+            2);
+  EXPECT_TRUE(has_problem(machine, "memory.commit"));
+  const nlohmann::json status = machine.governor().status();
+  ASSERT_EQ(status.at("notifications").size(), 2U);
+  EXPECT_EQ(status.at("notifications").at(0).at("step"), "suspend");
+
+  // Once the metric is back the problem goes, and the ladder judges pressure afresh.
+  machine.metrics()[std::string(telemetry::metric::memory_commit)] = 140.0 * gib;
+  machine.second();
+  EXPECT_FALSE(has_problem(machine, "telemetry stalled"));
+  EXPECT_EQ(machine.process(bigjob).suspend_count, 1U);
+}
+
+// Audit risk 4: the process table stops advancing.
+TEST(GovernorLadder, ProcessTableThatStopsAdvancingRollsBackSteps) {
+  Machine machine;
+  machine.start();
+  const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
+  cpu_pressure(machine);
+  machine.seconds(25);
+  ASSERT_EQ(machine.process(bigjob).eco_qos, os::EcoQos::on);
+  machine.freeze_view();
+  machine.seconds(static_cast<int>(Governor::stall_limit.count()));
+  EXPECT_EQ(machine.process(bigjob).priority, os::PriorityClass::normal);
+  EXPECT_EQ(machine.process(bigjob).eco_qos, os::EcoQos::automatic);
+  EXPECT_TRUE(has_problem(machine, "stopped advancing"));
+  machine.thaw_view();
+  machine.seconds(16);  // pressure judged afresh: 15 s above 90 % again, then step 1
+  EXPECT_EQ(machine.process(bigjob).priority, os::PriorityClass::below_normal);
+  EXPECT_FALSE(has_problem(machine, "telemetry stalled"));
+}
+
+// Audit risk 6: the root of a suspended tree exits while its child stays suspended. The
+// notification stays, and its Resume reaches the child.
+TEST(GovernorLadder, SuspendedTreeKeepsItsResumeWhenItsRootExits) {
+  Machine machine;
+  machine.start();
+  const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
+  const ProcessKey worker = machine.spawn(301, R"(C:\Tools\worker.exe)", bigjob, true, 30.0, 1_GiB);
+  memory_pressure(machine);
+  machine.seconds(45);
+  ASSERT_EQ(machine.process(worker).suspend_count, 1U);
+
+  machine.exit(bigjob);
+  machine.seconds(2);
+  const nlohmann::json status = machine.governor().status();
+  ASSERT_EQ(status.at("notifications").size(), 1U);
+  EXPECT_EQ(status.at("notifications").at(0).at("root").at("pid"), 300);
+  EXPECT_EQ(status.at("notifications").at(0).at("step"), "suspend");
+
+  EXPECT_EQ(machine.governor().choose(bigjob, governor::OwnerChoice::resume), 1U);
+  EXPECT_EQ(machine.process(worker).suspend_count, 0U);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_suspend"), 0);
+  EXPECT_TRUE(machine.governor().status().at("notifications").empty());
+}
+
+// Once nothing of the tree carries a step, its notification goes with its root.
+TEST(GovernorLadder, NotificationGoesWhenNoProcessOfItsTreeIsLeft) {
+  Machine machine;
+  machine.start();
+  const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
+  const ProcessKey worker = machine.spawn(301, R"(C:\Tools\worker.exe)", bigjob, true, 30.0, 1_GiB);
+  memory_pressure(machine);
+  machine.seconds(45);
+  machine.exit(bigjob);
+  machine.second();
+  ASSERT_EQ(machine.governor().status().at("notifications").size(), 1U);
+  machine.exit(worker);
+  machine.seconds(2);
+  EXPECT_TRUE(machine.governor().status().at("notifications").empty());
+}
+
+// Audit risk 6: more than ipc::max_notifications notifications; the oldest are dropped, but never
+// the one of a suspended tree.
+TEST(GovernorLadder, NotificationOfASuspendedTreeIsNeverTrimmed) {
+  Machine machine;
+  machine.policy().ladder.suspend = {rules::ProcessClass::build};
+  machine.policy().ladder.cooldown = std::chrono::seconds{1};
+  machine.start();
+  const ProcessKey cargo = machine.spawn(100, cargo_path, std::nullopt, true, 50.0, 8_GiB);
+  for (std::uint32_t tool = 0; tool < 40; ++tool) {
+    machine.spawn(500 + tool, std::format(R"(C:\Tools\tool{}.exe)", tool), std::nullopt, true, 1.0,
+                  Bytes{(100U - tool) << 20U});
+  }
+  memory_pressure(machine);
+  machine.seconds(200);
+  ASSERT_EQ(machine.process(cargo).suspend_count, 1U);
+  const nlohmann::json notifications = machine.governor().status().at("notifications");
+  EXPECT_EQ(notifications.size(), ipc::max_notifications);
+  EXPECT_TRUE(std::ranges::any_of(notifications, [](const nlohmann::json& notification) {
+    return notification.at("root").at("pid") == 100 && notification.at("step") == "suspend";
+  }));
+}
+
+// An owner's choice for a tree the ladder never acted on.
+TEST(GovernorLadder, AllowOnceOnATreeWithoutStepsExemptsIt) {
+  Machine machine;
+  machine.start();
+  const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
+  machine.second();
+  EXPECT_EQ(machine.governor().choose(bigjob, governor::OwnerChoice::allow_once), 0U);
+  cpu_pressure(machine);
+  machine.seconds(30);
+  EXPECT_EQ(machine.process(bigjob).priority, os::PriorityClass::normal);
+}
+
+// Audit risk 7: Windows refuses the owner's Resume. The process stays suspended and counted, its
+// notification keeps Resume, the owner is told, and the governor tries again.
+TEST(GovernorLadder, RefusedResumeStaysSuspendedIsReportedAndRetried) {
+  Machine machine;
+  machine.start();
+  const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
+  memory_pressure(machine);
+  machine.seconds(45);
+  ASSERT_EQ(machine.process(bigjob).suspend_count, 1U);
+
+  machine.os().fail_next("resume", Error{.code = Errc::access_denied, .message = "denied"});
+  EXPECT_EQ(machine.governor().choose(bigjob, governor::OwnerChoice::resume), 1U);
+  EXPECT_EQ(machine.process(bigjob).suspend_count, 1U);
+  EXPECT_EQ(machine.count("SELECT SUM(count) FROM governor_suspend"), 1);
+  nlohmann::json status = machine.governor().status();
+  ASSERT_EQ(status.at("notifications").size(), 1U);
+  EXPECT_EQ(status.at("notifications").at(0).at("step"), "suspend");
+  EXPECT_EQ(status.at("trees").at(0).at("step"), "suspend");
+  EXPECT_TRUE(has_problem(machine, "stay suspended"));
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_event WHERE kind = 'resume' AND "
+                          "actor = 'owner' AND detail LIKE '%1 failed (pid 300: denied)%'"),
+            1);
+
+  machine.seconds(static_cast<int>(Governor::resume_retry_interval.count()));
+  EXPECT_EQ(machine.process(bigjob).suspend_count, 0U);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_suspend"), 0);
+  status = machine.governor().status();
+  EXPECT_TRUE(status.at("notifications").empty());
+  EXPECT_FALSE(has_problem(machine, "stay suspended"));
+}
+
+// After Governor::resume_retries refused retries the process waits for the owner's Resume.
+TEST(GovernorLadder, RefusedResumeWaitsForTheOwnerAfterTheLastRetry) {
+  Machine machine;
+  machine.start();
+  const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
+  memory_pressure(machine);
+  machine.seconds(45);
+  for (int attempt = 0; attempt <= Governor::resume_retries; ++attempt) {
+    machine.os().fail_next("resume", Error{.code = Errc::access_denied, .message = "denied"});
+  }
+  static_cast<void>(machine.governor().choose(bigjob, governor::OwnerChoice::resume));
+  machine.seconds(static_cast<int>(Governor::resume_retry_interval.count()) *
+                  (Governor::resume_retries + 2));
+  EXPECT_EQ(machine.process(bigjob).suspend_count, 1U);
+  EXPECT_TRUE(has_problem(machine, "stay suspended"));
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_event WHERE kind = 'resume' AND "
+                          "detail LIKE '%failed%'"),
+            Governor::resume_retries + 1);
+
+  EXPECT_EQ(machine.governor().choose(bigjob, governor::OwnerChoice::resume), 1U);
+  EXPECT_EQ(machine.process(bigjob).suspend_count, 0U);
+  EXPECT_FALSE(has_problem(machine, "stay suspended"));
+}
+
+// Audit risk 14: the owner's pause outlives a crash and a clean restart of the service.
+TEST(GovernorLadder, PauseSurvivesARestartUntilItEnds) {
+  Machine machine;
+  machine.start();
+  const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
+  const std::optional<WallTime> until = machine.governor().pause(std::chrono::minutes{60});
+  ASSERT_TRUE(until.has_value());
+  const std::int64_t until_seconds = store::to_unix_seconds(until.value_or(WallTime{}));
+
+  machine.crash();
+  machine.start();
+  EXPECT_EQ(machine.governor().status().at("paused_until"), until_seconds);
+  cpu_pressure(machine);
+  machine.seconds(30);
+  EXPECT_EQ(machine.process(bigjob).priority, os::PriorityClass::normal);
+
+  machine.governor().stop();
+  machine.start();
+  EXPECT_EQ(machine.governor().status().at("paused_until"), until_seconds);
+
+  machine.clock().advance(std::chrono::minutes{60});
+  machine.seconds(16);
+  EXPECT_EQ(machine.process(bigjob).priority, os::PriorityClass::below_normal);
+  EXPECT_TRUE(machine.governor().status().at("paused_until").is_null());
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_pause"), 0);
+}
+
+TEST(GovernorLadder, PauseThatEndedWhileTheServiceWasDownIsForgotten) {
+  Machine machine;
+  machine.start();
+  ASSERT_TRUE(machine.governor().pause(std::chrono::minutes{5}).has_value());
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_pause"), 1);
+  machine.crash();
+  machine.clock().advance(std::chrono::minutes{10});
+  machine.start();
+  EXPECT_TRUE(machine.governor().status().at("paused_until").is_null());
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_pause"), 0);
+  EXPECT_FALSE(machine.governor().pause(std::chrono::minutes{0}).has_value());
 }
 
 }  // namespace

@@ -141,7 +141,7 @@ class Machine {
         GovernorSources{
             .jobs = &os_,
             .processes = &os_,
-            .view = [this] { return view(); },
+            .view = [this] { return frozen_ ? frozen_ : view(); },
             .metric = [this](std::string_view name) -> std::optional<double> {
               const auto found = metrics_.find(name);
               return found == metrics_.end() ? std::nullopt : std::optional(found->second);
@@ -220,6 +220,10 @@ class Machine {
                              .image = found->path,
                              .command_line = "\"" + found->path + "\""});
   }
+
+  // From now on the telemetry pipeline publishes no newer process table, until thaw_view().
+  void freeze_view() { frozen_ = view(); }
+  void thaw_view() { frozen_.reset(); }
 
   // Leaves `process` out of the process table until show(): it started after the latest sample.
   void hide(const governor::ProcessKey& process) { hidden_.push_back(process); }
@@ -341,7 +345,8 @@ class Machine {
   std::unique_ptr<store::Store> store_;
   std::unique_ptr<Governor> governor_;
   std::vector<Running> running_;
-  std::vector<governor::ProcessKey> hidden_;  // left out of the process table
+  std::vector<governor::ProcessKey> hidden_;              // left out of the process table
+  std::shared_ptr<const telemetry::ProcessView> frozen_;  // freeze_view()
   int spawned_ = 0;
 };
 

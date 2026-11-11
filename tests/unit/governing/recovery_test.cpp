@@ -13,6 +13,7 @@
 
 #include "core/governing/records.hpp"
 #include "core/governor/forest.hpp"
+#include "core/governor/policy.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 #include "core/os/jobs.hpp"
@@ -180,6 +181,72 @@ TEST(GovernorRecovery, JobWithoutMembersIsReleasedAndMissingJobForgotten) {
   machine.start();
   EXPECT_FALSE(machine.os().job_exists(tree));
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_job"), 0);
+}
+
+// Audit risk 5 and NFR-REL-2 item 2: the priority, memory priority and EcoQoS the ladder saved are
+// persisted, so a restarted service restores them after a crash.
+TEST(GovernorRecovery, LadderStepsAreRestoredAfterACrash) {
+  Machine machine;
+  machine.start();
+  const ProcessKey bigjob = machine.spawn(300, bigjob_path, std::nullopt, true, 60.0, 2_GiB);
+  ASSERT_TRUE(machine.os().set_priority(os_key(bigjob), os::PriorityClass::above_normal));
+  machine.metrics()[std::string(telemetry::metric::cpu_utility)] = 95.0;
+  machine.seconds(25);  // priority, then EcoQoS
+  ASSERT_EQ(machine.process(bigjob).priority, os::PriorityClass::below_normal);
+  ASSERT_EQ(machine.process(bigjob).eco_qos, os::EcoQos::on);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_saved WHERE pid = 300 AND priority = "
+                          "'above_normal' AND memory_priority = 5 AND eco_qos = 'automatic'"),
+            1);
+
+  machine.crash();
+  machine.start();
+  EXPECT_EQ(machine.process(bigjob).priority, os::PriorityClass::above_normal);
+  EXPECT_EQ(machine.process(bigjob).memory_priority, os::MemoryPriority::normal);
+  EXPECT_EQ(machine.process(bigjob).eco_qos, os::EcoQos::automatic);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_saved"), 0);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM action_log WHERE outcome = 'roll_back' AND "
+                          "reason = 'orphaned_state' AND detail LIKE '%pid 300%'"),
+            1);
+}
+
+// A tree job adopted again keeps its root at BELOW_NORMAL, as the policy calls for; the stop
+// then restores the priority it had before it was placed. Released in observe mode, it is restored
+// at once.
+TEST(GovernorRecovery, PlacementPriorityStaysWithAnAdoptedJobAndIsRestoredWhenItLeaves) {
+  Machine machine;
+  machine.start();
+  const ProcessKey cargo = machine.spawn(100, cargo_path, std::nullopt, false);
+  ASSERT_TRUE(machine.os().set_priority(os_key(cargo), os::PriorityClass::above_normal));
+  machine.start_event(cargo);
+  ASSERT_EQ(machine.process(cargo).priority, os::PriorityClass::below_normal);
+
+  machine.crash();
+  machine.start();
+  EXPECT_EQ(machine.process(cargo).priority, os::PriorityClass::below_normal);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_saved WHERE pid = 100 AND placed = "
+                          "'above_normal'"),
+            1);
+  machine.governor().stop();
+  EXPECT_EQ(machine.process(cargo).priority, os::PriorityClass::above_normal);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_saved"), 0);
+
+  machine.start();
+  machine.start_event(cargo);  // placed again (a new tree job)
+  ASSERT_EQ(machine.process(cargo).priority, os::PriorityClass::below_normal);
+  machine.crash();
+  machine.policy().mode = governor::GovernorMode::observe;
+  machine.start();
+  EXPECT_EQ(machine.process(cargo).priority, os::PriorityClass::above_normal);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_saved"), 0);
+}
+
+TEST(GovernorRecovery, SavedStateOfAnExitedProcessIsForgotten) {
+  Machine machine;
+  machine.start();
+  const ProcessKey cargo = machine.spawn(100, cargo_path);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_saved"), 1);
+  machine.exit(cargo);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_saved"), 0);
 }
 
 }  // namespace

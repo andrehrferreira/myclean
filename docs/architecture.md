@@ -246,7 +246,10 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   hard faults/s and the process table; no WMI, no query of its own) feed the pressure detector:
   a threshold held for its dwell enters pressure, 60 s at every exit threshold clears it. Hard
   faults count only while available memory is below `hard_faults_below_available_gib` (16): with
-  memory to spare they are file reads and page-ins after a shortage.
+  memory to spare they are file reads and page-ins after a shortage. When the ladder gets no
+  snapshot for 30 s (no process table, one that stopped advancing, or a CPU or commit metric
+  missing), steps 1-3 are rolled back (`telemetry_stalled`), the component reports it, and
+  pressure is judged afresh once the samples are back; a suspend still waits for the owner.
 - **Ladder:** on the heaviest unprotected tree, one step at a time with a 10 s cooldown:
   priority + memory priority, EcoQoS, cap (a cap job at 50 % CPU and commit + 25 %; a tree in
   its MyClean tree job has that job tightened instead), suspend (persisted in
@@ -257,7 +260,15 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   Suspend and kill need a memory signal: CPU pressure alone stops at the cap.
   Steps 1-3 roll back when pressure clears; a suspend waits for the owner (Resume,
   Kill, Allow once, Always allow, through the tray), a pause or the stop. Every step and
-  rollback is a `governor_event` row and a `GovernorStep` entry in `action_log`.
+  rollback is a `governor_event` row and a `GovernorStep` entry in `action_log`. The values
+  before steps 1-2 (and the priority before a job placement) are saved in `governor_saved`
+  before the change. A tree's processes keep their steps when they move to other trees (the
+  root exited), and its notification stays while any of them carries one; the owner's choice
+  for the old root acts on the trees they are in now. A suspended tree's notification is never
+  dropped to keep the list at 32. When Windows refuses a resume the owner asked for (Resume,
+  Allow, a pause), the processes stay suspended and counted, the notification keeps Resume,
+  the component reports it, and the resume is retried 3 times, 10 s apart. The owner's pause
+  is stored in `governor_pause`, so a restarted service keeps it until it ends.
 - **Game mode:** a game is on the owner's list, under a launcher library root, path-matched in
   the owner's `GameConfigStore` (read from `HKU\<owner SID>`), or the fullscreen foreground
   process with sustained GPU use (the tray sends the notification state and foreground PID
@@ -272,13 +283,16 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   Protected classes, the foreground process and MyClean are never ended; each end is a kill
   event with reason `orphaned_loop`.
 - **Fail-open:** on a clean stop the service rolls back every step, resumes every suspend,
-  lifts and releases every job and resumes every persisted suspend as recorded, within the
-  30 s stop budget. A crash leaves jobs (permanent) and suspend records behind: the restarted
+  lifts and releases every job, restores the priority each placed process had before its job,
+  and resumes every persisted suspend as recorded, within the 30 s stop budget. A crash leaves
+  jobs (permanent) and suspend records behind: the restarted
   service (SCM recovery, 5 s) re-opens each persisted job, refuses one not owned by SYSTEM
   (`untrusted_job`), adopts one with members at the current policy's limits (its members are
   then polled, since its port is gone), releases cap jobs and empty jobs, and resumes each
   recorded (PID, creation time) exactly as often as recorded (`orphaned_suspend`); nothing
-  that is not recorded is resumed.
+  that is not recorded is resumed. It also restores what `governor_saved` holds of each live
+  process (`orphaned_state`), except that a member of a re-adopted job stays at `BELOW_NORMAL`
+  until it leaves the job.
 
 ## 8. IPC and MCP
 

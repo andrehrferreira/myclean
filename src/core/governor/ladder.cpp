@@ -151,7 +151,12 @@ void LadderEngine::rehome(std::vector<Command>& out) {
         released.marks.emplace(key, mark);
         continue;
       }
-      TreeState& target = next[forest_.processes[forest_.trees[tree].root].key];
+      const ProcessKey now_root = forest_.processes[forest_.trees[tree].root].key;
+      TreeState& target = next[now_root];
+      target.origins.insert(state.origins.begin(), state.origins.end());
+      if (now_root != root) {
+        target.origins.emplace(root, state.image);
+      }
       Mark& merged = target.marks[key];
       merged.level = std::max(merged.level, mark.level);
       merged.suspended = merged.suspended || mark.suspended;
@@ -391,22 +396,85 @@ bool LadderEngine::exempt(const Tree& tree) const {
   });
 }
 
+std::vector<ProcessKey> LadderEngine::trees_from(const ProcessKey& root) const {
+  std::vector<ProcessKey> roots;
+  if (trees_.contains(root) || tree_rooted_at(root)) {
+    roots.push_back(root);
+  }
+  for (const auto& [key, state] : trees_) {
+    if (key != root && state.origins.contains(root)) {
+      roots.push_back(key);
+    }
+  }
+  return roots;
+}
+
 std::vector<Command> LadderEngine::choose(const ProcessKey& root, OwnerChoice choice,
                                           MonoTime now) {
   std::vector<Command> out;
-  switch (choice) {
-    case OwnerChoice::resume:
-      resume_tree(root, now, out);
-      break;
-    case OwnerChoice::kill:
-      kill_tree(root, out);
-      break;
-    case OwnerChoice::allow_once:
-    case OwnerChoice::always_allow:
-      allow_tree(root, choice == OwnerChoice::always_allow, out);
-      break;
+  std::vector<ProcessKey> roots = trees_from(root);
+  // The image the owner's Always allow is about: the old root's, when it moved on.
+  std::string origin_image;
+  for (const ProcessKey& tree : roots) {
+    if (tree == root) {
+      continue;
+    }
+    // A tree that came from `root` has a state: trees_from() found it there.
+    const std::map<ProcessKey, std::string>& origins = trees_.at(tree).origins;
+    if (const auto origin = origins.find(root); origin != origins.end()) {
+      origin_image = origin->second;
+    }
+  }
+  const bool moved = std::ranges::find(roots, root) == roots.end();
+  if (roots.empty()) {
+    roots.push_back(root);
+  }
+  for (const ProcessKey& tree : roots) {
+    switch (choice) {
+      case OwnerChoice::resume:
+        resume_tree(tree, now, out);
+        break;
+      case OwnerChoice::kill:
+        kill_tree(tree, out);
+        break;
+      case OwnerChoice::allow_once:
+      case OwnerChoice::always_allow:
+        allow_tree(tree, choice == OwnerChoice::always_allow && !moved, out);
+        break;
+    }
+  }
+  if (choice == OwnerChoice::always_allow && moved && !origin_image.empty()) {
+    Command allow = command(CommandKind::add_to_allow_list, root, TreeState{.image = origin_image},
+                            Step::priority, Reason::always_allow);
+    allow.actor = Actor::owner();
+    out.push_back(std::move(allow));
   }
   return out;
+}
+
+void LadderEngine::resume_failed(std::span<const ProcessKey> processes) {
+  for (const ProcessKey& key : processes) {
+    const auto found = index_.find(key);
+    if (found == index_.end() || tree_of_[found->second] == no_tree) {
+      continue;  // exited, or protected now
+    }
+    const ProcessKey root = forest_.processes[forest_.trees[tree_of_[found->second]].root].key;
+    TreeState& state = trees_[root];
+    describe_root(root, state);
+    state.marks[key].suspended = true;
+  }
+}
+
+bool LadderEngine::holds(const ProcessKey& root) const {
+  return std::ranges::any_of(trees_from(root),
+                             [&](const ProcessKey& tree) { return trees_.contains(tree); });
+}
+
+bool LadderEngine::suspends(const ProcessKey& root) const {
+  return std::ranges::any_of(trees_from(root), [&](const ProcessKey& tree) {
+    const auto state = trees_.find(tree);
+    return state != trees_.end() && any_suspended(state->second.marks);
+  });
 }
 
 void LadderEngine::resume_tree(const ProcessKey& root, MonoTime now, std::vector<Command>& out) {
@@ -492,11 +560,17 @@ void LadderEngine::describe_root(const ProcessKey& root, TreeState& state) const
   state.in_myclean_job = node.in_myclean_job;
 }
 
-std::vector<Command> LadderEngine::pause(MonoTime now, std::chrono::minutes duration) {
+std::vector<Command> LadderEngine::pause(MonoTime now, std::chrono::seconds duration) {
   std::vector<Command> out;
   roll_back_all(Reason::pause, Actor::owner(), true, out);
   trees_.clear();
   paused_until_ = now + duration;
+  return out;
+}
+
+std::vector<Command> LadderEngine::stall() {
+  std::vector<Command> out;
+  roll_back_all(Reason::telemetry_stalled, Actor::governor(), false, out);
   return out;
 }
 

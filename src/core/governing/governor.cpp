@@ -141,6 +141,8 @@ Result<void> Governor::start() {
   game_mode_ = governor::decide_game_mode(override_, false, policy_.jobs);
   scan_games();
   recover();
+  restore_pause();
+  governed_at_ = clock_->monotonic();
   started_ = true;
   spdlog::info("governor: {} mode, {} class entries, {} allowed images",
                governor::to_string(policy_.mode), classifier_.classes().matches.size(),
@@ -262,6 +264,7 @@ void Governor::recover() {
     input.processes.push_back(suspend.process);
   }
   const bool act = policy_.mode == governor::GovernorMode::act;
+  std::set<std::uint32_t> adopted_members;  // PIDs in a job adopted again
   for (const governor::RecoveryCommand& command : governor::plan_recovery(input, policy_.jobs)) {
     const auto record_of = by_name.find(command.job_name);
     switch (command.kind) {
@@ -278,6 +281,11 @@ void Governor::recover() {
         }
         const governor::JobLimits limits = command.limits.value_or(governor::JobLimits{});
         Result<TrackedJob*> adopted = jobs_.adopt(std::move(job), record_of->second, limits);
+        if (adopted) {
+          const auto reopened =
+              std::ranges::find(input.reopened, command.job_name, &governor::ReopenedJob::name);
+          adopted_members.insert(reopened->member_pids.begin(), reopened->member_pids.end());
+        }
         record(EventKind::job_adopted, record_of->second.root, record_of->second.root_image,
                record_of->second.process_class, governor::Reason::policy,
                adopted ? "job of the previous run " + command.job_name +
@@ -315,6 +323,15 @@ void Governor::recover() {
         break;
     }
   }
+  recover_states(adopted_members);
+}
+
+void Governor::recover_states(const std::set<std::uint32_t>& adopted_members) {
+  if (Result<std::vector<SavedState>> states = load_states(*store_); states) {
+    executor_.restore_persisted(*states, adopted_members, governor::Reason::orphaned_state);
+  } else {
+    problems_["recovery"] = "saved priorities unreadable: " + states.error().message;
+  }
 }
 
 void Governor::stop() {
@@ -332,6 +349,7 @@ void Governor::fail_open(governor::Reason reason, std::string_view detail) {
     run(command);
   }
   jobs_.release_all(reason, detail);
+  executor_.restore_all(reason);
   if (Result<std::vector<governor::PersistedSuspend>> suspends = load_suspends(*store_); suspends) {
     for (const governor::PersistedSuspend& suspend : *suspends) {
       executor_.resume_persisted(suspend, reason);
@@ -341,6 +359,8 @@ void Governor::fail_open(governor::Reason reason, std::string_view detail) {
   }
   executor_.clear();
   notifications_.clear();
+  retries_.clear();
+  problems_.erase("resume");
   observed_roots_.clear();
   orphan_proposals_.clear();
 }
@@ -355,8 +375,16 @@ void Governor::run(const governor::Command& command) {
         });
         notifications_.push_back(
             Notification{.id = next_notification_++, .time = clock_->now(), .command = command});
+        // The oldest go first, but never one whose tree is still suspended: it holds the
+        // owner's only Resume.
         while (notifications_.size() > ipc::max_notifications) {
-          notifications_.pop_front();
+          const auto oldest = std::ranges::find_if(notifications_, [&](const Notification& shown) {
+            return !ladder_.suspends(shown.command.root);
+          });
+          if (oldest == notifications_.end()) {
+            break;
+          }
+          notifications_.erase(oldest);
         }
       }
       record(EventKind::notify, command.root, command.root_image, command.process_class,
@@ -495,8 +523,7 @@ void Governor::place(const governor::ProcessKey& key, const Known& known,
   } else {
     detail += ", nested under the job it was in";
   }
-  const Result<os::PriorityClass> priority =
-      sources_.processes->set_priority(to_os(key), os::PriorityClass::below_normal);
+  const Result<void> priority = executor_.lower_placed(key);
   detail +=
       priority ? ", priority below normal" : ", priority not lowered: " + priority.error().message;
   // Children it started before this start event was handled did not inherit the job.
@@ -512,8 +539,7 @@ void Governor::place(const governor::ProcessKey& key, const Known& known,
       continue;
     }
     (*tree)->members.insert(descendant);
-    static_cast<void>(
-        sources_.processes->set_priority(to_os(descendant), os::PriorityClass::below_normal));
+    static_cast<void>(executor_.lower_placed(descendant));
     ++joined;
   }
   if (joined > 0) {
@@ -584,8 +610,7 @@ void Governor::join_parent_job(const governor::ProcessKey& key, const Known& kno
   std::string detail;
   if (const Result<void> assigned = tree->job->assign(to_os(key)); assigned) {
     tree->members.insert(key);
-    const Result<os::PriorityClass> priority =
-        sources_.processes->set_priority(to_os(key), os::PriorityClass::below_normal);
+    const Result<void> priority = executor_.lower_placed(key);
     detail = std::format(
         "joined tree job {} of its parent pid {}: it started before its root was "
         "placed{}",
@@ -617,6 +642,7 @@ void Governor::on_stop(const events::ProcessStop& stop) {
   const governor::ProcessKey key = to_governor(stop.process);
   known_.erase(key);
   observed_roots_.erase(key);
+  executor_.forget(key);
 }
 
 void Governor::tick() {
@@ -632,6 +658,7 @@ void Governor::tick() {
   }
   if (paused_until_ && !ladder_.paused(clock_->monotonic())) {
     paused_until_.reset();
+    store_pause();
   }
   const std::shared_ptr<const telemetry::ProcessView> view =
       sources_.view ? sources_.view() : nullptr;
@@ -648,16 +675,104 @@ void Governor::tick() {
   if (view && (!orphans_at_ || clock_->monotonic() - *orphans_at_ >= orphan_interval)) {
     scan_orphans(*view);
   }
+  bool governed = false;
   if (view && view->time != last_view_) {
     if (const std::optional<governor::PressureSample> sample = read_sample(); sample) {
       last_view_ = view->time;
       govern(*view, *sample);
+      governed = true;
     }
   }
+  if (governed) {
+    governed_at_ = clock_->monotonic();
+    stalled_ = false;
+    problems_.erase("telemetry");
+  } else {
+    check_stall(view.get());
+  }
+  retry_resumes();
+  // A notification goes with its root, unless the tree's processes moved to other trees that
+  // still carry its steps (a suspend among them): its Resume must stay reachable.
   std::erase_if(notifications_, [&](const Notification& notification) {
     const auto found = live.find(notification.command.root.pid);
-    return view && (found == live.end() || found->second != notification.command.root.created);
+    return view && (found == live.end() || found->second != notification.command.root.created) &&
+           !ladder_.holds(notification.command.root);
   });
+}
+
+void Governor::check_stall(const telemetry::ProcessView* view) {
+  if (stalled_ || !governed_at_ || clock_->monotonic() - *governed_at_ < stall_limit) {
+    return;
+  }
+  stalled_ = true;
+  std::string why;
+  if (view == nullptr) {
+    why = "no process table";
+  } else if (view->time == last_view_) {
+    why = "the process table stopped advancing";
+  } else {
+    why = "no value for";
+    for (const std::string_view name : {metric::cpu_utility, metric::memory_available,
+                                        metric::memory_commit, metric::memory_commit_limit}) {
+      if (!sources_.metric || !sources_.metric(name)) {
+        why += std::format(" {}", name);
+      }
+    }
+  }
+  problems_["telemetry"] = std::format(
+      "telemetry stalled for {} s ({}): the ladder's steps were rolled back and none is taken "
+      "until it is back",
+      stall_limit.count(), why);
+  spdlog::warn("governor: {}", problems_["telemetry"]);
+  for (const governor::Command& command : ladder_.stall()) {
+    run(command);
+  }
+  // The pressure of before the stall says nothing about now: it is judged afresh.
+  pressure_ = governor::PressureDetector(policy_.pressure);
+}
+
+bool Governor::run_owner(const std::vector<governor::Command>& commands) {
+  for (const governor::Command& command : commands) {
+    run(command);
+  }
+  const std::vector<governor::ProcessKey> refused = executor_.take_failed_resumes();
+  if (refused.empty()) {
+    return false;
+  }
+  ladder_.resume_failed(refused);
+  problems_["resume"] = std::format(
+      "{} processes stay suspended: Windows refused to resume them (see the resume events); the "
+      "governor tries again, and Resume in the tray does too",
+      refused.size());
+  return true;
+}
+
+void Governor::retry_resumes() {
+  const MonoTime now = clock_->monotonic();
+  for (auto retry = retries_.begin(); retry != retries_.end();) {
+    const governor::ProcessKey root = retry->first;
+    if (!ladder_.suspends(root)) {
+      retry = retries_.erase(retry);  // resumed by the owner, a pause, or exited
+      continue;
+    }
+    if (retry->second.attempts >= resume_retries || now < retry->second.next) {
+      ++retry;
+      continue;
+    }
+    ++retry->second.attempts;
+    retry->second.next = now + resume_retry_interval;
+    if (run_owner(ladder_.choose(root, governor::OwnerChoice::resume, now))) {
+      ++retry;
+      continue;
+    }
+    std::erase_if(notifications_, [&](const Notification& notification) {
+      return notification.command.root == root;
+    });
+    retry = retries_.erase(retry);
+  }
+  if (retries_.empty()) {
+    problems_.erase("resume");
+  }
 }
 
 void Governor::update_known(const telemetry::ProcessView& view) {
@@ -688,6 +803,7 @@ void Governor::update_known(const telemetry::ProcessView& view) {
     if (!present.contains(entry->first) && entry->first.created + table_grace < view.time) {
       detector_.fullscreen().forget(entry->first.pid);
       observed_roots_.erase(entry->first);
+      executor_.forget(entry->first);
       entry = known_.erase(entry);
     } else {
       ++entry;
@@ -1151,9 +1267,16 @@ std::size_t Governor::choose(const governor::ProcessKey& root, governor::OwnerCh
   if (stopped_ || !started_) {
     return 0;
   }
-  const std::vector<governor::Command> commands = ladder_.choose(root, choice, clock_->monotonic());
-  for (const governor::Command& command : commands) {
-    run(command);
+  const MonoTime now = clock_->monotonic();
+  const std::vector<governor::Command> commands = ladder_.choose(root, choice, now);
+  if (run_owner(commands)) {
+    // Still suspended: the notification stays with Resume, and the resume is tried again.
+    retries_.try_emplace(root, ResumeRetry{.next = now + resume_retry_interval});
+    return commands.size();
+  }
+  retries_.erase(root);
+  if (retries_.empty()) {
+    problems_.erase("resume");
   }
   std::erase_if(notifications_, [&](const Notification& notification) {
     return notification.command.root == root;
@@ -1169,19 +1292,55 @@ std::optional<WallTime> Governor::pause(std::chrono::minutes minutes) {
   const MonoTime now = clock_->monotonic();
   if (minutes.count() <= 0) {
     if (ladder_.paused(now)) {
-      for (const governor::Command& command : ladder_.pause(now, std::chrono::minutes{0})) {
-        run(command);
-      }
+      static_cast<void>(run_owner(ladder_.pause(now, std::chrono::minutes{0})));
     }
     paused_until_.reset();
+    store_pause();
     return std::nullopt;
   }
-  for (const governor::Command& command : ladder_.pause(now, minutes)) {
-    run(command);
+  const std::vector<governor::Command> commands = ladder_.pause(now, minutes);
+  if (run_owner(commands)) {
+    for (const governor::Command& command : commands) {
+      if (command.kind == governor::CommandKind::resume && ladder_.suspends(command.root)) {
+        retries_.try_emplace(command.root, ResumeRetry{.next = now + resume_retry_interval});
+      }
+    }
   }
-  notifications_.clear();
+  // Only the notifications of processes that could not be resumed stay.
+  std::erase_if(notifications_, [&](const Notification& notification) {
+    return !ladder_.suspends(notification.command.root);
+  });
   paused_until_ = clock_->now() + minutes;
+  store_pause();
   return paused_until_;
+}
+
+void Governor::restore_pause() {
+  const Result<std::optional<WallTime>> until = load_pause(*store_);
+  if (!until) {
+    problems_["pause"] = "the stored pause is unreadable: " + until.error().message;
+    return;
+  }
+  if (!*until) {
+    return;
+  }
+  const WallTime now = clock_->now();
+  if (**until <= now) {
+    store_pause();  // it ended while the service was not running
+    return;
+  }
+  static_cast<void>(
+      ladder_.pause(clock_->monotonic(), std::chrono::ceil<std::chrono::seconds>(**until - now)));
+  paused_until_ = **until;
+  spdlog::info("governor: paused until {} (stored)", store::to_unix_seconds(**until));
+}
+
+void Governor::store_pause() {
+  if (Result<void> stored = save_pause(*store_, paused_until_); stored) {
+    problems_.erase("pause");
+  } else {
+    problems_["pause"] = "the pause is not stored, so a restart ends it: " + stored.error().message;
+  }
 }
 
 governor::GameMode Governor::set_override(governor::GameModeOverride value) {

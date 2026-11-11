@@ -100,6 +100,14 @@ class Governor {
   static constexpr std::chrono::seconds table_grace{10};
   // How often the process table is searched for orphaned polling loops.
   static constexpr std::chrono::seconds orphan_interval{10};
+  // With no new process table or no CPU or commit metric this long, the ladder's steps 1-3 are
+  // rolled back (reason telemetry_stalled): the governor acts on what it sees, so it lets go when
+  // it is blind. Suspends wait for the owner, as when pressure clears.
+  static constexpr std::chrono::seconds stall_limit{30};
+  // A resume the OS refused after the owner's choice or a pause is tried again this often, this
+  // many times; the processes stay suspended for the tray's Resume in between and after.
+  static constexpr std::chrono::seconds resume_retry_interval{10};
+  static constexpr int resume_retries = 3;
 
   // `store` and `clock` must outlive the governor.
   Governor(GovernorSources sources, store::Store& store, const os::IClock& clock);
@@ -111,8 +119,8 @@ class Governor {
 
   // Loads the policy, the classes, the owner's allow list and game sources, then reconciles what
   // an earlier run left (crash recovery): its jobs are re-opened (owner checked) and adopted with
-  // the current policy or released, and every persisted suspend is resumed exactly as recorded.
-  // Fails only when the store cannot be read.
+  // the current policy or released, every persisted suspend is resumed exactly as recorded, and a
+  // persisted pause that has not ended goes on. Fails only when the store cannot be read.
   [[nodiscard]] Result<void> start();
 
   // A process started: classification, and for a build or test tree root its jobs.
@@ -129,7 +137,8 @@ class Governor {
   [[nodiscard]] nlohmann::json status() const;
   // How many commands the owner's choice caused.
   [[nodiscard]] std::size_t choose(const governor::ProcessKey& root, governor::OwnerChoice choice);
-  // 0 minutes ends a pause. The time the pause ends, if paused.
+  // 0 minutes ends a pause. The time the pause ends, if paused. The pause is persisted, so a
+  // restarted service keeps it until that time.
   [[nodiscard]] std::optional<WallTime> pause(std::chrono::minutes minutes);
   [[nodiscard]] governor::GameMode set_override(governor::GameModeOverride value);
   void set_user_state(const UserState& state);
@@ -164,6 +173,11 @@ class Governor {
     WallTime time;
     governor::Command command;
   };
+  // A resume the OS refused, tried again from tick().
+  struct ResumeRetry {
+    int attempts = 0;
+    MonoTime next;
+  };
   // "End N loops of <pattern>": a pattern without a rule with at least min_trees live trees.
   struct OrphanProposal {
     std::int64_t id = 0;  // kept while the pattern stays proposed
@@ -177,8 +191,19 @@ class Governor {
   void apply_policy(const governor::GovernorPolicy& policy);
   void scan_games();
   void recover();
+  // The saved priorities of an earlier run; `adopted_members`: the PIDs of jobs adopted again.
+  void recover_states(const std::set<std::uint32_t>& adopted_members);
   void fail_open(governor::Reason reason, std::string_view detail);
   void run(const governor::Command& command);
+  // Runs the commands of an owner's choice, a pause or a retry. A resume the OS refused leaves its
+  // processes suspended: the ladder keeps them suspended, so their notification keeps Resume, and
+  // the owner is told (problems). True when one was refused.
+  [[nodiscard]] bool run_owner(const std::vector<governor::Command>& commands);
+  void retry_resumes();
+  // tick() without a snapshot for the ladder: after stall_limit, steps 1-3 are rolled back.
+  void check_stall(const telemetry::ProcessView* view);
+  void restore_pause();
+  void store_pause();
   [[nodiscard]] Known learn(governor::ProcessFacts facts,
                             std::optional<governor::ProcessKey> parent) const;
   void update_known(const telemetry::ProcessView& view);
@@ -251,7 +276,10 @@ class Governor {
   std::optional<governor::PressureSample> sample_;
   std::optional<MonoTime> reloaded_at_;
   std::optional<WallTime> paused_until_;
+  std::optional<MonoTime> governed_at_;  // the ladder's latest snapshot (or the start)
+  bool stalled_ = false;                 // steps rolled back for this stall
   std::deque<Notification> notifications_;
+  std::map<governor::ProcessKey, ResumeRetry> retries_;  // by the root the owner chose for
   std::int64_t next_notification_ = 1;
   std::vector<OrphanRuleRecord> orphan_rules_;
   std::vector<OrphanProposal> orphan_proposals_;

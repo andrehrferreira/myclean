@@ -51,8 +51,11 @@ namespace myclean::ipc {
 // with a ladder step in effect. "notifications" are the owner's pending notifications (already
 // limited to one per tree per [notifications] interval_minutes, and always one for a suspend),
 // oldest first, each with an "id" that only grows: the tray shows a toast for each id above the
-// last one it showed. One leaves the list when the owner chose for its tree or the tree's root
-// exited; at most max_notifications are kept. "orphans": the orphaned polling loops (governor
+// last one it showed. One leaves the list when the owner chose for its tree (unless Windows
+// refused a resume: the processes then stay suspended and the notification keeps Resume), or when
+// the tree's root exited and none of its processes, in whatever tree they are now, carries a step
+// any more; at most max_notifications are kept, the oldest dropped first, but never one whose
+// tree still has a suspended process. "orphans": the orphaned polling loops (governor
 // spec, "Orphaned Polling Loops"): each proposal is a pattern (the normalized command line of the
 // trees' roots) with no rule and at least min_trees live orphaned trees, "End <trees> loops of
 // <pattern>", with an "id" kept while it stays proposed; "rules" are the owner's stored decisions.
@@ -77,7 +80,8 @@ inline constexpr std::string_view governor_choose_method = "governor.choose";
 
 // TRAY ONLY. Parameters: minutes (integer 0-max_pause_minutes, required). Pauses the governor:
 // every step is rolled back and every tree it suspended is resumed, and no step is taken until
-// the pause ends. 0 ends a pause now. {"paused_until": integer|null}.
+// the pause ends. 0 ends a pause now. The pause is stored: a restarted service keeps it until it
+// ends. {"paused_until": integer|null}.
 inline constexpr std::string_view governor_pause_method = "governor.pause";
 inline constexpr int max_pause_minutes = 1440;
 
