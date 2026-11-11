@@ -229,7 +229,10 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   foreign job (an IDE's) gets a tree job only, nested under that job. Each job carries the
   class's CPU hard cap (`JobObjectCpuRateControlInformation`), the commit cap of the whole tree
   (`JOB_OBJECT_LIMIT_JOB_MEMORY`) and a commit notification limit at 80 %; the root runs at
-  `BELOW_NORMAL`, which its children inherit. The first notification is recorded and the limit
+  `BELOW_NORMAL`, which its children inherit. Children the root started before its start event
+  was handled did not inherit the job: those in the process table are assigned to it (and
+  lowered) when the root is placed, any other one on its own start event; a protected process
+  and what lies below it are left out. The first notification is recorded and the limit
   cleared; the 1 s loop also checks the job's commit from its accounting and re-arms the limit
   below 70 %. One completion port per job reports membership, `JOB_MEMORY_LIMIT` and member
   exits; a tree job is released when its last member exits (a root exiting while `mspdbsrv`

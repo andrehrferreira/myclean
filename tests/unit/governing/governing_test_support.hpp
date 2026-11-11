@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -198,19 +199,31 @@ class Machine {
                                .cpu_percent = cpu_percent,
                                .private_bytes = private_bytes});
     if (start_event) {
-      std::string command_line = "\"" + path + "\"";
-      governor_->on_start(events::ProcessStart{
-          .process = {.pid = pid, .created = created},
-          .parent_pid = parent ? parent->pid : 4,
-          .parent = parent ? std::optional(
-                                 events::ProcessKey{.pid = parent->pid, .created = parent->created})
-                           : std::nullopt,
-          .session = 1,
-          .image = path,
-          .command_line = std::move(command_line)});
+      this->start_event(process);
     }
     return process;
   }
+
+  // Delivers the ETW start of a running process spawned without it (events queue behind the
+  // governor's tick, so a start can be handled after the process started children).
+  void start_event(const governor::ProcessKey& process) {
+    const auto found = std::ranges::find(running_, process, &Running::key);
+    ASSERT_NE(found, running_.end());
+    const std::optional<governor::ProcessKey>& parent = found->parent;
+    governor_->on_start(
+        events::ProcessStart{.process = {.pid = process.pid, .created = process.created},
+                             .parent_pid = parent ? parent->pid : 4,
+                             .parent = parent ? std::optional(events::ProcessKey{
+                                                    .pid = parent->pid, .created = parent->created})
+                                              : std::nullopt,
+                             .session = 1,
+                             .image = found->path,
+                             .command_line = "\"" + found->path + "\""});
+  }
+
+  // Leaves `process` out of the process table until show(): it started after the latest sample.
+  void hide(const governor::ProcessKey& process) { hidden_.push_back(process); }
+  void show(const governor::ProcessKey& process) { std::erase(hidden_, process); }
 
   // From now on the process table reports `process` in session `session` (0: a service).
   void set_session(const governor::ProcessKey& process, std::uint32_t session) {
@@ -275,7 +288,11 @@ class Machine {
   [[nodiscard]] std::shared_ptr<const telemetry::ProcessView> view() const {
     auto table = std::make_shared<telemetry::ProcessView>();
     table->time = clock_.now();
+    std::vector<std::optional<governor::ProcessKey>> parents;  // per row
     for (const Running& process : running_) {
+      if (std::ranges::find(hidden_, process.key) != hidden_.end()) {
+        continue;
+      }
       telemetry::ProcessRow row{.info = {.pid = process.key.pid,
                                          .parent_pid = process.parent ? process.parent->pid : 4,
                                          .created = process.key.created,
@@ -283,14 +300,20 @@ class Machine {
                                          .private_bytes = process.private_bytes,
                                          .session = process.session},
                                 .cpu_percent = process.cpu_percent};
-      if (process.parent) {
-        for (std::size_t index = 0; index < running_.size(); ++index) {
-          if (running_[index].key == *process.parent) {
-            row.parent = index;
-          }
+      table->rows.push_back(std::move(row));
+      parents.push_back(process.parent);
+    }
+    for (std::size_t child = 0; child < table->rows.size(); ++child) {
+      const std::optional<governor::ProcessKey>& parent = parents[child];
+      if (!parent) {
+        continue;
+      }
+      for (std::size_t index = 0; index < table->rows.size(); ++index) {
+        const telemetry::ProcessInfo& info = table->rows[index].info;
+        if (info.pid == parent->pid && info.created == parent->created) {
+          table->rows[child].parent = index;
         }
       }
-      table->rows.push_back(std::move(row));
     }
     return table;
   }
@@ -318,6 +341,7 @@ class Machine {
   std::unique_ptr<store::Store> store_;
   std::unique_ptr<Governor> governor_;
   std::vector<Running> running_;
+  std::vector<governor::ProcessKey> hidden_;  // left out of the process table
   int spawned_ = 0;
 };
 

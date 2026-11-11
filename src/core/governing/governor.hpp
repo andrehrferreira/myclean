@@ -184,6 +184,17 @@ class Governor {
   void update_known(const telemetry::ProcessView& view);
   void place(const governor::ProcessKey& key, const Known& known, rules::ProcessClass process_class,
              governor::JobPlacement placement);
+  // The descendants of `root` in the process view, which it started before it was placed and so
+  // did not inherit its job: without protected processes (and what lies below them) and without
+  // processes already in a MyClean tree job.
+  [[nodiscard]] std::vector<governor::ProcessKey> earlier_descendants(
+      const governor::ProcessKey& root) const;
+  // A starting process whose parent is in a MyClean tree job but which is not in it (it started
+  // before the root was placed) is assigned to that job, unless it is protected.
+  void join_parent_job(const governor::ProcessKey& key, const Known& known,
+                       const governor::ProcessKey& parent);
+  // Protected from placement: a protected class, a MyClean process or the foreground process.
+  [[nodiscard]] bool spared(const governor::ProcessKey& key, std::string_view image) const;
   [[nodiscard]] std::optional<governor::PressureSample> read_sample() const;
   void govern(const telemetry::ProcessView& view, const governor::PressureSample& sample);
   void observe_fullscreen();

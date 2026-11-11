@@ -415,6 +415,10 @@ void Governor::on_start(const events::ProcessStart& start) {
                                                .signer = start.signer},
                         parent);
   const Known& known = known_.insert_or_assign(key, std::move(learned)).first->second;
+  const bool act = policy_.mode == governor::GovernorMode::act;
+  if (act && parent && jobs_.in_tree_job(*parent)) {
+    join_parent_job(key, known, *parent);
+  }
   const rules::ProcessClass process_class = class_of(key);
   if (!job_class(process_class)) {
     return;
@@ -423,7 +427,6 @@ void Governor::on_start(const events::ProcessStart& start) {
   if ((user && user->foreground_pid == key.pid) || under_class(key, rules::ProcessClass::game)) {
     return;  // protected: the foreground window's process, or a game's descendant
   }
-  const bool act = policy_.mode == governor::GovernorMode::act;
   jobs_.drain();
   const bool parent_in_job =
       parent && (act ? jobs_.in_tree_job(*parent) : under_observed_root(*parent));
@@ -496,8 +499,113 @@ void Governor::place(const governor::ProcessKey& key, const Known& known,
       sources_.processes->set_priority(to_os(key), os::PriorityClass::below_normal);
   detail +=
       priority ? ", priority below normal" : ", priority not lowered: " + priority.error().message;
+  // Children it started before this start event was handled did not inherit the job.
+  std::size_t joined = 0;
+  std::size_t refused = 0;
+  std::string refusal;
+  for (const governor::ProcessKey& descendant : earlier_descendants(key)) {
+    const Result<void> assigned = (*tree)->job->assign(to_os(descendant));
+    if (!assigned) {
+      if (assigned.error().code != Errc::not_found && refused++ == 0) {
+        refusal = std::format("pid {}: {}", descendant.pid, assigned.error().message);
+      }
+      continue;
+    }
+    (*tree)->members.insert(descendant);
+    static_cast<void>(
+        sources_.processes->set_priority(to_os(descendant), os::PriorityClass::below_normal));
+    ++joined;
+  }
+  if (joined > 0) {
+    detail += std::format(", {} processes it started earlier joined it", joined);
+  }
+  if (refused > 0) {
+    detail += std::format(", {} it started earlier could not join ({})", refused, refusal);
+  }
   record(EventKind::place_job, key, known.facts.image, process_class, governor::Reason::policy,
          std::move(detail), true);
+}
+
+std::vector<governor::ProcessKey> Governor::earlier_descendants(
+    const governor::ProcessKey& root) const {
+  std::vector<governor::ProcessKey> found;
+  const std::shared_ptr<const telemetry::ProcessView> view =
+      sources_.view ? sources_.view() : nullptr;
+  if (!view) {
+    return found;
+  }
+  const std::vector<telemetry::ProcessRow>& rows = view->rows;
+  std::vector<std::vector<std::size_t>> children(rows.size());
+  std::optional<std::size_t> start;
+  for (std::size_t index = 0; index < rows.size(); ++index) {
+    const telemetry::ProcessInfo& info = rows[index].info;
+    if (info.pid == root.pid && info.created == root.created) {
+      start = index;
+    }
+    // Only a parent created before its child: a reused PID is never a parent.
+    if (const std::optional<std::size_t> parent = rows[index].parent;
+        parent && *parent < rows.size() && rows[*parent].info.created < info.created) {
+      children[*parent].push_back(index);
+    }
+  }
+  if (!start) {
+    return found;
+  }
+  std::vector<std::size_t> tree{*start};
+  for (std::size_t next = 0; next < tree.size(); ++next) {
+    for (const std::size_t child : children[tree[next]]) {
+      const telemetry::ProcessInfo& info = rows[child].info;
+      const governor::ProcessKey key{.pid = info.pid, .created = info.created};
+      if (spared(key, info.image) || jobs_.in_tree_job(key)) {
+        continue;
+      }
+      tree.push_back(child);
+      found.push_back(key);
+    }
+  }
+  return found;
+}
+
+void Governor::join_parent_job(const governor::ProcessKey& key, const Known& known,
+                               const governor::ProcessKey& parent) {
+  TrackedJob* tree = jobs_.tree_job_of(parent);
+  if (tree == nullptr || spared(key, known.facts.image)) {
+    return;
+  }
+  const Result<bool> inside = tree->job->contains(to_os(key));
+  if (!inside) {
+    return;  // exited already
+  }
+  if (*inside) {
+    tree->members.insert(key);  // inherited the job, as children do
+    return;
+  }
+  const std::string name = tree->job->ref().object_name();
+  std::string detail;
+  if (const Result<void> assigned = tree->job->assign(to_os(key)); assigned) {
+    tree->members.insert(key);
+    const Result<os::PriorityClass> priority =
+        sources_.processes->set_priority(to_os(key), os::PriorityClass::below_normal);
+    detail = std::format(
+        "joined tree job {} of its parent pid {}: it started before its root was "
+        "placed{}",
+        name, parent.pid,
+        priority ? ", priority below normal"
+                 : ", priority not lowered: " + priority.error().message);
+  } else if (assigned.error().code == Errc::not_found) {
+    return;
+  } else {
+    detail = std::format("not placed in tree job {} of its parent pid {}: {}", name, parent.pid,
+                         assigned.error().message);
+  }
+  record(EventKind::place_job, key, known.facts.image, class_of(key), governor::Reason::policy,
+         std::move(detail), true);
+}
+
+bool Governor::spared(const governor::ProcessKey& key, std::string_view image) const {
+  const std::optional<UserState> user = fresh_user_state();
+  return protected_class(class_of(key)) || myclean_image(image) ||
+         (user && user->foreground_pid == key.pid);
 }
 
 void Governor::on_stop(const events::ProcessStop& stop) {

@@ -237,6 +237,70 @@ TEST(GovernorJobs, TreeJobIsReleasedWhenItsLastMemberExits) {
   EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_event WHERE kind = 'job_released'"), 2);
 }
 
+// Audit risk 3: the start event of a build root is handled after the root started children.
+// Those in the process table join its tree job when it is placed; a protected one does not.
+TEST(GovernorJobs, ChildrenStartedBeforeTheRootWasPlacedJoinItsTreeJob) {
+  Machine machine;
+  machine.start();
+  const ProcessKey cargo = machine.spawn(100, cargo_path, std::nullopt, false);
+  const ProcessKey rustc = machine.spawn(200, rustc_path, cargo, false);
+  const ProcessKey linker = machine.spawn(201, R"(C:\VS\link.exe)", rustc, false);
+  const ProcessKey host = machine.spawn(202, R"(C:\Windows\System32\svchost.exe)", cargo, false);
+  const ProcessKey below_host = machine.spawn(203, R"(C:\Tools\helper.exe)", host, false);
+  machine.second();
+
+  machine.start_event(cargo);
+  const std::vector<std::string> jobs = machine.process(cargo).jobs;
+  ASSERT_EQ(jobs.size(), 2U);  // class job, tree job
+  for (const ProcessKey& child : {rustc, linker}) {
+    EXPECT_EQ(machine.process(child).jobs, jobs);
+    EXPECT_EQ(machine.process(child).priority, os::PriorityClass::below_normal);
+  }
+  for (const ProcessKey& spared : {host, below_host}) {
+    EXPECT_TRUE(machine.process(spared).jobs.empty());
+    EXPECT_EQ(machine.process(spared).priority, os::PriorityClass::normal);
+  }
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_event WHERE kind = 'place_job' AND "
+                          "root_pid = 100 AND detail LIKE '%2 processes it started earlier joined "
+                          "it%'"),
+            1);
+
+  // Their own start events change nothing more: they are in the job already.
+  machine.start_event(rustc);
+  machine.start_event(linker);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_event WHERE kind = 'place_job'"), 1);
+  EXPECT_EQ(jobs_of(machine.store(), JobRole::tree_job).size(), 1U);
+}
+
+// A child too new for the process table joins when its own start event comes, and so do its
+// children in turn.
+TEST(GovernorJobs, ChildMissingFromTheProcessTableJoinsOnItsStartEvent) {
+  Machine machine;
+  machine.start();
+  const ProcessKey cargo = machine.spawn(100, cargo_path, std::nullopt, false);
+  const ProcessKey rustc = machine.spawn(200, rustc_path, cargo, false);
+  const ProcessKey linker = machine.spawn(201, R"(C:\VS\link.exe)", rustc, false);
+  machine.hide(rustc);
+  machine.hide(linker);
+  machine.start_event(cargo);
+  EXPECT_TRUE(machine.process(rustc).jobs.empty());
+
+  machine.start_event(rustc);
+  machine.start_event(linker);
+  for (const ProcessKey& child : {rustc, linker}) {
+    EXPECT_EQ(machine.process(child).jobs, machine.process(cargo).jobs);
+    EXPECT_EQ(machine.process(child).priority, os::PriorityClass::below_normal);
+  }
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM governor_event WHERE kind = 'place_job' AND "
+                          "detail LIKE 'joined tree job%started before its root was placed%'"),
+            2);
+  EXPECT_EQ(machine.count("SELECT COUNT(*) FROM action_log WHERE outcome = 'place_job'"), 3);
+  machine.show(rustc);
+  machine.show(linker);
+  machine.second();
+  EXPECT_EQ(machine.governor().status().at("jobs").at(1).at("members"), 3);
+}
+
 TEST(GovernorJobs, FailedAssignmentLeavesNoJobBehind) {
   Machine machine;
   machine.start();
