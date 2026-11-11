@@ -243,6 +243,10 @@ bool Poller::handle_cleanup(const Request& request, PollResult& result) {
     return decide("Proposing a cleanup", ipc::plans_propose_cleanup_method,
                   propose_cleanup_params(propose->candidates));
   }
+  if (const auto* recycle = std::get_if<RecycleCandidates>(&request)) {
+    return decide("Sending to the Recycle Bin", ipc::plans_recycle_method,
+                  propose_cleanup_params(recycle->candidates));
+  }
   if (const auto* action = std::get_if<OwnerAction>(&request)) {
     return decide("Starting it", ipc::plans_owner_action_method,
                   owner_action_params(action->candidate));

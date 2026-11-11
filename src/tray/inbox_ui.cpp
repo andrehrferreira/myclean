@@ -378,13 +378,24 @@ void draw_quarantine(const std::vector<tray_model::QuarantineRun>& runs,
 }
 
 // Space lists. A file row can be proposed for cleaning: the service creates a plan that waits
-// in the inbox like any other.
+// in the inbox like any other. The owner can also send it to the Recycle Bin at once (the click
+// is the approval; the tray's task worker runs it, and the file can be restored from the bin).
 
 void propose_button(std::vector<std::int64_t> candidates, const char* label, bool reachable,
                     UiState& state) {
   ImGui::BeginDisabled(!reachable);
   if (ImGui::SmallButton(label)) {
     state.requests.emplace_back(tray_model::ProposeCleanup{.candidates = std::move(candidates)});
+  }
+  ImGui::EndDisabled();
+}
+
+void recycle_button(std::vector<std::int64_t> candidates, const char* label, bool reachable,
+                    UiState& state) {
+  ImGui::SameLine();
+  ImGui::BeginDisabled(!reachable);
+  if (ImGui::SmallButton(label)) {
+    state.requests.emplace_back(tray_model::RecycleCandidates{.candidates = std::move(candidates)});
   }
   ImGui::EndDisabled();
 }
@@ -427,6 +438,7 @@ void draw_top(const tray_model::SpaceReply& reply, const std::chrono::time_zone&
       ImGui::TableNextColumn();
       if (file.protected_by.empty()) {
         propose_button({file.id}, "Propose cleanup", reachable, state);
+        recycle_button({file.id}, "To Recycle Bin", reachable, state);
       } else {
         muted_text(tray_model::protected_text(file.protected_by));
       }
@@ -460,6 +472,7 @@ void draw_downloads(const std::vector<tray_model::OldDownloadRow>& downloads, bo
     wrapped_text(color::muted, download.origin.value_or("unknown"));
     ImGui::TableNextColumn();
     propose_button({download.id}, "Propose cleanup", reachable, state);
+    recycle_button({download.id}, "To Recycle Bin", reachable, state);
     ImGui::PopID();
   }
   ImGui::EndTable();
@@ -486,7 +499,9 @@ void draw_duplicates(const std::vector<tray_model::DuplicateGroupRow>& groups,
                          local_date_time(zone, file.modified) + ")");
       }
       muted_text("Keeping the oldest copy, most likely the original, frees the rest.");
-      propose_button(std::move(others), "Propose removing the other copies", reachable, state);
+      propose_button(others, "Propose removing the other copies", reachable, state);
+      recycle_button(std::move(others), "Send the other copies to the Recycle Bin", reachable,
+                     state);
     }
     ImGui::PopID();
   }
@@ -516,6 +531,7 @@ void draw_installers(const std::vector<tray_model::UsedInstallerRow>& installers
     text(installer.installed_as);
     ImGui::TableNextColumn();
     propose_button({installer.id}, "Propose cleanup", reachable, state);
+    recycle_button({installer.id}, "To Recycle Bin", reachable, state);
     ImGui::PopID();
   }
   ImGui::EndTable();

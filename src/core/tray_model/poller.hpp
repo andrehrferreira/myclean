@@ -51,8 +51,8 @@ struct SelectRange {
   Range range = Range::live;
 };
 // The approval inbox: a cleaning scan, a plan's details shown or hidden, the owner's decision,
-// an undo, a restore from quarantine; a Space list, a cleanup proposed from it, and the one-click
-// action of an owner decision.
+// an undo, a restore from quarantine; a Space list, a cleanup proposed from it or its files sent
+// to the Recycle Bin, and the one-click action of an owner decision.
 struct ScanNow {};
 struct OpenPlan {
   std::int64_t id = 0;
@@ -83,6 +83,11 @@ struct LoadSpace {
   bool refresh = false;  // start a new analysis
 };
 struct ProposeCleanup {
+  std::vector<std::int64_t> candidates;  // Space candidate ids
+};
+// The owner deletes Space files to the Recycle Bin (plans.recycle: an approved plan the tray's
+// task worker then runs), so they can be restored from there.
+struct RecycleCandidates {
   std::vector<std::int64_t> candidates;  // Space candidate ids
 };
 // The owner's one click on an owner decision: moving a cold folder to the HDD archive, or
@@ -120,8 +125,9 @@ struct EndPause {};
 using Request =
     std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange, ScanNow, OpenPlan,
                  ClosePlan, ApprovePlan, RejectPlan, UndoPlan, RestoreQuarantine, PurgeQuarantine,
-                 LoadSpace, ProposeCleanup, OwnerAction, ChooseForTree, PauseGovernor, SetGameMode,
-                 DecideOrphans, ProposePause, EndPause, LoadScreen, ScreenAction>;
+                 LoadSpace, ProposeCleanup, RecycleCandidates, OwnerAction, ChooseForTree,
+                 PauseGovernor, SetGameMode, DecideOrphans, ProposePause, EndPause, LoadScreen,
+                 ScreenAction>;
 
 // The tray's executor of user-scope plans, as the poller drives it: the poller takes a task
 // (user_tasks.next) only from a reachable service and only while the runner is idle, and
