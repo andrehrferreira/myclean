@@ -13,6 +13,6 @@
 - [ ] 1.17 Acceptance: prompt 2 passes; every applied optimization in the audit log has a verification result; NTFS index matches a full rescan on C: and F:
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 2.1 Update or create documentation covering the implementation
-- [ ] 2.2 Write tests covering the new behavior
-- [ ] 2.3 Run tests and confirm they pass
+- [x] 2.1 Update or create documentation covering the implementation; done with each item in docs/architecture.md, docs/development.md, data/alerts.toml and the item commits listed above
+- [x] 2.2 Write tests covering the new behavior; done with each item (tests/unit/startup, resident, indexer, space photos, devdrive, vhdx, elimination, cleaning verification and pause tests, platform_* adapters)
+- [x] 2.3 Run tests and confirm they pass; full gate green on every commit, 1964/1964 at 6eafb77, release suite green at deploy 20261111-120915-d9aee936
