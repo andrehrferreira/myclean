@@ -84,6 +84,9 @@ src/core/health/        disk health: NVMe log / SMART interpretation, assessment
                         history, endurance projection, the 10-min collector
 src/core/alerts/        alert rules (data/alerts.toml) and the engine: thresholds, changes,
                         rate limit, snooze, badge
+src/core/backup/        backup detection: every Windows backup source, backup tools, artifacts on
+                        the backup drives, last-backup age, the recommendation, the read-only
+                        repository check (Win32 reads in src/platform/backup)
 src/core/trust/         trust signal: signature, signer, path class, knowledge-base match
 src/core/governor/      governor logic: classes, policy (data/governor.toml), pressure, ladder,
                         game mode, job placement, crash recovery (snapshot in, commands out)
@@ -275,6 +278,7 @@ started in this order (stopped in reverse), so that each starts after those it u
 | `resident` | every second hands the newest process table to `resident::Tracker`: per program (the lower-case image of its trees' root) and minute, CPU time, private bytes, RAM, disk I/O and the network bytes of `net_minute`; 5-minute private bytes in `resident_fine` (2 days), hourly totals in `resident_hour` (35 days); at each closed 5-minute bucket the leak readings go to `alerts` (rule `process.memory-leak`). Reads only: it cannot act on a process | `resident.*` |
 | `elimination` | guided freeze elimination (`core/elimination`): the pauses the cleaning executor starts for approved `PauseSuspect` plans, ticked every 5 s (period end, the spans of a guided pause), suspend pauses resumed as recorded at the start after a crash and at the stop; suspends only processes `governing::Governor::protects` leaves alone | `input.pauses`, `input.end_pause` |
 | `cleaning` | rule scans (the clean cases of the knowledge packs that apply, reloaded at every scan) and plans by tier; runs approved service-scope plans and, after every scan, its auto-tier plan; auto run hourly (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge (runs past 7 days, and at once every run on a volume under 10 % free) on the in-app scheduler; user tasks for the tray; space analyses, including the build-output and cache folders Windows Search indexes (`space.indexed_folders`, with `plans.propose_index_exclusion`); the startup items, their impact and the boot and logon times | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*`, `startup.*` |
+| `backup` | the backup check (`core/backup`) at its start, once a day and on request: every Windows backup source (File History, system images, restore points, shadow copies, OneDrive folder backup), installed backup tools, the artifacts on the drives labelled as backup drives, the last-backup age (to `alerts`, rule `backup.age`), the recommendation when no backup exists and the git repositories of `data/workspaces.toml` with no remote, unpushed or uncommitted work (git as the owner, local refs only). Reads only: it sets nothing up | `backups.check` |
 
 The contracts of the cleaning methods are in `src/core/ipc/plans.hpp`, the governor's in
 `src/core/ipc/governor.hpp` (`governor.choose`, `.pause`, `.game_mode` and `.user_state` are

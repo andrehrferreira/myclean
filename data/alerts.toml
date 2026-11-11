@@ -119,3 +119,15 @@ metric = "process.private_growth_hours"
 severity = "warning"
 above = 5
 unit = "hours"
+
+# The newest backup is older than the owner's limit (backup spec, "Backup Age Alert";
+# core/backup): the value is its age in whole days (infinite when no backup exists), the entity
+# "newest", the detail names its source. The backup component checks once a day. Set `above` to
+# the most days a backup may be old.
+[[rule]]
+id = "backup.age"
+title = "Your newest backup is old"
+metric = "backup.age_days"
+severity = "warning"
+above = 7
+unit = "days"

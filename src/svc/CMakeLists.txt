@@ -4,6 +4,8 @@ myclean_add_library(svc
   SOURCES
     alerts_component.cpp
     alerts_component.hpp
+    backup_component.cpp
+    backup_component.hpp
     cleaning_component.cpp
     cleaning_component.hpp
     component.hpp
@@ -34,6 +36,7 @@ myclean_add_library(svc
   DEPENDS
     myclean::actions
     myclean::alerts
+    myclean::backup
     myclean::cleaning
     myclean::elimination
     myclean::events
@@ -43,6 +46,7 @@ myclean_add_library(svc
     myclean::ipc
     myclean::os
     myclean::packs
+    myclean::platform_backup
     myclean::platform_clean
     myclean::platform_fs
     myclean::platform_git

@@ -336,6 +336,18 @@ Result<cleaning::OwnerContext> owner_context(std::string_view owner_sid) {
       .wsl = std::make_unique<platform::Win32Wsl>(owner_identity(std::string(owner_sid)))};
 }
 
+std::unique_ptr<platform::GitCli> owner_git(std::string_view owner_sid) {
+  const std::optional<fs::path> git = platform::find_git();
+  if (!git) {
+    return nullptr;
+  }
+  const Result<std::string> current = platform::current_user_sid();
+  if (current && *current == owner_sid) {
+    return std::make_unique<platform::GitCli>(*git);
+  }
+  return std::make_unique<platform::GitCli>(*git, owner_identity(std::string(owner_sid)));
+}
+
 Result<WallTime> owner_logon_time(std::string_view owner_sid) {
   Result<OwnerSession> session = owner_session(owner_sid);
   if (!session) {

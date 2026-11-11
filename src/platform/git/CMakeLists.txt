@@ -4,5 +4,6 @@ myclean_add_library(platform_git
     git_cli.cpp
     git_cli.hpp
   DEPENDS
+    myclean::backup
     myclean::clean
     WIL::WIL)

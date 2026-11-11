@@ -11,6 +11,7 @@
 #include <wil/resource.h>
 #include <windows.h>
 
+#include "core/backup/repos.hpp"
 #include "core/clean/engine.hpp"
 #include "core/clean/probes.hpp"
 #include "core/clean/workspaces.hpp"
@@ -217,6 +218,30 @@ clean::Worktree described(const GitCli& git, const fs::path& folder) {
   EXPECT_TRUE(worktree.has_value() && worktree->has_value())
       << (worktree ? "not a linked worktree" : worktree.error().message);
   return worktree.value_or(std::nullopt).value_or(clean::Worktree{});
+}
+
+// Backup spec, "Repository Safety Check": no remote, unpushed commits and uncommitted changes,
+// from the local refs only (the remote below is a folder that is never fetched).
+TEST_F(SandboxRepository, StatesRemotesUnpushedCommitsAndUncommittedChanges) {
+  const GitCli cli{git_path()};
+  Result<backup::RepoState> state = cli.state(project());
+  ASSERT_TRUE(state.has_value()) << state.error().message;
+  EXPECT_EQ(state->remotes, 0U);
+  EXPECT_EQ(state->unpushed, 1U);
+  EXPECT_TRUE(state->uncommitted);  // build\out.js is neither committed nor ignored
+
+  git({L"remote", L"add", L"origin", (sandbox().root() / "nowhere.git").native()});
+  git({L"update-ref", L"refs/remotes/origin/main", L"HEAD"});
+  git({L"commit", L"-q", L"--allow-empty", L"-m", L"one"});
+  git({L"commit", L"-q", L"--allow-empty", L"-m", L"two"});
+  write_text(project() / ".gitignore", "node_modules/\ndist/\nbuild/\n");
+  git({L"commit", L"-q", L"-am", L"ignore build"});
+  state = cli.state(project());
+  ASSERT_TRUE(state.has_value()) << state.error().message;
+  EXPECT_EQ(state->remotes, 1U);
+  EXPECT_EQ(state->unpushed, 3U);
+  EXPECT_FALSE(state->uncommitted);
+  EXPECT_FALSE(fs::exists(sandbox().root() / "nowhere.git"));
 }
 
 TEST_F(SandboxRepository, DescribesLinkedWorktrees) {

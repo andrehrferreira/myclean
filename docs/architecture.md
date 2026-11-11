@@ -295,6 +295,7 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   | `processes.explain` | pid | telemetry + trust |
   | `volumes.list` | none | telemetry |
   | `disks.health` | none | disk_health |
+  | `backups.check` | refresh | backup |
   | `alerts.list` | since | alerts |
   | `alerts.badge` | none | alerts |
   | `alerts.snooze` | rule, entity, minutes | alerts |
@@ -346,6 +347,21 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   numbers a read tool returned (candidate ids, startup item ids, folder ids, disk ids, suspect
   ids), never by
   a path or registry name, so no client string reaches an OS API.
+
+**Backup check (B1, `core/backup`, `svc::BackupComponent`):** `backups.check` reports every
+backup source of spike X8 (`docs/spikes/X8-backups.md`) as found, not found or could not be checked
+(with the error): File History (the owner's `Config1.xml`), system images (`WindowsImageBackup`
+folders, else `wbadmin get versions` by its exit code), restore points and shadow copies (WMI,
+listed but never counted: they live on the volume they protect), OneDrive folder backup (a known
+folder under an account's `UserFolder`), installed backup products, and the artifacts on the volumes
+whose label holds "backup" (images, `WindowsImageBackup` and `FileHistory` folders, dated manual
+copy folders, dumps; a walk of depth 3 that enters no reparse point and opens no file). The newest
+copy that counts gives the last-backup age and its source, reported to the alert engine once a day
+(rule `backup.age`, `above` = the owner's limit in days); with no backup, a recommendation names
+only healthy drives of this machine and MyClean sets nothing up. The git repositories under the
+roots of `data/workspaces.toml` are checked as the owner with `remote`, `rev-list --branches --not
+--remotes` and `status --porcelain`: local refs only, nothing is fetched. MCP `check_backups` reads
+it.
 
 **Guided freeze elimination (I3, `core/elimination`, `svc::EliminationComponent`):** once the
 first freeze incident is 7 days old, `input.pauses` offers the highest-ranked running suspect

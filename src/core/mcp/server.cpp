@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 
 #include "core/ipc/alerts.hpp"
+#include "core/ipc/backup.hpp"
 #include "core/ipc/disk_health.hpp"
 #include "core/ipc/input.hpp"
 #include "core/ipc/json_rpc.hpp"
@@ -429,6 +430,20 @@ const Json& tool_list() {
                  {"maximum", 168},
                  {"description", "How long the pause lasts; 24 when absent"}}}},
               Json::array({"suspect_id"}))),
+      tool("check_backups",
+           "Every backup source of this PC, each found, not found or could not be checked (with "
+           "the error): File History (target, newest copy), system images, restore points and "
+           "shadow copies (listed, but they live on the drive they protect and never count as a "
+           "backup), OneDrive folder backup, installed third-party backup tools, and the backup "
+           "artifacts on the drives labelled as backup drives (Macrium, Veeam and Acronis images, "
+           "WindowsImageBackup and FileHistory folders, dated manual copy folders, dumps). Also "
+           "the last-backup age with its source ('no backup exists' when none), the git "
+           "repositories of the workspaces with no remote, unpushed commits or uncommitted "
+           "changes (local refs only, nothing is fetched), and when no backup exists a "
+           "recommendation naming only healthy drives of this PC. The check runs in the "
+           "background: while 'state' is 'checking', call again in a minute. Reads only; it "
+           "sets nothing up.",
+           object_schema({{"refresh", refresh_property()}})),
   });
   return list;
 }
@@ -597,6 +612,9 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
     proposal["client"] = client;
     return ServiceCall{.method = ipc::plans_propose_optimization_method,
                        .params = std::move(proposal)};
+  }
+  if (tool == "check_backups") {
+    return ServiceCall{.method = ipc::backups_check_method, .params = refresh};
   }
   return std::nullopt;
 }

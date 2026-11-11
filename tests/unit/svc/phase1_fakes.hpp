@@ -168,9 +168,11 @@ class ComponentHarness {
  public:
   explicit ComponentHarness(const os::IClock& clock) : clock_(&clock) {}
 
-  // Opens the store with the component's tables and starts the component with `data_dir`.
+  // Opens the store with the component's tables and starts the component with `data_dir` (and
+  // the owner `owner_sid`).
   [[nodiscard]] Result<void> start(IComponent& component,
-                                   const std::filesystem::path& data_dir = shipped_data) {
+                                   const std::filesystem::path& data_dir = shipped_data,
+                                   const std::string& owner_sid = {}) {
     const std::vector<store::MigrationSet> sets = component.migrations();
     Result<std::unique_ptr<store::Store>> opened =
         store::Store::open(dir_.path() / "myclean.db", *clock_, sets);
@@ -178,7 +180,7 @@ class ComponentHarness {
       return tl::unexpected(opened.error());
     }
     store_ = std::move(*opened);
-    return component.start(Context(*store_, methods_, *clock_, data_dir));
+    return component.start(Context(*store_, methods_, *clock_, data_dir, owner_sid));
   }
 
   [[nodiscard]] Result<nlohmann::json> call(

@@ -11,6 +11,7 @@
 
 #include <wil/resource.h>
 
+#include "core/backup/repos.hpp"
 #include "core/clean/probes.hpp"
 #include "core/model/result.hpp"
 
@@ -50,11 +51,13 @@ using IdentitySource = std::function<Result<ProcessIdentity>()>;
 // HEAD, log -1 --format=%ct HEAD, check-ignore -q -- <path>, ls-files -z -- :(literal)<path>;
 // for worktrees rev-parse --path-format=absolute --git-dir --git-common-dir, symbolic-ref -q
 // --short HEAD and refs/remotes/origin/HEAD, rev-parse -q --verify refs/heads/main (master),
-// merge-base --is-ancestor HEAD <base> and status --porcelain.
+// merge-base --is-ancestor HEAD <base> and status --porcelain; for the repository safety check
+// remote, rev-list --count --branches --not --remotes and status --porcelain (local refs only:
+// nothing fetches).
 // git's own safety checks apply: a repository git refuses (such as one owned by another user)
 // fails with io_error, and the engine then proposes nothing from it. So the service runs git as
 // the owner (`identity`); a command whose identity cannot be read fails the same way.
-class GitCli final : public clean::IGit, public clean::IWorktreeGit {
+class GitCli final : public clean::IGit, public clean::IWorktreeGit, public backup::IRepoGit {
  public:
   explicit GitCli(std::filesystem::path git, IdentitySource identity = {},
                   std::chrono::milliseconds timeout = std::chrono::seconds{60});
@@ -67,6 +70,8 @@ class GitCli final : public clean::IGit, public clean::IWorktreeGit {
                                           const std::filesystem::path& entry) const override;
   [[nodiscard]] Result<std::optional<clean::Worktree>> worktree(
       const std::filesystem::path& folder) const override;
+  [[nodiscard]] Result<backup::RepoState> state(
+      const std::filesystem::path& work_tree) const override;
 
  private:
   [[nodiscard]] Result<ProcessOutput> run(const std::filesystem::path& work_tree,

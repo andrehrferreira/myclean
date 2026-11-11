@@ -192,7 +192,8 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
                                              "boot_times",
                                              "propose_disable_startup",
                                              "freeze_elimination",
-                                             "propose_pause"}));
+                                             "propose_pause",
+                                             "check_backups"}));
   // No tool approves, rejects, executes, undoes, restores or deletes anything.
   for (const std::string& name : names) {
     for (const char* verb :
@@ -307,6 +308,18 @@ TEST_F(ServerTest, FreezeEliminationToolsCallTheirMethodsWithASuspectIdOnly) {
   EXPECT_EQ(calls()[1].method, "plans.propose_pause");
   EXPECT_EQ(calls()[1].params, (Json{{"suspect", 2}, {"client", "claude-code"}}));
   EXPECT_EQ(calls()[2].params, (Json{{"suspect", 1}, {"client", "claude-code"}, {"hours", 8}}));
+}
+
+// Backup spec, "Prompt 6 Answerable Through MCP": check_backups only reads backups.check.
+TEST_F(ServerTest, CheckBackupsReadsTheBackupCheck) {
+  static_cast<void>(text(call_tool("check_backups"), false));
+  static_cast<void>(text(call_tool("check_backups", {{"refresh", true}}), false));
+  ASSERT_EQ(calls().size(), 2U);
+  EXPECT_EQ(calls()[0].method, "backups.check");
+  EXPECT_EQ(calls()[0].params, (Json{{"refresh", false}}));
+  EXPECT_EQ(calls()[1].params, (Json{{"refresh", true}}));
+  EXPECT_TRUE(text(call_tool("check_backups", {{"path", "C:\\"}}), true).find("unknown argument") !=
+              std::string::npos);
 }
 
 TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
@@ -465,7 +478,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 30U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 31U);
 }
 
 }  // namespace

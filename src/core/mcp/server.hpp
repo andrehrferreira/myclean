@@ -41,6 +41,7 @@ inline constexpr std::array<std::string_view, 4> protocol_versions{"2025-11-25",
 //                     plans.propose_cleanup, plans.propose_optimization,
 //                     plans.propose_compact, as "mcp:<client>"
 //                     (the clientInfo name of initialize): plans awaiting the owner's approval
+//   check_backups     backups.check (backup sources, last-backup age, unprotected repositories)
 // No tool can change anything: there is no tool that closes, suspends or reprioritizes a
 // process, and none that approves, executes or undoes a plan (the service accepts those only
 // from the tray). A tool whose service call fails returns a tool error (isError) naming what is

@@ -19,6 +19,8 @@
 #include <wil/resource.h>
 #include <windows.h>
 
+#include "core/backup/backup.hpp"
+#include "core/backup/repos.hpp"
 #include "core/events/event_store.hpp"
 #include "core/games/library_roots.hpp"
 #include "core/governing/governor.hpp"
@@ -27,6 +29,7 @@
 #include "core/packs/loader.hpp"
 #include "core/placement/drives.hpp"
 #include "core/telemetry/metrics.hpp"
+#include "platform/backup/win32_backup.hpp"
 #include "platform/clean/win32_probes.hpp"
 #include "platform/cleanup/win32_command_runner.hpp"
 #include "platform/cleanup/win32_handler_host.hpp"
@@ -61,6 +64,7 @@
 #include "platform/trust/win_image_inspector.hpp"
 #include "platform/vhdx/win32_vhdx.hpp"
 #include "svc/alerts_component.hpp"
+#include "svc/backup_component.hpp"
 #include "svc/cleaning_component.hpp"
 #include "svc/component.hpp"
 #include "svc/disk_health_component.hpp"
@@ -336,6 +340,21 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
       svc::ResidentSources{.view = [telemetry = telemetry.get()] { return telemetry->processes(); },
                            .network = network_traffic},
       alerts.get());
+  const std::string drive = system_drive();
+  auto backups = std::make_unique<svc::BackupComponent>(
+      svc::BackupSources{
+          .system = [](std::string_view owner) -> std::unique_ptr<myclean::backup::IBackupSystem> {
+            return std::make_unique<platform::Win32BackupSystem>(std::string(owner));
+          },
+          .reader = std::make_unique<platform::Win32DirectoryReader>(),
+          .drives =
+              std::make_unique<DriveFacts>([disks = disk_health.get()] { return disks->latest(); }),
+          .git = [](std::string_view owner) -> std::unique_ptr<myclean::backup::IRepoGit> {
+            return svc::owner_git(owner);
+          },
+          .system_root = std::filesystem::path((drive.empty() ? std::string("C:") : drive) + "\\"),
+          .files = &files},
+      alerts.get());
 
   std::vector<std::unique_ptr<svc::IComponent>> components;
   components.push_back(std::move(alerts));
@@ -349,6 +368,7 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
   components.push_back(std::move(resident));
   components.push_back(std::move(elimination));
   components.push_back(std::move(cleaning));
+  components.push_back(std::move(backups));
   return components;
 }
 

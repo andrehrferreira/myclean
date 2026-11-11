@@ -1,5 +1,6 @@
 #include "platform/git/git_cli.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <chrono>
@@ -18,6 +19,7 @@
 #include <wil/resource.h>
 #include <windows.h>
 
+#include "core/backup/repos.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
 
@@ -385,6 +387,40 @@ Result<std::optional<clean::Worktree>> GitCli::worktree(const fs::path& folder) 
     }
   }
   return worktree;
+}
+
+Result<backup::RepoState> GitCli::state(const fs::path& work_tree) const {
+  const Result<ProcessOutput> remotes = run(work_tree, {L"remote"});
+  if (!remotes) {
+    return tl::unexpected(remotes.error());
+  }
+  if (remotes->exit_code != 0) {
+    return git_failed(work_tree, "remote", remotes->exit_code);
+  }
+  backup::RepoState state;
+  state.remotes = static_cast<std::size_t>(std::ranges::count(remotes->out, '\n'));
+  // Commits of local branches that no remote-tracking ref holds; 0 in a repository without one.
+  const Result<ProcessOutput> unpushed =
+      run(work_tree, {L"rev-list", L"--count", L"--branches", L"--not", L"--remotes"});
+  if (!unpushed) {
+    return tl::unexpected(unpushed.error());
+  }
+  const std::string_view count =
+      std::string_view(unpushed->out).substr(0, unpushed->out.find_first_of("\r\n"));
+  if (unpushed->exit_code != 0 ||
+      std::from_chars(std::to_address(count.begin()), std::to_address(count.end()), state.unpushed)
+              .ec != std::errc{}) {
+    return git_failed(work_tree, "rev-list", unpushed->exit_code);
+  }
+  const Result<ProcessOutput> status = run(work_tree, {L"status", L"--porcelain"});
+  if (!status) {
+    return tl::unexpected(status.error());
+  }
+  if (status->exit_code != 0) {
+    return git_failed(work_tree, "status", status->exit_code);
+  }
+  state.uncommitted = !status->out.empty();
+  return state;
 }
 
 }  // namespace myclean::platform

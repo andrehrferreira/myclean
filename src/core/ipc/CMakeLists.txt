@@ -3,6 +3,7 @@
 myclean_add_library(ipc
   SOURCES
     alerts.hpp
+    backup.hpp
     disk_health.hpp
     frame.cpp
     frame.hpp

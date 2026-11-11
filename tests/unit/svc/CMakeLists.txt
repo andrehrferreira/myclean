@@ -3,6 +3,7 @@
 myclean_add_test(svc
   SOURCES
     alerts_component_test.cpp
+    backup_component_test.cpp
     cleaning_component_test.cpp
     cleaning_smoke_test.cpp
     disk_health_component_test.cpp
