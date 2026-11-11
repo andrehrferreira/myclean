@@ -44,6 +44,9 @@ inline constexpr std::array<std::string_view, 4> protocol_versions{"2025-11-25",
 //   check_backups     backups.check (backup sources, last-backup age, unprotected repositories)
 //   list_installed_apps, propose_uninstall
 //                     apps.list, plans.propose_uninstall (as "mcp:<client>", awaiting approval)
+//   get_report, compare_snapshots
+//                     reports.get, reports.compare (the monthly reports; "found" false names a
+//                     month without a report or snapshot)
 // No tool can change anything: there is no tool that closes, suspends or reprioritizes a
 // process, and none that approves, executes or undoes a plan (the service accepts those only
 // from the tray). A tool whose service call fails returns a tool error (isError) naming what is

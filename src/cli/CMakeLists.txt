@@ -8,6 +8,8 @@ myclean_add_library(cli
     map_command.hpp
     packs_command.cpp
     packs_command.hpp
+    report_command.cpp
+    report_command.hpp
     scan_all_command.cpp
     scan_all_command.hpp
     security_command.cpp

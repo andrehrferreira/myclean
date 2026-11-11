@@ -23,6 +23,8 @@ myclean_add_library(svc
     input_component.hpp
     owner_session.cpp
     owner_session.hpp
+    report_component.cpp
+    report_component.hpp
     resident_component.cpp
     resident_component.hpp
     security_component.cpp
@@ -62,8 +64,10 @@ myclean_add_library(svc
     myclean::platform_settings
     myclean::platform_startup
     myclean::platform_vhdx
+    myclean::report
     myclean::resident
     myclean::rules
+    myclean::sched
     myclean::security
     myclean::startup
     myclean::store

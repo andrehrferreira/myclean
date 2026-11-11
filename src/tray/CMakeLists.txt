@@ -46,6 +46,7 @@ myclean_add_library(tray
     myclean::platform_proc
     myclean::platform_service
     myclean::platform_settings
+    myclean::report
     myclean::tray_model
     myclean::user_tasks
     imgui::imgui

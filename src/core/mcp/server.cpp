@@ -21,6 +21,7 @@
 #include "core/ipc/input.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/plans.hpp"
+#include "core/ipc/reports.hpp"
 #include "core/ipc/resident.hpp"
 #include "core/ipc/security.hpp"
 #include "core/ipc/telemetry.hpp"
@@ -510,6 +511,28 @@ const Json& tool_list() {
               {{"app_id",
                 {{"type", "integer"}, {"description", "An 'id' from list_installed_apps"}}}},
               Json::array({"app_id"}))),
+      tool("get_report",
+           "The monthly report of one month (prompt 7), which MyClean makes on the 1st at 09:00 "
+           "or at the next start: health from 30-day averages, storage, security, governor, "
+           "freezes, disk health, space freed by automatic cleaning and what changed since the "
+           "previous snapshot (new and removed startup items, browser extensions, services, "
+           "listening ports and unsigned binaries, top-folder growth, disk health per drive, "
+           "free space). Returns the report's Markdown, its diff and the paths of its Markdown "
+           "and HTML files; the first report says it has no previous snapshot to compare. For a "
+           "month without a report 'found' is false and 'available' lists the months that have "
+           "one. Reads only.",
+           object_schema(
+               {{"month",
+                 {{"type", "string"}, {"description", "The month as YYYY-MM, such as 2026-11"}}}},
+               Json::array({"month"}))),
+      tool(
+          "compare_snapshots",
+          "The changes between two monthly snapshots, from month 'a' to month 'b', in the "
+          "categories of the monthly report. When a snapshot does not exist 'found' is false, "
+          "'missing' names it and 'available' lists the months that have one. Reads only.",
+          object_schema({{"a", {{"type", "string"}, {"description", "The earlier month, YYYY-MM"}}},
+                         {"b", {{"type", "string"}, {"description", "The later month, YYYY-MM"}}}},
+                        Json::array({"a", "b"}))),
   });
   return list;
 }
@@ -705,6 +728,14 @@ std::optional<ServiceCall> guard_call(std::string_view tool, const Json& argumen
   if (tool == "propose_uninstall") {
     return ServiceCall{.method = ipc::plans_propose_uninstall_method,
                        .params = Json{{"app", arguments.at("app_id")}, {"client", client}}};
+  }
+  if (tool == "get_report") {
+    return ServiceCall{.method = ipc::reports_get_method,
+                       .params = Json{{"month", arguments.at("month")}}};
+  }
+  if (tool == "compare_snapshots") {
+    return ServiceCall{.method = ipc::reports_compare_method,
+                       .params = Json{{"a", arguments.at("a")}, {"b", arguments.at("b")}}};
   }
   return std::nullopt;
 }

@@ -79,8 +79,7 @@ src/
     policy/     automation levels, approval state machine
     governor/   classification, ladder state machine (snapshot in → commands out)
     sched/      cron parser, catch-up logic
-    diff/       snapshot diff
-    report/     Markdown/HTML rendering
+    report/     monthly snapshot, its diff, Markdown/HTML rendering, snapshot/report tables
   platform/     Win32 adapters implementing core interfaces
     proc/       NtQuerySystemInformation, tokens, signatures (WinVerifyTrust)
     etw/        krabsetw sessions: Kernel-Process, Kernel-Network
@@ -300,7 +299,8 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   (`src/core/ipc`). Methods are typed and registered by the service
   components; the exact JSON of each is documented in the contract headers
   of `src/core/ipc/` (`status.hpp`, `telemetry.hpp`, `disk_health.hpp`,
-  `alerts.hpp`, `input.hpp`, `plans.hpp`, `governor.hpp`, `resident.hpp`, `security.hpp`).
+  `alerts.hpp`, `input.hpp`, `plans.hpp`, `governor.hpp`, `resident.hpp`, `security.hpp`,
+  `reports.hpp`).
   Phase 1, the governor and the resident processes:
 
   | Method | Parameters | Component |
@@ -336,6 +336,9 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   | `security.network` | hours | security |
   | `security.defender_scan` | item | security |
   | `security.windows` (tray only) | windows (record) | security |
+  | `reports.list` | none | report |
+  | `reports.get` | month | report |
+  | `reports.compare` | a, b | report |
 
   Tray-only methods are checked via the client process image and session. Later phases add
   `scan.run` and so on (the cleaning methods are in `plans.hpp`).
@@ -364,7 +367,8 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   `list_alerts`, `freeze_summary`, `freeze_elimination`, the storage tools, `dev_drive_advice`, `list_vhdx`, `list_plans`,
   `get_plan`, `list_startup`, `boot_times`, `background_costs`,
   `memory_trend`, `find_indexed_build_folders` and the intruder scan's `scan_suspicious`,
-  `list_browser_extensions` and `list_network_processes`. Proposal tools (`propose_cleanup`,
+  `list_browser_extensions` and `list_network_processes`, and the monthly report's `get_report` and
+  `compare_snapshots`. Proposal tools (`propose_cleanup`,
   `propose_optimization`, `propose_disable_startup`, `propose_index_exclusion`,
   `propose_compact_vhdx`, `propose_pause`, `propose_uninstall`) create plans in the `awaiting_approval` state, which
   triggers a tray notification. They name what they propose only by the
@@ -443,6 +447,38 @@ Nothing here closes, removes or disables anything: a persistence point that is a
 names it (`startup_item`), and disabling it is a `plans.propose_startup` plan that waits for the
 owner's approval in the tray.
 
+
+**Monthly report (RP1–RP2, `core/report`, `svc::ReportComponent`):** job `monthly-report` (`0 9 1 * *`)
+on MyClean's own scheduler (`core/sched`; no OS schedule): the 1st at 09:00 local time, one
+catch-up run at the next start when MyClean was off, and one more run at the next start when a run
+of this month stopped before its snapshot was stored. A month with a snapshot never runs again, so
+each month gets one report at most. The component is registered last and starts its first poll 5
+minutes after the start (every method is registered and disk health has its first reading). The
+snapshot is read through the service's own read methods, called in-process on the dispatcher:
+`startup.list` (startup items, and its auto-start services), `security.extensions`,
+`security.network` (listening ports with their process, windowless talkers), `security.scan`,
+`processes.top` (unsigned or invalid images among processes, persistence targets and network
+talkers), `space.top` of the system volume, `space.old_downloads`, `space.duplicates` (photos) and
+`space.used_installers` (started with refresh, then asked again until ready), `disks.health`,
+`volumes.list` and `metrics.query` (30 daily means of `volume.free`; `cpu.utility` and
+`memory.available` merged over 30 days) and `resident.costs` (30-day CPU and RAM per program: the
+health part never uses one sample); governor interventions (`apply_step` and `kill` rows of
+`governor_event`, observe-mode decisions counted apart), freeze incidents (`input_incident`) and the
+bytes the automatic cleaning freed (`apply` entries of actor `scheduler` in `action_log`) count from
+the previous snapshot (or 30 days). A category that cannot be read is stored as "not collected" with
+the reason. The diff against the newest earlier snapshot lists added and removed items by key, the
+growth of the top folders, each drive's status and counters, the free-space change and the counts;
+the first report says it has nothing to compare and lists the baseline, a report after a gap names
+the month it compares with. Markdown and HTML are rendered from the same blocks into
+`%ProgramData%\MyClean\reports\YYYY-MM\report.md` and `report.html`; the HTML has inline style, an
+inline SVG chart and a Content-Security-Policy of `default-src 'none'`, so it loads nothing. The
+snapshot and the report are stored in tables `snapshot` and `report` (permanent), then the reading
+`report.ready` (entity: the month) goes to the alert engine; a click on its toast makes the tray open
+the HTML it builds from the month under `%ProgramData%`. The job calls no plan, proposal or scan
+method that acts, writes nothing to `action_log` and sends nothing off the machine. `reports.get`
+and `reports.compare` (MCP `get_report`, `compare_snapshots`; `myclean report get|compare`) answer
+`"found": false` with the months that exist for a missing month or snapshot; `reports.list` lists
+the stored reports with their files, newest first.
 ## 9. Security
 
 - The service is the elevation boundary: the pipe DACL allows only SYSTEM and

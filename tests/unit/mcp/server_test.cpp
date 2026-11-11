@@ -75,6 +75,12 @@ class ServerTest : public ::testing::Test {
            Json::array({{{"pid", 100}, {"image", "a.exe"}, {"trust", nullptr}},
                         {{"pid", 200}, {"image", "b.exe"}, {"trust", unrecognized_trust()}}})}};
     }
+    if (method == "reports.get" && params.value("month", "") == "2026-05") {
+      return Json{{"found", false},
+                  {"month", "2026-05"},
+                  {"message", "no report exists for 2026-05"},
+                  {"available", Json::array({"2026-11"})}};
+    }
     return Json{{"method", method}};
   }
 
@@ -198,7 +204,9 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
                                              "propose_pause",
                                              "check_backups",
                                              "list_installed_apps",
-                                             "propose_uninstall"}));
+                                             "propose_uninstall",
+                                             "get_report",
+                                             "compare_snapshots"}));
   // No tool approves, rejects, executes, undoes, restores or deletes anything.
   for (const std::string& name : names) {
     for (const char* verb :
@@ -377,6 +385,27 @@ TEST_F(ServerTest, InstalledAppToolsListAndProposeByIdOnly) {
             std::string::npos);
 }
 
+// Reports spec, "Report MCP Tools": get_report and compare_snapshots only read reports.get and
+// reports.compare, and a missing month comes back as a plain "not found" answer, not an error.
+TEST_F(ServerTest, ReportToolsReadTheStoredReportsAndSayWhenAMonthIsMissing) {
+  static_cast<void>(text(call_tool("get_report", {{"month", "2026-11"}}), false));
+  static_cast<void>(
+      text(call_tool("compare_snapshots", {{"a", "2026-11"}, {"b", "2027-01"}}), false));
+  ASSERT_EQ(calls().size(), 2U);
+  EXPECT_EQ(calls()[0].method, "reports.get");
+  EXPECT_EQ(calls()[0].params, (Json{{"month", "2026-11"}}));
+  EXPECT_EQ(calls()[1].method, "reports.compare");
+  EXPECT_EQ(calls()[1].params, (Json{{"a", "2026-11"}, {"b", "2027-01"}}));
+
+  const Json missing = Json::parse(text(call_tool("get_report", {{"month", "2026-05"}}), false));
+  EXPECT_EQ(missing.at("found"), false);
+  EXPECT_EQ(missing.at("message"), "no report exists for 2026-05");
+  EXPECT_NE(text(call_tool("get_report"), true).find("missing required argument 'month'"),
+            std::string::npos);
+  EXPECT_NE(text(call_tool("compare_snapshots", {{"a", 202611}, {"b", "2027-01"}}), true)
+                .find("must be of type string"),
+            std::string::npos);
+}
 TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
   static_cast<void>(send(Json{{"jsonrpc", "2.0"},
                               {"id", 1},
@@ -533,7 +562,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 36U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 38U);
 }
 
 }  // namespace

@@ -4,6 +4,7 @@
 #include <bit>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -15,6 +16,7 @@
 #include <vector>
 
 #include <dwmapi.h>
+#include <shellapi.h>
 #include <spdlog/spdlog.h>
 #include <wil/resource.h>
 #include <windows.h>
@@ -23,6 +25,7 @@
 #include "core/games/fullscreen.hpp"
 #include "core/model/result.hpp"
 #include "core/os/clock.hpp"
+#include "core/report/month.hpp"
 #include "core/tray_model/governor.hpp"
 #include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/poller.hpp"
@@ -31,6 +34,7 @@
 #include "core/user_tasks/task.hpp"
 #include "platform/games/win32_games.hpp"
 #include "platform/input/input_watchdog.hpp"
+#include "platform/service/system.hpp"
 #include "tray/dashboard_ui.hpp"
 #include "tray/dashboard_window.hpp"
 #include "tray/icon.hpp"
@@ -52,6 +56,38 @@ constexpr UINT command_open = 1;
 constexpr UINT command_quit = 2;
 // Each pipe call; also bounds how long quitting waits for the poll thread.
 constexpr std::chrono::milliseconds call_timeout{2000};
+// The alert of a finished monthly report; its entity is the month ("2026-11").
+constexpr std::string_view report_rule = "report.ready";
+
+// Opens the HTML report of `month` in the owner's browser. The path is built here, under
+// %ProgramData%\MyClean\reports, from a month that parses as YYYY-MM; nothing else of the alert
+// reaches the shell.
+void open_report(std::string_view month) {
+  const std::optional<std::chrono::year_month> parsed = report::parse_month(month);
+  const Result<std::filesystem::path> program_data = platform::program_data_dir();
+  if (!parsed || !program_data) {
+    spdlog::warn("report toast: no report file for '{}'", month);
+    return;
+  }
+  const std::filesystem::path file =
+      report::html_file(*program_data / L"MyClean" / L"reports", *parsed);
+  const HRESULT com = ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+  const auto uninitialize = wil::scope_exit([com] {
+    if (SUCCEEDED(com)) {
+      ::CoUninitialize();
+    }
+  });
+  SHELLEXECUTEINFOW info{};
+  info.cbSize = sizeof(info);
+  info.fMask = SEE_MASK_FLAG_NO_UI;
+  info.lpVerb = L"open";
+  info.lpFile = file.c_str();
+  info.nShow = SW_SHOWNORMAL;
+  if (::ShellExecuteExW(&info) == FALSE) {
+    spdlog::warn("report toast: cannot open the report of {} (Windows error {})", month,
+                 ::GetLastError());
+  }
+}
 
 // The owner's session as governor.user_state takes it: SHQueryUserNotificationState and the
 // process of the foreground window. Read on the poll thread; neither call shows anything.
@@ -139,6 +175,8 @@ class App {
   bool quit_ = false;
   // The section a click on the latest toast opens: the governor's after a governor toast.
   std::optional<Section> toast_section_;
+  // The month whose report a click on the latest toast opens, after a report.ready toast.
+  std::optional<std::string> toast_report_;
   // Filled by the watchdog, emptied by the poll thread: declared before both, so it goes last.
   tray_model::IncidentQueue incidents_;
   std::unique_ptr<platform::InputWatchdog> watchdog_;
@@ -250,6 +288,10 @@ LRESULT App::handle(UINT message, WPARAM wparam, LPARAM lparam) {
         open_dashboard();
         break;
       case NIN_BALLOONUSERCLICK:
+        if (toast_report_) {
+          open_report(*toast_report_);
+          break;
+        }
         open_dashboard();
         if (dashboard_ && toast_section_) {
           dashboard_->show(*toast_section_);
@@ -335,6 +377,7 @@ void App::show_toasts() {
       spdlog::warn("toast: {}", shown.error().message);
     } else {
       toast_section_.reset();
+      toast_report_ = alert.rule == report_rule ? std::optional(alert.entity) : std::nullopt;
     }
   }
 }
@@ -354,6 +397,7 @@ void App::show_governor_toasts() {
       spdlog::warn("governor toast: {}", shown.error().message);
     } else {
       toast_section_ = Section::governor;
+      toast_report_.reset();
     }
   }
 }

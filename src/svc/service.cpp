@@ -75,7 +75,8 @@ Service::~Service() {
 }
 
 Result<void> Service::start_components(std::vector<std::unique_ptr<IComponent>> components) {
-  const Context context(*store_, methods_, *clock_, options_.data_dir, options_.owner_sid);
+  const Context context(*store_, methods_, *clock_, options_.data_dir, options_.owner_sid,
+                        options_.database.parent_path());
   for (std::unique_ptr<IComponent>& component : components) {
     if (Result<void> started = component->start(context); !started) {
       return fail(started.error().code, "component " + std::string(component->name()) +

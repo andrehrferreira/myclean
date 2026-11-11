@@ -14,6 +14,7 @@ myclean_add_library(ipc
     json_rpc.hpp
     plans.cpp
     plans.hpp
+    reports.hpp
     resident.hpp
     security.hpp
     status.cpp

@@ -118,6 +118,9 @@ src/core/user_tasks/    the user-scope plans the tray runs under the owner's tok
                         commands, user-profile cleanup handlers, relocations; their reports
 src/core/security/      the intruder scan: persistence points, browser extensions and their origin,
                         network talkers over time, reverse DNS, Defender and VirusTotal verdicts
+src/core/report/        the monthly report: snapshot through the service's read methods and the
+                        history, diff against the previous snapshot, Markdown and HTML rendering,
+                        the snapshot and report tables
 src/platform/<module>/  Win32 implementations of src/core interfaces (proc, perf, disk,
                         disk_health, etw, trust, input, ipc, fs, service, scan, clean, git,
                         cleanup, settings, ntfs, compress, defrag, packs, jobs, games, image,
@@ -125,7 +128,8 @@ src/platform/<module>/  Win32 implementations of src/core interfaces (proc, perf
 src/svc/                myclean-svc: host, Service and its components (see below)
 src/tray/               myclean-tray: tray icon, toasts, dashboard (approval inbox, Space),
                         input watchdog, the worker that runs user tasks
-src/cli/                myclean: read-only CLI, `map`, `scan-all`, `packs`, `security` and `myclean mcp`
+src/cli/                myclean: read-only CLI, `map`, `scan-all`, `packs`, `security`, `report` and
+                        `myclean mcp`
 tests/fakes/            in-memory fakes of the src/core/os interfaces (myclean::fakes)
 tests/unit/<module>/    GoogleTest suite of one module
 tests/acceptance/       the seven-prompt acceptance suite over one fixture machine (acceptance.md)
@@ -287,6 +291,7 @@ started in this order (stopped in reverse), so that each starts after those it u
 | `elimination` | guided freeze elimination (`core/elimination`): the pauses the cleaning executor starts for approved `PauseSuspect` plans, ticked every 5 s (period end, the spans of a guided pause), suspend pauses resumed as recorded at the start after a crash and at the stop; suspends only processes `governing::Governor::protects` leaves alone | `input.pauses`, `input.end_pause` |
 | `cleaning` | rule scans (the clean cases of the knowledge packs that apply, reloaded at every scan) and plans by tier; runs approved service-scope plans and, after every scan, its auto-tier plan; auto run hourly (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge (runs past 7 days, and at once every run on a volume under 10 % free) on the in-app scheduler; user tasks for the tray; space analyses, including the build-output and cache folders Windows Search indexes (`space.indexed_folders`, with `plans.propose_index_exclusion`); the startup items, their impact and the boot and logon times; the installed apps with their last use and verdict (`apps.list`) and their uninstall plans (`plans.propose_uninstall`, run by the tray) | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*`, `startup.*`, `apps.*` |
 | `backup` | the backup check (`core/backup`) at its start, once a day and on request: every Windows backup source (File History, system images, restore points, shadow copies, OneDrive folder backup), installed backup tools, the artifacts on the drives labelled as backup drives, the last-backup age (to `alerts`, rule `backup.age`), the recommendation when no backup exists and the git repositories of `data/workspaces.toml` with no remote, unpushed or uncommitted work (git as the owner, local refs only). Reads only: it sets nothing up | `backups.check` |
+| `report` | last: the monthly report (`core/report`) on its own in-app scheduler job `monthly-report` (the 1st at 09:00, catch-up at the next start, one report per month); the snapshot through the other components' read methods called in-process, the diff against the newest earlier snapshot, `report.md` and a self-contained `report.html` in `<state>\reports\YYYY-MM`, tables `snapshot` and `report`, the reading `report.ready` to `alerts` (its toast opens the HTML in the tray). Reads only | `reports.list`, `reports.get`, `reports.compare` |
 
 The contracts of the cleaning methods are in `src/core/ipc/plans.hpp`, the governor's in
 `src/core/ipc/governor.hpp` (`governor.choose`, `.pause`, `.game_mode` and `.user_state` are

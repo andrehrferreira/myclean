@@ -131,3 +131,13 @@ metric = "backup.age_days"
 severity = "warning"
 above = 7
 unit = "days"
+
+# A monthly report is ready (reports spec, "Toast With Open Report"; svc::ReportComponent): the
+# entity is the month ("2026-11"); clicking the toast opens its HTML report. One reading per month,
+# so each report raises one toast.
+[[rule]]
+id = "report.ready"
+title = "Your monthly MyClean report is ready"
+metric = "report.ready"
+severity = "info"
+above = 0.5

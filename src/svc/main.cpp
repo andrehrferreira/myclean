@@ -76,6 +76,7 @@
 #include "svc/host.hpp"
 #include "svc/input_component.hpp"
 #include "svc/owner_session.hpp"
+#include "svc/report_component.hpp"
 #include "svc/resident_component.hpp"
 #include "svc/security_component.hpp"
 #include "svc/startup_component.hpp"
@@ -394,6 +395,8 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
           .system_root = std::filesystem::path((drive.empty() ? std::string("C:") : drive) + "\\"),
           .files = &files},
       alerts.get());
+  // Last: the monthly report calls the read methods of every component before it.
+  auto reports = std::make_unique<svc::ReportComponent>(svc::ReportSources{}, alerts.get());
 
   std::vector<std::unique_ptr<svc::IComponent>> components;
   components.push_back(std::move(alerts));
@@ -409,6 +412,7 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
   components.push_back(std::move(elimination));
   components.push_back(std::move(cleaning));
   components.push_back(std::move(backups));
+  components.push_back(std::move(reports));
   return components;
 }
 

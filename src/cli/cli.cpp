@@ -23,6 +23,7 @@
 
 #include "cli/map_command.hpp"
 #include "cli/packs_command.hpp"
+#include "cli/report_command.hpp"
 #include "cli/scan_all_command.hpp"
 #include "cli/security_command.hpp"
 #include "cli/text.hpp"
@@ -346,6 +347,8 @@ std::string_view usage() {
          "                              origin, processes that used the network\n"
          "  security defender-scan <id> Microsoft Defender scans the file of scan item <id>;\n"
          "                              it reports only and removes nothing\n"
+         "  report get <YYYY-MM>        the monthly report of that month and its files\n"
+         "  report compare <a> <b>      what changed from the snapshot of month <a> to <b>\n"
          "  mcp                         MCP server on stdin/stdout with read-only tools\n"
          "--json writes one JSON document to stdout; --pipe <name> talks to \\\\.\\pipe\\<name>\n"
          "instead of the service's pipe. Nothing here changes the system.\n";
@@ -408,6 +411,10 @@ int run(std::span<const std::string> args, std::istream& in, std::ostream& out, 
     return security_command(std::span<const std::string>(line->words).subspan(1),
                             find_option(*line, "hours"), line->json,
                             pipe_caller(std::move(pipe), timeout), out, err);
+  }
+  if (line->words.front() == "report" && line->words.size() >= 2) {
+    return report_command(std::span<const std::string>(line->words).subspan(1), line->json,
+                          pipe_caller(std::move(pipe), timeout), out, err);
   }
   return dispatch(*line, pipe_caller(std::move(pipe), timeout), clock, in, out, err);
 }
