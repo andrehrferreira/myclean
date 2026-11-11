@@ -29,6 +29,7 @@
 #include "core/tray_model/cleaning.hpp"
 #include "core/tray_model/governor.hpp"
 #include "core/tray_model/replies.hpp"
+#include "core/tray_model/screens.hpp"
 #include "core/tray_model/snapshot.hpp"
 
 namespace myclean::tray_model {
@@ -113,6 +114,7 @@ PollResult Poller::poll(WallTime now, bool dashboard_open, const std::vector<Req
     handle(request, result);
     refresh_plans = handle_cleanup(request, result) || refresh_plans;
     handle_governor(request, result);
+    refresh_plans = handle_screens(request, result) || refresh_plans;
   }
   fetch_rest(now, dashboard_open, result);
   fetch_governor(result);
@@ -138,6 +140,7 @@ void Poller::select(bool dashboard_open, const std::vector<Request>& requests) {
     // A dashboard opened later starts with every plan closed and no Space list loaded.
     open_plans_.clear();
     analysing_.clear();
+    screens_.clear();
   }
   dashboard_open_ = dashboard_open;
   // A range takes effect even while the service is down.
@@ -324,11 +327,28 @@ void Poller::report_windows(WallTime now) {
   }
 }
 
+bool Poller::handle_screens(const Request& request, PollResult& result) {
+  if (const auto* load = std::get_if<LoadScreen>(&request)) {
+    screens_.load(*link_, *load, result.screens);
+  } else if (const auto* action = std::get_if<ScreenAction>(&request)) {
+    send_action(*link_, *action, result.screens);
+    return true;
+  }
+  return false;
+}
+
 void Poller::ask_again(bool dashboard_open, const std::vector<Request>& requests,
                        PollResult& result) {
   if (!dashboard_open) {
     return;
   }
+  std::vector<LoadScreen> loading;
+  for (const Request& request : requests) {
+    if (const auto* load = std::get_if<LoadScreen>(&request)) {
+      loading.push_back(*load);
+    }
+  }
+  screens_.ask_again(*link_, loading, result.screens);
   for (const LoadSpace& load : std::exchange(analysing_, {})) {
     const bool asked = std::ranges::any_of(requests, [&](const Request& request) {
       const auto* other = std::get_if<LoadSpace>(&request);

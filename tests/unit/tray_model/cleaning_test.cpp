@@ -267,7 +267,7 @@ TEST(CleaningRepliesTest, QuarantineRunsWithPurgeDates) {
 }
 
 TEST(CleaningRepliesTest, AProtectedFileSaysWhoFreesIt) {
-  EXPECT_EQ(protected_text("page_file"), "Windows' page or hibernation file: see System space");
+  EXPECT_EQ(protected_text("page_file"), "Windows' page or hibernation file: see Placement");
   EXPECT_EQ(protected_text("system_volume_information"),
             "restore points and shadow copies: Windows manages them");
   EXPECT_EQ(protected_text("user_known_folder"),

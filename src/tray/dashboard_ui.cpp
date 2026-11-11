@@ -28,6 +28,7 @@
 #include "core/tray_model/tray_state.hpp"
 #include "tray/governor_ui.hpp"
 #include "tray/inbox_ui.hpp"
+#include "tray/screens_ui.hpp"
 #include "tray/ui_text.hpp"
 
 namespace myclean::tray {
@@ -1167,7 +1168,7 @@ void draw_dashboard(const DashboardModel& model, const std::chrono::time_zone& z
   draw_header(model, zone);
 
   // A navigation column on the left, the chosen section on the right.
-  static constexpr std::array<std::pair<Section, const char*>, 9> sections = {{
+  static constexpr std::array<std::pair<Section, const char*>, 18> sections = {{
       {Section::cpu_memory, "CPU and memory"},
       {Section::disks, "Disks"},
       {Section::volumes, "Volumes"},
@@ -1177,6 +1178,15 @@ void draw_dashboard(const DashboardModel& model, const std::chrono::time_zone& z
       {Section::cleanup, "Cleanup"},
       {Section::space, "Space"},
       {Section::governor, "Governor"},
+      {Section::placement, "Placement"},
+      {Section::optimize, "Optimize"},
+      {Section::startup, "Startup"},
+      {Section::apps, "Apps"},
+      {Section::security, "Security"},
+      {Section::backups, "Backups"},
+      {Section::audit, "Audit"},
+      {Section::settings, "Settings"},
+      {Section::reports, "Reports"},
   }};
   ImGui::BeginChild("navigation", ImVec2(ImGui::GetFontSize() * 10.0F, 0.0F),
                     ImGuiChildFlags_Borders);
@@ -1229,6 +1239,33 @@ void draw_dashboard(const DashboardModel& model, const std::chrono::time_zone& z
       break;
     case Section::governor:
       draw_governor(model, zone, state);
+      break;
+    case Section::placement:
+      draw_placement(model, zone, state);
+      break;
+    case Section::optimize:
+      draw_optimize(model, zone, state);
+      break;
+    case Section::startup:
+      draw_startup(model, zone, state);
+      break;
+    case Section::apps:
+      draw_apps(model, zone, state);
+      break;
+    case Section::security:
+      draw_security(model, zone, state);
+      break;
+    case Section::backups:
+      draw_backups(model, zone, state);
+      break;
+    case Section::audit:
+      draw_audit(model, zone, state);
+      break;
+    case Section::settings:
+      draw_settings(model, zone, state);
+      break;
+    case Section::reports:
+      draw_reports(model, zone, state);
       break;
   }
   ImGui::EndChild();

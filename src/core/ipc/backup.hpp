@@ -22,7 +22,8 @@ namespace myclean::ipc {
 //  "last_backup": null | {"source", "name", "location": string|null, "newest", "age_days"},
 //  "backup_exists": bool, "summary": string,
 //  "recommendation": null | {"text", "drives": [string], "left_out": [{"drive", "reason"}]},
-//  "repositories": null | {"checked": int, "unprotected": [{"path", "no_remote": bool,
+//  "repositories": null | {"roots": [string] (the workspace roots of data/workspaces.toml it
+//                  walked), "checked": int, "unprotected": [{"path", "no_remote": bool,
 //                  "unpushed": int, "uncommitted": bool, "text"}], "problems": [string],
 //                  "truncated": bool}}
 // Before the first check ends the report members are absent. "status" could_not_check means the

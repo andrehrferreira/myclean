@@ -20,6 +20,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/actions/audit_log.hpp"
 #include "core/actions/item_action.hpp"
 #include "core/actions/policy.hpp"
 #include "core/actions/quarantine.hpp"
@@ -32,6 +33,7 @@
 #include "core/elimination/pause_action.hpp"
 #include "core/indexer/folders.hpp"
 #include "core/ipc/apps.hpp"
+#include "core/ipc/audit.hpp"
 #include "core/ipc/frame.hpp"
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/plans.hpp"
@@ -123,6 +125,84 @@ Result<Json> state_answer(const Result<PlanState>& state) {
     return tl::unexpected(state.error());
   }
   return Json{{"state", to_string(*state)}};
+}
+
+// The system_space.status answer.
+Result<Json> system_space_answer(const Result<std::vector<SystemSetting>>& settings) {
+  if (!settings) {
+    return tl::unexpected(settings.error());
+  }
+  Json listed = Json::array();
+  for (const SystemSetting& setting : *settings) {
+    Json entry{{"kind", setting.kind},
+               {"current", nullptr},
+               {"cost", nullptr},
+               {"recommended", nullptr},
+               {"restart_required", false},
+               {"error", setting.error.empty() ? Json(nullptr) : Json(setting.error)}};
+    if (const std::optional<placement::SettingSummary>& summary = setting.summary) {
+      entry["current"] = summary->current;
+      entry["cost"] = summary->cost.count();
+      entry["restart_required"] = summary->restart_required;
+      if (setting.recommended) {
+        entry["recommended"] = summary->proposed;
+      }
+    }
+    listed.push_back(std::move(entry));
+  }
+  return Json{{"settings", std::move(listed)}};
+}
+
+// One page of the audit log (audit.list), newest first.
+Result<Json> audit_page(store::Store& store, const Json& params) {
+  const std::int64_t limit = params.value("limit", std::int64_t{ipc::audit_default_limit});
+  if (limit < 1 || limit > ipc::audit_max_limit) {
+    return fail(Errc::invalid_argument,
+                "limit must be 1 to " + std::to_string(ipc::audit_max_limit));
+  }
+  const std::optional<std::int64_t> before =
+      params.contains("before") ? std::optional(params.at("before").get<std::int64_t>())
+                                : std::nullopt;
+  std::vector<actions::LogRow> rows;
+  // One entry more than the page tells whether an older page follows.
+  if (Result<void> read = store.read([&](store::Database& db) -> Result<void> {
+        Result<std::vector<actions::LogRow>> page =
+            actions::log_page(db, before, static_cast<std::size_t>(limit) + 1);
+        if (!page) {
+          return tl::unexpected(page.error());
+        }
+        rows = *std::move(page);
+        return {};
+      });
+      !read) {
+    return tl::unexpected(read.error());
+  }
+  Json next = nullptr;
+  if (rows.size() > static_cast<std::size_t>(limit)) {
+    rows.pop_back();
+    next = rows.back().id;
+  }
+  const auto state = [](const std::optional<PlanState>& value) {
+    return value ? Json(to_string(*value)) : Json(nullptr);
+  };
+  Json entries = Json::array();
+  for (const actions::LogRow& row : rows) {
+    const actions::LogEntry& entry = row.entry;
+    entries.push_back(
+        Json{{"id", row.id},
+             {"time", store::to_unix_seconds(entry.time)},
+             {"plan", entry.plan.value() == 0 ? Json(nullptr) : Json(entry.plan.value())},
+             {"item", entry.item ? Json(entry.item->value()) : Json(nullptr)},
+             {"actor", entry.actor},
+             {"event", entry.event},
+             {"from", state(entry.from)},
+             {"to", state(entry.to)},
+             {"outcome", entry.outcome},
+             {"reason", entry.reason},
+             {"detail", entry.detail},
+             {"metrics", entry.metrics}});
+  }
+  return Json{{"entries", std::move(entries)}, {"next", std::move(next)}};
 }
 
 // The candidates of an analysis and the ids written back into its JSON entries.
@@ -1711,6 +1791,11 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
                         }
                         return list_plans(store, state);
                       }));
+  added.push_back(add(
+      ipc::audit_list_method,
+      {Param{.name = "before", .type = ParamType::integer},
+       Param{.name = "limit", .type = ParamType::integer}},
+      [&store](const Json& params) { return audit_page(store, params); }, Access::tray));
   added.push_back(add(ipc::plans_get_method, {id}, [&store](const Json& params) {
     return get_plan(store, plan_param(params));
   }));
@@ -1753,6 +1838,10 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
                              [this](const Json& params, const ipc::Caller& caller) {
                                return propose_optimization(params, proposer_of(params, caller));
                              }));
+  added.push_back(add(ipc::system_space_status_method, {}, [this](const Json& /*params*/) {
+    return on_executor(
+        [](Executor& executor) { return system_space_answer(executor.system_space()); });
+  }));
   added.push_back(
       add(ipc::startup_list_method, {}, [this](const Json& /*params*/) { return startup_list(); }));
   added.push_back(add(ipc::apps_list_method,

@@ -15,6 +15,7 @@
 #include <implot.h>
 
 #include "../tray_model/inbox_fixtures.hpp"
+#include "../tray_model/screens_fixtures.hpp"
 #include "../tray_model/tray_model_test_support.hpp"
 #include "core/model/result.hpp"
 #include "core/model/series.hpp"
@@ -156,13 +157,17 @@ tray_model::DashboardModel full_model() {
                                2, start - 10, 400, "other.exe", "ecoqos")})))
                       .value();
   open.governor_action = "The choice failed: the tree is gone";
+  open.screens = tray_model::testing::screens_poll();
   model.apply(std::move(open));
   return model;
 }
 
-constexpr std::array<Section, 9> all_sections = {
-    Section::cpu_memory, Section::disks,   Section::volumes, Section::processes, Section::alerts,
-    Section::freezes,    Section::cleanup, Section::space,   Section::governor};
+constexpr std::array<Section, 18> all_sections = {
+    Section::cpu_memory, Section::disks,     Section::volumes,  Section::processes,
+    Section::alerts,     Section::freezes,   Section::cleanup,  Section::space,
+    Section::governor,   Section::placement, Section::optimize, Section::startup,
+    Section::apps,       Section::security,  Section::backups,  Section::audit,
+    Section::settings,   Section::reports};
 
 TEST(DashboardUiTest, DrawsEverySectionWithLiveData) {
   const HeadlessUi ui;
@@ -378,6 +383,41 @@ TEST(DashboardUiTest, DrawsTheGovernorInEveryStateAndSendsNothingUnasked) {
   UiState quiet_state{.section = Section::governor};
   EXPECT_GT(render(observing, quiet_state), 0);
   EXPECT_TRUE(quiet_state.requests.empty());
+}
+
+// UI-3: each screen asks for its answers once when it is first shown, never while the service is
+// down, and proposes nothing unasked.
+TEST(DashboardUiTest, DrawsTheScreensAndLoadsEachOnceWhenShown) {
+  const HeadlessUi ui;
+  apply_style(1.0F);
+  const tray_model::DashboardModel model = full_model();
+  for (const auto& [section, screen] :
+       {std::pair{Section::placement, tray_model::Screen::placement},
+        std::pair{Section::optimize, tray_model::Screen::optimize},
+        std::pair{Section::startup, tray_model::Screen::startup},
+        std::pair{Section::apps, tray_model::Screen::apps},
+        std::pair{Section::security, tray_model::Screen::security},
+        std::pair{Section::backups, tray_model::Screen::backups},
+        std::pair{Section::audit, tray_model::Screen::audit},
+        std::pair{Section::settings, tray_model::Screen::settings},
+        std::pair{Section::reports, tray_model::Screen::reports}}) {
+    UiState state{.section = section};
+    EXPECT_GT(render(model, state), 0);
+    EXPECT_GT(render(model, state), 0);
+    ASSERT_EQ(state.requests.size(), 1U) << static_cast<int>(section);
+    const auto* load = std::get_if<tray_model::LoadScreen>(state.requests.data());
+    ASSERT_NE(load, nullptr);
+    EXPECT_EQ(load->screen, screen);
+    EXPECT_FALSE(load->refresh);
+  }
+  const tray_model::DashboardModel down;
+  for (const Section section :
+       {Section::placement, Section::optimize, Section::startup, Section::apps, Section::security,
+        Section::backups, Section::audit, Section::settings, Section::reports}) {
+    UiState state{.section = section};
+    EXPECT_GT(render(down, state), 0);
+    EXPECT_TRUE(state.requests.empty());
+  }
 }
 
 TEST(DashboardUiTest, StyleScalesWithTheMonitorDpi) {

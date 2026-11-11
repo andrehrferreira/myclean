@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -44,6 +45,17 @@ struct LogEntry {
 [[nodiscard]] Result<std::int64_t> append_log(store::Database& db, const LogEntry& entry);
 // The entries of `plan`, oldest first.
 [[nodiscard]] Result<std::vector<LogEntry>> plan_log(store::Database& db, PlanId plan);
+
+// One action_log row with its id.
+struct LogRow {
+  std::int64_t id = 0;
+  LogEntry entry;
+};
+// The newest `limit` entries whose id is below `before` (from the newest when nullopt), newest
+// first: one page of the audit log.
+[[nodiscard]] Result<std::vector<LogRow>> log_page(store::Database& db,
+                                                   std::optional<std::int64_t> before,
+                                                   std::size_t limit);
 
 // The newest "verify" entry of `plan`; nullopt when it has none.
 [[nodiscard]] Result<std::optional<LogEntry>> last_verification(store::Database& db, PlanId plan);

@@ -1147,6 +1147,73 @@ TEST_F(CleaningServiceTest, SystemSettingsChangeOnlyAfterTheOwnerApproves) {
             "invalid_state");  // already reduced
 }
 
+// PLC-2: hibernation, the page file and the restore-point storage of C: with their cost and the
+// change a proposal would make; reading them changes nothing.
+TEST_F(CleaningServiceTest, SystemSpaceStatusShowsEachSettingWithItsCostAndRecommendation) {
+  system().hibernation_state = {.mode = placement::HibernationMode::full,
+                                .file = L"C:\\hiberfil.sys",
+                                .file_size = 50_GiB,
+                                .memory = 64_GiB};
+  system().page_file_state = {.config = {.automatic = true, .files = {}},
+                              .in_use = {{.path = L"C:\\pagefile.sys", .allocated = 16_GiB}}};
+  start();
+  work();
+  const Json first = call("system_space.status").at("settings");
+  ASSERT_EQ(first.size(), 3U);
+  EXPECT_EQ(first[0].at("kind"), "hibernation");
+  EXPECT_EQ(first[0].at("cost"), (50_GiB).count());
+  EXPECT_TRUE(first[0].at("recommended").get<std::string>().starts_with("reduced"));
+  EXPECT_TRUE(first[0].at("error").is_null());
+  EXPECT_EQ(first[1].at("kind"), "page_file");
+  EXPECT_EQ(first[1].at("cost"), (16_GiB).count());
+  EXPECT_TRUE(first[1].at("restart_required").get<bool>());
+  EXPECT_EQ(first[2].at("kind"), "shadow_storage");
+  EXPECT_FALSE(first[2].at("error").is_null());  // C: has no shadow storage
+  EXPECT_TRUE(first[2].at("cost").is_null());
+
+  system().hibernation_state.mode = placement::HibernationMode::reduced;
+  system().shadows = {{.volume = "C:",
+                       .diff_volume = "C:",
+                       .used = 4_GiB,
+                       .allocated = 5_GiB,
+                       .maximum = std::nullopt}};
+  const Json second = call("system_space.status").at("settings");
+  EXPECT_TRUE(second[0].at("recommended").is_null());  // already reduced
+  EXPECT_EQ(second[2].at("cost"), (5_GiB).count());
+  EXPECT_FALSE(second[2].at("recommended").is_null());  // unbounded: a limit is recommended
+  EXPECT_TRUE(tools().commands.empty());
+  EXPECT_TRUE(system().written.empty());
+}
+
+// The Audit screen: action_log newest first, a page at a time, for the tray only.
+TEST_F(CleaningServiceTest, AuditListPagesTheActionLogForTheTrayOnly) {
+  system().hibernation_state = {.mode = placement::HibernationMode::full,
+                                .file = L"C:\\hiberfil.sys",
+                                .file_size = 50_GiB,
+                                .memory = 64_GiB};
+  start();
+  work();
+  const std::int64_t id = call("plans.propose_optimization", Json{{"kind", "hibernation"}})
+                              .at("plan")
+                              .get<std::int64_t>();
+  call("plans.reject", Json{{"id", id}});
+  const Json first = call("audit.list", Json{{"limit", 1}});
+  ASSERT_EQ(first.at("entries").size(), 1U);
+  const Json& newest = first.at("entries")[0];
+  EXPECT_EQ(newest.at("plan"), id);
+  EXPECT_EQ(newest.at("to"), "rejected");
+  EXPECT_EQ(newest.at("actor"), "owner");
+  ASSERT_TRUE(first.at("next").is_number_integer());
+  const Json older = call("audit.list", Json{{"before", first.at("next")}, {"limit", 200}});
+  ASSERT_FALSE(older.at("entries").empty());
+  EXPECT_LT(older.at("entries")[0].at("id").get<std::int64_t>(),
+            newest.at("id").get<std::int64_t>());
+  EXPECT_TRUE(older.at("next").is_null());
+  EXPECT_EQ(error_of("audit.list", Json::object(), false).at("data").at("errc"), "refused");
+  EXPECT_EQ(error_of("audit.list", Json{{"limit", 0}}, true).at("data").at("errc"),
+            "invalid_argument");
+}
+
 // Startup spec "MCP proposal waits", "Prompt 2 disables only the selection", "Run item
 // re-enabled": items are named by their number in startup.list, change only after approval, and
 // undo restores them.

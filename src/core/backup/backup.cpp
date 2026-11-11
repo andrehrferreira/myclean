@@ -516,7 +516,12 @@ Json repos_json(const RepoReport& report) {
                                {"uncommitted", finding.uncommitted},
                                {"text", finding.text}});
   }
-  return Json{{"checked", report.checked},
+  Json roots = Json::array();
+  for (const std::filesystem::path& root : report.roots) {
+    roots.push_back(utf8_text(root));
+  }
+  return Json{{"roots", std::move(roots)},
+              {"checked", report.checked},
               {"unprotected", std::move(unprotected)},
               {"problems", report.problems},
               {"truncated", report.truncated}};
@@ -754,6 +759,7 @@ Report check(const Probes& probes, WallTime now, const std::stop_token& stop,
                                             probes.repo_limits, stop);
     report.repositories = check_repositories(*probes.git, walk.repositories, stop);
     report.repositories->truncated = walk.truncated;
+    report.repositories->roots = probes.workspace_roots;
   }
   return report;
 }

@@ -13,6 +13,7 @@
 #include "core/tray_model/governor.hpp"
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/replies.hpp"
+#include "core/tray_model/screens.hpp"
 
 namespace myclean::tray {
 
@@ -25,7 +26,16 @@ enum class Section {
   freezes,
   cleanup,
   space,
-  governor
+  governor,
+  placement,
+  optimize,
+  startup,
+  apps,
+  security,
+  backups,
+  audit,
+  settings,
+  reports
 };
 
 // What the owner chose in the dashboard; kept between frames.
@@ -52,6 +62,17 @@ struct UiState {
   // confirmation.
   int pause_minutes = 60;
   std::optional<tray_model::GovernorProcess> confirm_kill;
+  // The screens already loaded once (each loads when first shown), and the startup items the
+  // owner ticked, by key.
+  std::set<tray_model::Screen> screens_asked;
+  std::set<std::string> startup_ticked;
+  // Apps: only those not used for 6 months.
+  bool apps_unused_only = false;
+  // Audit: the "before" of each older page shown, the current one last (empty: the newest page).
+  std::vector<std::int64_t> audit_pages;
+  // Reports: the two snapshots the owner picked to compare.
+  std::string compare_from;
+  std::string compare_to;
   // What the owner asked of the service during the frame; the window sends and clears them.
   std::vector<tray_model::Request> requests;
 };

@@ -331,6 +331,8 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   | `backups.check` | refresh | backup |
   | `apps.list` | unused_days | cleaning |
   | `plans.propose_uninstall` | app, client | cleaning |
+  | `system_space.status` | none | cleaning |
+  | `audit.list` (tray only) | before, limit | cleaning |
   | `alerts.list` | since | alerts |
   | `alerts.badge` | none | alerts |
   | `alerts.snooze` (tray only) | rule, entity, minutes | alerts |
@@ -463,6 +465,31 @@ Nothing here closes, removes or disables anything: a persistence point that is a
 names it (`startup_item`), and disabling it is a `plans.propose_startup` plan that waits for the
 owner's approval in the tray.
 
+**Tray screens (UI-3, `core/tray_model/screens`, `src/tray/*_ui.cpp`):** besides the dashboard,
+Cleanup, Space, Governor and Freezes, the tray shows a screen per read feature. Each loads its
+methods when the owner first opens it and on Refresh (an analysis still running is asked for again
+every second), and each change it offers is a proposal that waits in Cleanup for the owner's
+approval. Placement shows `system_space.status` (hibernation, the page file and the system drive's
+restore-point storage, each with its state, what it holds on disk and the change
+`plans.propose_optimization` would make) with a Propose button, and every relocatable cache with
+its newest relocate plan. Optimize shows the applied `system_setting` and `compact` plans with their
+verification, `space.indexed_folders`, `space.vhdx`, `space.dev_drive` and `resident.costs`.
+Startup shows `startup.list` with each item's impact and `startup.boot_times`; ticked items are
+proposed through `plans.propose_startup`. A startup item is named by its number in the latest
+`startup.list` answer, so the tray lists the items again right before it proposes and sends the
+numbers of that answer for the keys the owner ticked: a list another client asked for meanwhile
+cannot shift them. Apps shows `apps.list` (optionally only the apps not used for 6 months) with a
+Propose uninstall button (`plans.propose_uninstall`, the app named the same way: listed again, then
+its number in that answer). Security shows `security.scan`, `security.extensions` and
+`security.network` (24 hours); an item is labelled "known dangerous" only when it carries a
+Defender or VirusTotal verdict, and a Defender scan of one item (`security.defender_scan`) starts
+only on the owner's click. Backups shows `backups.check`. Audit pages through `audit.list` (tray
+only: the append-only `action_log`, newest first, 50 entries a page by default, each page below the
+id the previous one ended at). Settings shows what the service already reports, read only: the
+governor's mode and pause, the snoozed alerts, whether VirusTotal lookups are on (the key stays in
+the administrators-only `security.toml`) and the workspace roots, which `backups.check` reports with
+its repository check (`repositories.roots`). Reports lists `reports.list`, shows a report's text
+from `reports.get` and the changes between two snapshots from `reports.compare`.
 
 **Monthly report (RP1–RP2, `core/report`, `svc::ReportComponent`):** job `monthly-report` (`0 9 1 * *`)
 on MyClean's own scheduler (`core/sched`; no OS schedule): the 1st at 09:00 local time, one
@@ -495,6 +522,7 @@ method that acts, writes nothing to `action_log` and sends nothing off the machi
 and `reports.compare` (MCP `get_report`, `compare_snapshots`; `myclean report get|compare`) answer
 `"found": false` with the months that exist for a missing month or snapshot; `reports.list` lists
 the stored reports with their files, newest first.
+
 ## 9. Security
 
 - The service is the elevation boundary: the pipe DACL allows only SYSTEM and

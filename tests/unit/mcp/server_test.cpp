@@ -411,6 +411,7 @@ TEST_F(ServerTest, ReportToolsReadTheStoredReportsAndSayWhenAMonthIsMissing) {
                 .find("must be of type string"),
             std::string::npos);
 }
+
 TEST_F(ServerTest, ProposalsAreMadeAsTheMcpClientWithCandidateIdsOnly) {
   static_cast<void>(send(Json{{"jsonrpc", "2.0"},
                               {"id", 1},

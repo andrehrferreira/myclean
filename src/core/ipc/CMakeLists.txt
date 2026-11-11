@@ -4,6 +4,7 @@ myclean_add_library(ipc
   SOURCES
     alerts.hpp
     apps.hpp
+    audit.hpp
     backup.hpp
     disk_health.hpp
     frame.cpp

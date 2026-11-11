@@ -14,6 +14,7 @@
 #include "core/tray_model/governor.hpp"
 #include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/poller.hpp"
+#include "core/tray_model/screens.hpp"
 #include "core/tray_model/snapshot.hpp"
 #include "core/tray_model/tray_state.hpp"
 
@@ -102,6 +103,8 @@ class DashboardModel {
 
   // The approval inbox, the Space view and the user-task runner.
   [[nodiscard]] const CleanupView& cleanup() const { return cleanup_; }
+  // The answers of the screens the owner opened.
+  [[nodiscard]] const ScreensView& screens() const { return screens_; }
 
   // The governor's newest status; nullopt before the first (or while the service does not offer
   // the governor).
@@ -164,6 +167,7 @@ class DashboardModel {
   std::optional<IncidentQueue::Counts> incident_counts_;
   std::string watchdog_error_;
   CleanupView cleanup_;
+  ScreensView screens_;
   std::optional<GovernorStatus> governor_;
   std::string governor_action_error_;
   GovernorToasts governor_toasts_;

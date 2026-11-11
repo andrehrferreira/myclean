@@ -37,6 +37,7 @@
 #include "core/placement/drives.hpp"
 #include "core/placement/relocation.hpp"
 #include "core/placement/settings.hpp"
+#include "core/placement/system_space.hpp"
 #include "core/rules/schema.hpp"
 #include "core/safety/deny_list.hpp"
 #include "core/startup/startup.hpp"
@@ -142,6 +143,15 @@ struct Optimization {
   std::string instance;
 };
 
+// One system setting that holds space on the system drive, as system_space.status shows it.
+struct SystemSetting {
+  std::string kind;  // hibernation | page_file | shadow_storage
+  // Its state and cost now; `proposed` is the recommended change when `recommended` is set.
+  std::optional<placement::SettingSummary> summary;
+  bool recommended = false;
+  std::string error;  // why the setting could not be read; empty when it was
+};
+
 class Executor {
  public:
   // Every reference must outlive the executor.
@@ -197,6 +207,10 @@ class Executor {
   // {"recipe": placement::recipe_json(), "instance", "target", "content"}).
   [[nodiscard]] Result<Plan> propose_optimization(const Optimization& request,
                                                   const Actor& proposer);
+  // Hibernation, the page file and the shadow storage of the system drive: each one's state and
+  // cost now and the change propose_optimization would make with no value given (none when it
+  // needs no change). Fails with invalid_state without the system-setting probes.
+  [[nodiscard]] Result<std::vector<SystemSetting>> system_space() const;
   // An approval-only plan that disables (or enables) the startup items `ids` (startup::Item::id):
   // action "SetStartupItems", kind system_setting, one item per id with the id as its path,
   // params {"items", "enable"}. Fails with invalid_state without the startup probe, and as
@@ -289,6 +303,9 @@ class Executor {
   [[nodiscard]] Result<Plan> propose_shadow_storage(const Optimization& request,
                                                     std::vector<placement::TargetVolume> volumes,
                                                     const Actor& proposer);
+  // The shadow storage of the system drive, for system_space().
+  [[nodiscard]] SystemSetting system_shadow_storage(
+      const Result<std::vector<placement::TargetVolume>>& volumes) const;
   [[nodiscard]] Result<Plan> propose_relocation(const Optimization& request,
                                                 std::vector<placement::TargetVolume> volumes,
                                                 const Actor& proposer);

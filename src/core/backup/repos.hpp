@@ -67,9 +67,10 @@ struct RepoFinding {
 };
 
 struct RepoReport {
-  std::size_t checked = 0;               // repositories git described
-  std::vector<RepoFinding> unprotected;  // in path order
-  std::vector<std::string> problems;     // repositories git could not describe, with the error
+  std::vector<std::filesystem::path> roots;  // the workspace roots walked for repositories
+  std::size_t checked = 0;                   // repositories git described
+  std::vector<RepoFinding> unprotected;      // in path order
+  std::vector<std::string> problems;         // repositories git could not describe, with the error
   bool truncated = false;
 };
 

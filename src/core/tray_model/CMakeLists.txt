@@ -4,6 +4,8 @@
 # pixels, the tooltip and the text formats of the dashboard.
 myclean_add_library(tray_model
   SOURCES
+    audit.cpp
+    audit.hpp
     chart.cpp
     chart.hpp
     cleaning.cpp
@@ -16,10 +18,19 @@ myclean_add_library(tray_model
     governor.hpp
     incident_queue.cpp
     incident_queue.hpp
+    inventory.cpp
+    inventory.hpp
+    json_read.hpp
+    optimizer.cpp
+    optimizer.hpp
     poller.cpp
     poller.hpp
     replies.cpp
     replies.hpp
+    reports.cpp
+    reports.hpp
+    screens.cpp
+    screens.hpp
     service_link.hpp
     snapshot.cpp
     snapshot.hpp

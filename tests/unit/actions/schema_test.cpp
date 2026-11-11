@@ -1,6 +1,7 @@
 #include "core/actions/schema.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -64,6 +65,31 @@ TEST_F(ActionLogTest, EntryRoundTrips) {
   EXPECT_EQ(entries[0].from, PlanState::awaiting_approval);
   EXPECT_EQ(entries[0].to, PlanState::approved);
   EXPECT_FALSE(entries[0].item.has_value());
+}
+
+// The Audit screen pages through the log newest first, by the ids of the rows.
+TEST_F(ActionLogTest, PagesAreNewestFirstAndContinueBelowTheirLastId) {
+  for (int entry = 0; entry < 5; ++entry) {
+    append_one();
+  }
+  std::vector<LogRow> first;
+  std::vector<LogRow> second;
+  std::vector<LogRow> last;
+  ASSERT_TRUE(store()
+                  .read([&](store::Database& db) -> Result<void> {
+                    first = log_page(db, std::nullopt, 2).value();
+                    second = log_page(db, first.back().id, 2).value();
+                    last = log_page(db, second.back().id, 10).value();
+                    return {};
+                  })
+                  .has_value());
+  ASSERT_EQ(first.size(), 2U);
+  EXPECT_GT(first[0].id, first[1].id);
+  EXPECT_EQ(first[0].entry.plan, PlanId{7});
+  EXPECT_EQ(first[0].entry.to, PlanState::approved);
+  ASSERT_EQ(second.size(), 2U);
+  EXPECT_LT(second[0].id, first[1].id);
+  ASSERT_EQ(last.size(), 1U);
 }
 
 TEST_F(ActionLogTest, UpdateRejectedByTrigger) {

@@ -7,6 +7,7 @@ myclean_add_library(tray
   SOURCES
     app.cpp
     app.hpp
+    audit_ui.cpp
     dashboard_ui.cpp
     dashboard_ui.hpp
     dashboard_window.cpp
@@ -19,12 +20,17 @@ myclean_add_library(tray
     inbox_ui.hpp
     instance.cpp
     instance.hpp
+    inventory_ui.cpp
+    optimizer_ui.cpp
     package_remover.cpp
     package_remover.hpp
     pipe_link.cpp
     pipe_link.hpp
     poll_thread.cpp
     poll_thread.hpp
+    reports_ui.cpp
+    screens_ui.cpp
+    screens_ui.hpp
     task_worker.cpp
     task_worker.hpp
     tray_icon.cpp

@@ -1291,6 +1291,77 @@ Result<Plan> Executor::propose_optimization(const Optimization& request, const A
   return fail(Errc::invalid_argument, "unknown optimization \"" + request.kind + "\"");
 }
 
+namespace {
+
+// `kind` from the summary of an action set to the recommended value (or to the current one when
+// none is recommended, which summarizes the state as it is).
+SystemSetting system_setting(std::string kind, const Result<placement::SettingSummary>& summary,
+                             bool recommended) {
+  if (!summary) {
+    return SystemSetting{.kind = std::move(kind), .error = summary.error().message};
+  }
+  return SystemSetting{.kind = std::move(kind), .summary = *summary, .recommended = recommended};
+}
+
+SystemSetting setting_error(std::string kind, const Error& error) {
+  return SystemSetting{.kind = std::move(kind), .error = error.message};
+}
+
+}  // namespace
+
+Result<std::vector<SystemSetting>> Executor::system_space() const {
+  if (probes_.system == nullptr || probes_.tools == nullptr || probes_.drives == nullptr) {
+    return fail(Errc::invalid_state, "the system settings cannot be read here");
+  }
+  std::vector<SystemSetting> settings;
+  if (const Result<placement::HibernationState> state = probes_.system->hibernation(); !state) {
+    settings.push_back(setting_error("hibernation", state.error()));
+  } else {
+    const std::optional<placement::HibernationMode> mode =
+        placement::recommended_hibernation(*state);
+    const placement::HibernationAction action(*probes_.system, *probes_.tools,
+                                              mode.value_or(state->mode));
+    settings.push_back(system_setting("hibernation", action.summary(), mode.has_value()));
+  }
+  const Result<std::vector<placement::TargetVolume>> volumes = probes_.drives->volumes();
+  if (const Result<placement::PageFileState> state = probes_.system->page_files(); !state) {
+    settings.push_back(setting_error("page_file", state.error()));
+  } else if (!volumes) {
+    settings.push_back(setting_error("page_file", volumes.error()));
+  } else {
+    const std::optional<placement::PageFileConfig> config =
+        placement::recommended_page_files(*state, *volumes, options_.system_root);
+    const placement::PageFileAction action(*probes_.system, *probes_.drives,
+                                           config.value_or(state->config));
+    settings.push_back(system_setting("page_file", action.summary(), config.has_value()));
+  }
+  settings.push_back(system_shadow_storage(volumes));
+  return settings;
+}
+
+SystemSetting Executor::system_shadow_storage(
+    const Result<std::vector<placement::TargetVolume>>& volumes) const {
+  const Result<std::vector<placement::ShadowStorage>> storages = probes_.system->shadow_storage();
+  if (!storages) {
+    return setting_error("shadow_storage", storages.error());
+  }
+  if (!volumes) {
+    return setting_error("shadow_storage", volumes.error());
+  }
+  const std::string name = drive_name(options_.system_root);
+  const auto storage = std::ranges::find(*storages, name, &placement::ShadowStorage::volume);
+  const placement::TargetVolume* volume = placement::volume_of(*volumes, options_.system_root);
+  if (storage == storages->end() || volume == nullptr) {
+    return SystemSetting{.kind = "shadow_storage", .error = name + " has no shadow storage"};
+  }
+  const std::optional<Bytes> maximum =
+      placement::recommended_shadow_maximum(*storage, volume->size);
+  const bool recommended = maximum.has_value() && maximum != storage->maximum;
+  const placement::ShadowStorageAction action(*probes_.system, *probes_.tools, name,
+                                              recommended ? maximum : storage->maximum);
+  return system_setting("shadow_storage", action.summary(), recommended);
+}
+
 Result<Plan> Executor::propose_startup(std::span<const std::string> ids, bool enable,
                                        const Actor& proposer) {
   if (probes_.startup == nullptr) {

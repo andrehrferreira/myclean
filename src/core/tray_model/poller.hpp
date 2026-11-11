@@ -22,6 +22,7 @@
 #include "core/tray_model/governor.hpp"
 #include "core/tray_model/incident_queue.hpp"
 #include "core/tray_model/replies.hpp"
+#include "core/tray_model/screens.hpp"
 #include "core/tray_model/service_link.hpp"
 #include "core/tray_model/snapshot.hpp"
 
@@ -114,11 +115,13 @@ struct ProposePause {
   std::int64_t hours = 24;
 };
 struct EndPause {};
+// The screens (core/tray_model/screens.hpp): LoadScreen when the owner opens one or asks for a
+// refresh, ScreenAction for a proposal from it.
 using Request =
     std::variant<SnoozeAlert, DismissAlert, ExplainProcess, SelectRange, ScanNow, OpenPlan,
                  ClosePlan, ApprovePlan, RejectPlan, UndoPlan, RestoreQuarantine, PurgeQuarantine,
                  LoadSpace, ProposeCleanup, OwnerAction, ChooseForTree, PauseGovernor, SetGameMode,
-                 DecideOrphans, ProposePause, EndPause>;
+                 DecideOrphans, ProposePause, EndPause, LoadScreen, ScreenAction>;
 
 // The tray's executor of user-scope plans, as the poller drives it: the poller takes a task
 // (user_tasks.next) only from a reachable service and only while the runner is idle, and
@@ -183,6 +186,7 @@ struct PollResult {
   std::optional<GovernorStatus> governor;
   // Why the owner's last governor request failed; empty when it worked.
   std::optional<std::string> governor_action;
+  ScreensPoll screens;
 };
 
 // What the tray reads of the owner's session for governor.user_state; nullopt when it cannot be
@@ -214,7 +218,9 @@ using WindowSource = std::function<std::optional<std::vector<std::uint32_t>>()>;
 // owner's session state when a source is set, then governor.status (its notifications become
 // toasts); the owner's choices, pause and game-mode override are sent before it. The intruder
 // scan: every windows_interval, when a window source is set, security.windows with the processes
-// that own a visible window. Not thread-safe: one poll thread owns it.
+// that own a visible window. The screens: their answers when the owner opens one, and again at
+// every poll while their analysis runs; a proposal from one also fetches the plans. Not
+// thread-safe: one poll thread owns it.
 class Poller {
  public:
   static constexpr int top_trees = 25;
@@ -261,6 +267,8 @@ class Poller {
   void run_tasks(PollResult& result);
   // Sends the governor's requests; other requests are left alone.
   void handle_governor(const Request& request, PollResult& result);
+  // Sends the screens' requests; true when the plans must be fetched again.
+  bool handle_screens(const Request& request, PollResult& result);
   void fetch_governor(PollResult& result);
   void report_windows(WallTime now);
   [[nodiscard]] RangeHistory fetch_range(WallTime now);
@@ -283,6 +291,7 @@ class Poller {
   std::optional<CleaningStatus> status_;
   std::set<std::int64_t> open_plans_;  // whose details the dashboard shows
   std::vector<LoadSpace> analysing_;   // Space lists whose analysis runs
+  ScreenFetcher screens_;
 };
 
 // Whether the dashboard charts `key` over past ranges: the system CPU and memory lines, each

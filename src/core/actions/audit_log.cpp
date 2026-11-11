@@ -1,6 +1,7 @@
 #include "core/actions/audit_log.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -92,6 +93,45 @@ Result<std::vector<LogEntry>> plan_log(store::Database& db, PlanId plan) {
     return tl::unexpected(row.error());
   }
   return entries;
+}
+
+Result<std::vector<LogRow>> log_page(store::Database& db, std::optional<std::int64_t> before,
+                                     std::size_t limit) {
+  Result<store::Statement> query = db.prepare(
+      "SELECT id, time, plan_id, item_id, actor, event, from_state, to_state, outcome, reason, "
+      "detail, metrics FROM action_log WHERE ?1 IS NULL OR id < ?1 ORDER BY id DESC LIMIT ?2");
+  if (!query) {
+    return tl::unexpected(query.error());
+  }
+  if (before) {
+    query->bind(1, *before);
+  } else {
+    query->bind(1, nullptr);
+  }
+  query->bind(2, static_cast<std::int64_t>(limit));
+  std::vector<LogRow> rows;
+  Result<bool> row = query->step();
+  for (; row && *row; row = query->step()) {
+    rows.push_back(LogRow{
+        .id = query->column_int(0),
+        .entry = LogEntry{.time = store::from_unix_seconds(query->column_int(1)),
+                          .plan = PlanId{query->column_int(2)},
+                          .item = query->is_null(3)
+                                      ? std::nullopt
+                                      : std::optional<PlanItemId>(PlanItemId{query->column_int(3)}),
+                          .actor = query->column_text(4),
+                          .event = query->column_text(5),
+                          .from = column_state(*query, 6),
+                          .to = column_state(*query, 7),
+                          .outcome = query->column_text(8),
+                          .reason = query->column_text(9),
+                          .detail = query->column_text(10),
+                          .metrics = query->column_text(11)}});
+  }
+  if (!row) {
+    return tl::unexpected(row.error());
+  }
+  return rows;
 }
 
 Result<std::optional<LogEntry>> last_verification(store::Database& db, PlanId plan) {

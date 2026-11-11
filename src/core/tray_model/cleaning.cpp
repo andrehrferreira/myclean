@@ -459,7 +459,7 @@ const DuplicateFileRow* keep_hint(const DuplicateGroupRow& group) {
 
 std::string_view protected_text(std::string_view rule) {
   if (rule == "page_file") {
-    return "Windows' page or hibernation file: see System space";
+    return "Windows' page or hibernation file: see Placement";
   }
   if (rule == "system_volume_information") {
     return "restore points and shadow copies: Windows manages them";

@@ -144,6 +144,15 @@ inline constexpr std::string_view plans_propose_cleanup_method = "plans.propose_
 // change (already at the requested value, or no healthy target with room).
 inline constexpr std::string_view plans_propose_optimization_method = "plans.propose_optimization";
 
+// No parameters. The system settings that hold space on the system drive, read now:
+//   {"settings": [{"kind": "hibernation"|"page_file"|"shadow_storage" (of the system drive),
+//    "current": string|null (its state now), "cost": int|null (the bytes it holds on disk now),
+//    "recommended": string|null (what plans.propose_optimization with only this kind would set;
+//    null when it needs no change), "restart_required": bool, "error": string|null (why it
+//    could not be read; the other members are then null)}]}
+// It only reads: a change is a plans.propose_optimization plan that waits for the owner.
+inline constexpr std::string_view system_space_status_method = "system_space.status";
+
 // No parameters. Every startup item of the owner and of the machine (startup::inventory), read
 // now by the service: {"items": [{"id": int, "key": string, "source", "scope", "name",
 // "display_name", "command", "enabled": bool|null, "signer"?, "start"?, "delayed"?, "impact"}]}.

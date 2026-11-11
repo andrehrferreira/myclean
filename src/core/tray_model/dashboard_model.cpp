@@ -43,6 +43,7 @@ void DashboardModel::apply(PollResult result) {
     return;
   }
   cleanup_.apply(std::move(result.cleanup));
+  screens_.apply(std::move(result.screens));
   if (result.latest) {
     LatestReply& latest = *result.latest;
     metrics_ = std::move(latest.metrics);

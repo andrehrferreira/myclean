@@ -343,6 +343,19 @@ TEST(BackupProductTest, MatchesKnownProductsOnly) {
   EXPECT_EQ(backup_product("Microsoft OneDrive"), std::nullopt);
 }
 
+// The Settings screen shows the workspace roots the repository check walked.
+TEST_F(BackupTest, TheRepositoryCheckNamesTheWorkspaceRootsItWalked) {
+  const FakeGit git;
+  const Report report = check(Probes{.system = &system(),
+                                     .reader = &reader(),
+                                     .drives = &drives(),
+                                     .git = &git,
+                                     .workspace_roots = {L"F:\\", L"W:\\"}},
+                              now, std::stop_token{});
+  ASSERT_TRUE(report.repositories.has_value());
+  EXPECT_EQ(report_json(report, now).at("repositories").at("roots"), (Json{"F:\\", "W:\\"}));
+}
+
 // Spec "Three kinds of unprotected work" and "Check makes no network call" (the check only asks
 // IRepoGit, whose implementation reads local refs).
 TEST(RepositoryCheckTest, ReportsTheThreeKindsOfUnprotectedWork) {
