@@ -4,6 +4,7 @@
 
 #include "core/space/downloads.hpp"
 #include "core/space/duplicates.hpp"
+#include "core/space/forgotten.hpp"
 #include "core/space/installers.hpp"
 #include "core/space/photos.hpp"
 #include "core/space/scanner.hpp"
@@ -25,6 +26,9 @@ void to_json(nlohmann::json& json, const TopItems& top);
 //  "origin": {"zone_id": number|null, "host_url": string|null, "referrer_url": string|null}
 //  or null when unknown}
 void to_json(nlohmann::json& json, const OldDownload& download);
+
+// {"path", "size", "size_on_disk", "created", "modified", "idle_days"}
+void to_json(nlohmann::json& json, const ForgottenFile& file);
 
 // {"used": [{"path", "kind": "msi"|"exe", "size", "size_on_disk", "installed_as",
 //  "product_code" (msi), "publisher" (exe)}], "errors": [{"path", "error"}]}

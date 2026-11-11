@@ -178,11 +178,15 @@ Result<security::FileScan> Win32Defender::scan_file(const std::filesystem::path&
 }
 
 Result<std::optional<std::string>> read_security_settings() {
+  return read_owner_settings(L"security.toml");
+}
+
+Result<std::optional<std::string>> read_owner_settings(std::wstring_view name) {
   Result<std::filesystem::path> data = program_data_dir();
   if (!data) {
     return tl::unexpected(data.error());
   }
-  const std::filesystem::path file = *data / L"MyClean" / L"security.toml";
+  const std::filesystem::path file = *data / L"MyClean" / name;
   std::error_code error;
   if (!std::filesystem::exists(file, error)) {
     return std::optional<std::string>{};

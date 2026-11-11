@@ -220,6 +220,7 @@ class CleaningService {
                                                    const std::stop_token& stop);
   [[nodiscard]] Result<nlohmann::json> analyze_old_downloads(const std::filesystem::path& downloads,
                                                              const std::stop_token& stop);
+  [[nodiscard]] Result<nlohmann::json> analyze_forgotten(const std::stop_token& stop);
   [[nodiscard]] Result<nlohmann::json> analyze_installers(const std::filesystem::path& downloads,
                                                           const std::stop_token& stop);
   // The scans of the owner's known folders and Downloads that could be read; their roots go to

@@ -14,6 +14,9 @@
 
 #include "core/model/result.hpp"
 #include "core/placement/settings.hpp"
+#include "core/safety/deny_list.hpp"
+#include "platform/fs/own_files.hpp"
+#include "platform/fs/protected_locations.hpp"
 #include "platform/settings/win32_support.hpp"
 
 namespace myclean::platform {
@@ -131,6 +134,17 @@ Result<std::optional<std::string>> Win32TextFiles::read(const std::filesystem::p
   }
 }
 
+Result<void> Win32TextFiles::remove_own(const std::filesystem::path& path) {
+  if (!locations_) {
+    Result<safety::ProtectedLocations> found = protected_locations(nullptr);
+    if (!found) {
+      return tl::unexpected(found.error());
+    }
+    locations_ = *std::move(found);
+  }
+  return remove_own_file(path, *locations_);
+}
+
 Result<void> Win32TextFiles::write(const std::filesystem::path& path, std::string_view text) {
   const std::wstring staging = path.native() + L".myclean-new";
   {
@@ -144,27 +158,21 @@ Result<void> Win32TextFiles::write(const std::filesystem::path& path, std::strin
             FALSE ||
         written != text.size() || ::FlushFileBuffers(file.get()) == FALSE) {
       const DWORD error = ::GetLastError();
-      ::DeleteFileW(staging.c_str());
+      static_cast<void>(remove_own(staging));
       return win32_error("writing " + narrow(staging), error);
     }
   }
   if (::MoveFileExW(staging.c_str(), path.c_str(),
                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) == FALSE) {
     const DWORD error = ::GetLastError();
-    ::DeleteFileW(staging.c_str());
+    static_cast<void>(remove_own(staging));
     return win32_error("replacing " + narrow(path.native()), error);
   }
   return {};
 }
 
 Result<void> Win32TextFiles::remove(const std::filesystem::path& path) {
-  if (::DeleteFileW(path.c_str()) == FALSE) {
-    const DWORD error = ::GetLastError();
-    if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND) {
-      return win32_error("deleting " + narrow(path.native()), error);
-    }
-  }
-  return {};
+  return remove_own(path);
 }
 
 }  // namespace myclean::platform

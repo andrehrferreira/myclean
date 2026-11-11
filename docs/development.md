@@ -284,7 +284,7 @@ started in this order (stopped in reverse), so that each starts after those it u
 | `telemetry` | 1 s / 60 s collectors; volume facts to `alerts` | `metrics.*`, `processes.*`, `volumes.list` |
 | `disk_health` | HealthCollector on its own pipeline thread (a read may wait 60 s on WMI); health facts to `alerts` | `disks.health` |
 | `events` | ETW process and network events, connection snapshots | none yet |
-| `governor` | resource governor (`core/governing`): build/test trees into their jobs on the ETW start, the 1 s pressure loop and ladder on the telemetry samples, game detection and game mode, crash recovery at start and fail-open at stop; `[governor] mode` in `data/governor.toml` (`observe`, the default, records only) | `governor.*` |
+| `governor` | resource governor (`core/governing`): build/test trees into their jobs on the ETW start, the 1 s pressure loop and ladder on the telemetry samples, game detection and game mode (the owner's own game list and library roots in `%ProgramData%\MyClean\games.toml`, `owner = [...]` and `roots = [...]`, writable by administrators only), crash recovery at start and fail-open at stop; `[governor] mode` in `data/governor.toml` (`observe`, the default, records only) | `governor.*` |
 | `input` | `input_incident` table for the tray's watchdog | `input.*` |
 | `startup` | measures the first 2 minutes of each owner logon (`logon_impact`) and, every 10 min, records the boots Windows measured from the Diagnostics-Performance log (`boot_time`) | (read by `startup.*`) |
 | `resident` | every second hands the newest process table to `resident::Tracker`: per program (the lower-case image of its trees' root) and minute, CPU time, private bytes, RAM, disk I/O and the network bytes of `net_minute`; 5-minute private bytes in `resident_fine` (2 days), hourly totals in `resident_hour` (35 days); at each closed 5-minute bucket the leak readings go to `alerts` (rule `process.memory-leak`). Reads only: it cannot act on a process | `resident.*` |
@@ -337,6 +337,7 @@ The architecture fixes C++20 (section 10), and MSVC offers `std::expected` only 
 | `format-check` | hook, CI | any clang-format difference (`.clang-format`) |
 | `lint` | hook, CI | any clang-tidy finding (`.clang-tidy`, warnings are errors) |
 | Tests | hook, CI, deploy | any failing test; `debug` runs under AddressSanitizer |
+| Forbidden code | the `ForbiddenCode.*` test (`cmake/scripts/check-forbidden.cmake`) | a `.sys` file, a driver install, a scheduled-task registration or Task Scheduler create call, or the Task Scheduler service outside the startup toggle (`src/platform/startup`) |
 
 Silence a clang-tidy finding only with `// NOLINT(<check>): <reason>` on the line.
 Under AddressSanitizer the STL container annotations are disabled

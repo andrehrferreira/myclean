@@ -1,5 +1,6 @@
 # Scanner v1 (folder tree with sizes on disk) and the read-only space analyses: top-N, old
-# downloads, used installers, exact duplicates, near-duplicate photos, and their JSON forms.
+# downloads, used installers, large forgotten files, exact duplicates, near-duplicate photos, and
+# their JSON forms.
 # Win32 in platform/scan and platform/image.
 myclean_add_library(space
   SOURCES
@@ -8,6 +9,8 @@ myclean_add_library(space
     downloads.hpp
     duplicates.cpp
     duplicates.hpp
+    forgotten.cpp
+    forgotten.hpp
     identity_set.hpp
     installers.cpp
     installers.hpp

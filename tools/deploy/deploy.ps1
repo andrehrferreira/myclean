@@ -300,14 +300,17 @@ function Register-MyCleanService {
         New-Service -Name $ServiceName -BinaryPathName $binPath -DisplayName 'MyClean' `
                     -Description 'MyClean monitoring, resource governor and maintenance service' `
                     -StartupType Automatic | Out-Null
-        Invoke-Native sc.exe @('failure', $ServiceName, 'reset=', '86400', 'actions=', 'restart/5000/restart/5000/restart/30000')
-        # Also restart when the service stops itself with an error (a failed start, contract C7).
-        Invoke-Native sc.exe @('failureflag', $ServiceName, '1')
     } elseif ($existing.PathName -ne $binPath) {
         Write-Log "Updating service path to $binPath"
         $change = Invoke-CimMethod -InputObject $existing -MethodName Change -Arguments @{ PathName = $binPath }
         if ($change.ReturnValue -ne 0) { throw "Win32_Service.Change failed with code $($change.ReturnValue)." }
     }
+    # Set on every deploy, so that a service registered by an older deploy gets them too
+    # (NFR-REL-1). The first two restarts come after 1 s, so a crashed service is back within
+    # 5 s (NFR-REL-2); the third waits 30 s, so a service that keeps crashing does not spin.
+    Invoke-Native sc.exe @('failure', $ServiceName, 'reset=', '86400', 'actions=', 'restart/1000/restart/1000/restart/30000')
+    # Also restart when the service stops itself with an error (a failed start, contract C7).
+    Invoke-Native sc.exe @('failureflag', $ServiceName, '1')
 }
 
 function Start-MyCleanService {

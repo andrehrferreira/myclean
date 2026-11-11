@@ -1,6 +1,7 @@
 # Adapter tests against the real file system, inside a unique folder under %TEMP%\myclean-it.
 myclean_add_test(platform_fs
   SOURCES
+    own_files_test.cpp
     protected_locations_test.cpp
     safe_remove_on_disk_test.cpp
     sandbox.cpp

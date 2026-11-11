@@ -17,6 +17,9 @@
 // clang-format on
 
 #include "core/model/result.hpp"
+#include "core/safety/deny_list.hpp"
+#include "platform/fs/own_files.hpp"
+#include "platform/fs/protected_locations.hpp"
 #include "platform/ipc/pipe_io.hpp"
 #include "platform/service/system.hpp"
 
@@ -73,6 +76,12 @@ Result<fs::path> write_crash_dump(const fs::path& dir, EXCEPTION_POINTERS* excep
 }
 
 Result<void> prune_crash_dumps(const fs::path& dir, std::size_t keep) {
+  // Through the guarded delete of MyClean's own files: never a deny-list place but MyClean's own
+  // folder, never through a reparse point (architecture section 6).
+  const Result<safety::ProtectedLocations> locations = protected_locations(nullptr);
+  if (!locations) {
+    return tl::unexpected(locations.error());
+  }
   try {
     std::vector<fs::directory_entry> dumps;
     for (const fs::directory_entry& entry : fs::directory_iterator(dir)) {
@@ -84,7 +93,9 @@ Result<void> prune_crash_dumps(const fs::path& dir, std::size_t keep) {
       return left.last_write_time() > right.last_write_time();
     });
     for (std::size_t index = keep; index < dumps.size(); ++index) {
-      fs::remove(dumps[index].path());
+      if (Result<void> removed = remove_own_file(dumps[index].path(), *locations); !removed) {
+        return fail(removed.error().code, "pruning crash dumps: " + removed.error().message);
+      }
     }
     return {};
   } catch (const fs::filesystem_error& error) {

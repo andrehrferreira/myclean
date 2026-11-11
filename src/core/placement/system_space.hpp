@@ -16,8 +16,10 @@
 
 // The system settings that hold space on the system drive: hibernation, page file and shadow
 // storage (docs/analysis/myclean-planning/02-disk-cleaning-and-relocation.md, F-015). Each is an
-// approval-only action (tier ask, run by the service) that shows its cost, the exact command it
-// runs and its undo; propose() keeps them out of automatic approval.
+// action (tier ask, run by the service) that shows its cost, the exact command it runs and its
+// undo; a proposal waits for the owner's approval. The one exception is the owner's decision 003
+// (.rulebook/decisions): below 10 % free on C:, the cleaning executor changes hibernation and the
+// page file on its own (Executor::reclaim_system_space); shadow storage never.
 namespace myclean::placement {
 
 // What the Optimizations view shows for one change, before it is approved.

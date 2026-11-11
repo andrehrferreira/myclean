@@ -126,7 +126,7 @@ feature.
 | ID | Requirement | Pri |
 |---|---|---|
 | CLN-1 | Rule catalog as data: Windows temp/caches/dumps, browsers, Electron apps, IDEs, GPU shader caches, game launchers, package managers | P0 |
-| CLN-2 | Developer artifacts in every workspace root: per-toolchain rules, git-ignored check, inactive-project check, in-use check | P0 |
+| CLN-2 | Developer artifacts in every workspace root: per-toolchain rules, git-ignored check, inactive-project check, in-use check. The node `artifacts` rule is `auto` and deletes without quarantine once every guard holds (owner decision: `.rulebook/decisions/005-node-artifacts-tier-auto.md`) | P0 |
 | CLN-3 | Windows system areas through Windows' own cleanup handlers and DISM, never by hand | P0 |
 | CLN-4 | Tiers `auto` / `ask` / `report`; `auto` runs on schedule; `ask` items wait for approval | P0 |
 | CLN-5 | Quarantine with restore; same volume, or another healthy volume when space is critical | P0 |
@@ -138,7 +138,7 @@ feature.
 | ID | Requirement | Pri |
 |---|---|---|
 | PLC-1 | Relocate TEMP/TMP and package-manager caches off C: through their supported settings, with undo | P0 |
-| PLC-2 | Page-file placement and size, hibernation mode, restore-point storage: shown with their cost, changed only on approval | P0 |
+| PLC-2 | Page-file placement and size, hibernation mode, restore-point storage: shown with their cost, changed only on approval, except below 10 % free on C:, where hibernation and the page file change automatically (restore-point storage never does; owner decision: `.rulebook/decisions/003-automatic-system-space-on-critical-c.md`) | P0 |
 | PLC-3 | Placement advisor: recommends which drive each workload belongs on, from drive class (NVMe, QLC, USB, HDD), health and free space. Example: build output off QLC, archives to HDD | P1 |
 | PLC-4 | Dev Drive advisor: explains and guides creating a Dev Drive (ReFS + Defender performance mode) and moving active repos and caches onto it | P1 |
 | PLC-5 | Move a folder between drives safely (copy → verify by hash → switch → keep the old copy until confirmed) | P2 |
@@ -150,7 +150,7 @@ feature.
 | GOV-1 | Process classes as data: system, game, allow, build, test, default | P0 |
 | GOV-2 | `build`/`test` trees placed in a job object at launch, with CPU hard cap and whole-tree commit cap | P0 |
 | GOV-3 | Pressure detection (CPU, available RAM, commit, hard faults) with hysteresis | P0 |
-| GOV-4 | Escalation ladder for the heaviest non-protected tree: priority → memory priority → EcoQoS → cap → suspend → kill (kill opt-in per class) | P0 |
+| GOV-4 | Escalation ladder for the heaviest non-protected tree: priority and memory priority (one step) → EcoQoS → cap → suspend → kill (kill opt-in per class). Build and test trees go first; cap and suspend apply only to build and test trees by default; suspend and kill need a memory shortage (owner decision: `.rulebook/decisions/004-governor-ladder-deviations.md`, commit 0fd045c) | P0 |
 | GOV-5 | Automatic rollback of steps 1–4 after pressure ends | P0 |
 | GOV-6 | Game detection (list, library paths, Game Bar store, fullscreen + GPU) and game mode | P0 |
 | GOV-7 | CCD-aware placement on X3D: build jobs moved to the frequency CCD while a game runs (opt-in) | P2 |
@@ -238,7 +238,7 @@ Claude Code with the prompt pasted as written.
 |---|---|
 | NFR-PERF-1 | Service + tray: < 1 % avg CPU, < 150 MB RAM; no WMI in 1 s loops |
 | NFR-PERF-2 | Dashboard opens in < 1 s; live charts at 1 Hz without dropping samples |
-| NFR-SAFE-1 | Every destructive action goes through one `SafeRemove` primitive with a hard deny-list; never follows reparse points; never hydrates cloud files |
+| NFR-SAFE-1 | Every destructive action goes through one `SafeRemove` primitive with a hard deny-list; never follows reparse points; never hydrates cloud files. Deliberate exceptions, listed in architecture §6: the Recycle Bin purge through the shell, Windows' cleanup handlers and DISM, WSL commands (the `/tmp` prune, `wsl --unregister` after a checked import), MyClean's own staging and created config files (`.npmrc`), and the pruning of its own crash dumps; MyClean's own-file deletes still apply the deny-list and refuse reparse points |
 | NFR-SAFE-2 | Every change is a recorded action with undo data; append-only audit log |
 | NFR-SAFE-3 | AI/MCP clients can propose but never execute; approval happens in the tray |
 | NFR-SEC-1 | Service IPC pipe ACL: SYSTEM + owner only; the service accepts no raw paths or commands |

@@ -120,4 +120,9 @@ class Win32Resolver final : public security::IResolver {
 // it can turn on lookups that send data off the machine.
 [[nodiscard]] Result<std::optional<std::string>> read_security_settings();
 
+// The text of the owner's settings file %ProgramData%\MyClean\<name> (games.toml, ...), held to
+// the same rules as security.toml: nullopt when it does not exist, refused unless administrators
+// alone can write to it, at most 64 KiB.
+[[nodiscard]] Result<std::optional<std::string>> read_owner_settings(std::wstring_view name);
+
 }  // namespace myclean::platform

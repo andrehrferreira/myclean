@@ -23,6 +23,7 @@
 #include "core/backup/repos.hpp"
 #include "core/events/event_store.hpp"
 #include "core/games/library_roots.hpp"
+#include "core/games/owner_games.hpp"
 #include "core/governing/governor.hpp"
 #include "core/model/result.hpp"
 #include "core/model/units.hpp"
@@ -217,16 +218,41 @@ std::unique_ptr<svc::CleaningComponent> make_cleaning(const svc::HostOptions& op
                         .system_root = root});
 }
 
-// Game detection's sources as the owner sees them: launcher library roots (no owner roots yet)
-// and the owner's GameConfigStore, read from HKU\<owner SID>.
+// The owner's game list and library roots from %ProgramData%\MyClean\games.toml (GOV-6);
+// nothing, with the problem noted, when it is missing, refused or malformed.
+myclean::games::OwnerGames read_owner_games(std::vector<std::string>& problems) {
+  const Result<std::optional<std::string>> text =
+      myclean::platform::read_owner_settings(L"games.toml");
+  if (!text) {
+    problems.push_back("games.toml: " + text.error().message);
+    return {};
+  }
+  if (!*text) {
+    return {};
+  }
+  Result<myclean::games::OwnerGames> games = myclean::games::parse_owner_games(**text);
+  if (!games) {
+    problems.push_back(games.error().message);
+    return {};
+  }
+  return *std::move(games);
+}
+
+// Game detection's sources as the owner sees them: the owner's own list and library roots
+// (games.toml), the launchers' library roots and the owner's GameConfigStore, read from
+// HKU\<owner SID>.
 myclean::governing::GameScan read_games(std::string_view owner_sid) {
   namespace platform = myclean::platform;
   const platform::Win32GameSources sources(std::wstring(owner_sid.begin(), owner_sid.end()));
   const platform::Win32GameFiles files;
+  std::vector<std::string> problems;
+  myclean::games::OwnerGames owner = read_owner_games(problems);
   myclean::games::RootsReport roots =
-      myclean::games::find_library_roots(sources.launcher_data(), {}, files);
-  myclean::governing::GameScan scan{.sources = {.roots = std::move(roots.roots)},
-                                    .problems = std::move(roots.problems)};
+      myclean::games::find_library_roots(sources.launcher_data(), owner.roots, files);
+  problems.insert(problems.end(), roots.problems.begin(), roots.problems.end());
+  myclean::governing::GameScan scan{
+      .sources = {.owner_games = std::move(owner.owner), .roots = std::move(roots.roots)},
+      .problems = std::move(problems)};
   if (Result<std::vector<myclean::games::GameConfigEntry>> entries = sources.game_config_store();
       entries) {
     scan.sources.game_config = std::move(*entries);

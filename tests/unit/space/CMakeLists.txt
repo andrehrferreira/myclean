@@ -2,6 +2,7 @@ myclean_add_test(space
   SOURCES
     downloads_test.cpp
     duplicates_test.cpp
+    forgotten_test.cpp
     installers_test.cpp
     json_test.cpp
     photos_test.cpp

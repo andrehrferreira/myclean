@@ -13,6 +13,8 @@ myclean_add_library(games
     game_config_store.hpp
     library_roots.cpp
     library_roots.hpp
+    owner_games.cpp
+    owner_games.hpp
     paths.cpp
     paths.hpp
     steam.cpp
@@ -21,4 +23,5 @@ myclean_add_library(games
     myclean::model
     myclean::os
     myclean::telemetry
-    nlohmann_json::nlohmann_json)
+    nlohmann_json::nlohmann_json
+    tomlplusplus::tomlplusplus)

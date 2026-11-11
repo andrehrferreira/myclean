@@ -73,6 +73,15 @@ void to_json(nlohmann::json& json, const TopItems& top) {
   json = {{"files", std::move(files)}, {"folders", std::move(folders)}};
 }
 
+void to_json(nlohmann::json& json, const ForgottenFile& file) {
+  json = {{"path", utf8(file.path)},
+          {"size", file.size.count()},
+          {"size_on_disk", file.size_on_disk.count()},
+          {"created", unix_seconds(file.created)},
+          {"modified", unix_seconds(file.modified)},
+          {"idle_days", file.idle_days}};
+}
+
 void to_json(nlohmann::json& json, const OldDownload& download) {
   nlohmann::json origin = nullptr;
   if (download.origin) {

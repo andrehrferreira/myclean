@@ -9,6 +9,7 @@ myclean_add_library(platform_service
     system.cpp
     system.hpp
   DEPENDS
+    myclean::platform_fs
     myclean::platform_ipc
     WIL::WIL
     advapi32

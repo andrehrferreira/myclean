@@ -203,6 +203,22 @@ the deny-list, never follows reparse points, skips cloud placeholders,
 accepts only items that belong to a stored plan, and re-validates each item
 right before acting.
 
+Deliberate exceptions (NFR-SAFE-1): these delete without going through `SafeRemove`, each limited
+to what it names:
+- the Recycle Bin purge of items deleted long ago, through the shell's Recycle Bin folder
+  (`IFileOperation`, `Win32RecycleBin`);
+- Windows' own cleanup handlers and DISM (`HandlerCleanup`, component cleanup), which Windows
+  runs on the areas it owns;
+- WSL commands run inside a distribution or on it: the `/tmp` prune (`find /tmp ... -exec rm -rf`
+  of entries older than 7 days) and `wsl --unregister` of a distribution only after its copy on the
+  target volume is imported and checked;
+- MyClean's own files: the `.myclean-new` staging file of a settings write, and a config file
+  such as `.npmrc` that MyClean created and removes again on undo (`ITextFiles::remove`);
+- the pruning of MyClean's own crash dumps in its dump folder.
+
+MyClean's own-file deletes (the last two) go through `platform::remove_own_file`. It refuses a
+path the deny-list protects and any reparse point, and it deletes one regular file only.
+
 ## 7. Governor (detail)
 
 Specification: `.rulebook/tasks/phase3_resource-governor/specs/governor/spec.md`. Decisions are

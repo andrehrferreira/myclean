@@ -4,9 +4,11 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "core/model/result.hpp"
 #include "core/placement/settings.hpp"
+#include "core/safety/deny_list.hpp"
 
 namespace myclean::platform {
 
@@ -28,15 +30,26 @@ class Win32UserEnvironment final : public placement::IUserEnvironment {
 
 // Small text files read and written whole. A write goes to "<file>.myclean-new" first and then
 // replaces the file, so a reader never sees half of it.
+//
+// Its deletes (the staging file of a failed write, a file MyClean created and removes on undo) go
+// through platform::remove_own_file with the deny-list places of the calling user, or of
+// `locations` when given: never a protected place, never through a reparse point.
 class Win32TextFiles final : public placement::ITextFiles {
  public:
   Win32TextFiles() = default;
+  explicit Win32TextFiles(safety::ProtectedLocations locations)
+      : locations_(std::move(locations)) {}
 
   [[nodiscard]] Result<std::optional<std::string>> read(
       const std::filesystem::path& path) const override;
   [[nodiscard]] Result<void> write(const std::filesystem::path& path,
                                    std::string_view text) override;
   [[nodiscard]] Result<void> remove(const std::filesystem::path& path) override;
+
+ private:
+  [[nodiscard]] Result<void> remove_own(const std::filesystem::path& path);
+
+  std::optional<safety::ProtectedLocations> locations_;  // looked up at the first delete
 };
 
 }  // namespace myclean::platform

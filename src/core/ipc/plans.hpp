@@ -138,7 +138,8 @@ inline constexpr std::string_view plans_propose_cleanup_method = "plans.propose_
 //                    relocation recipe "<pack>/<case>" of the packs in effect, with instance
 //                    (token) for a recipe whose setting names instances (a WSL distribution);
 //                    target (token): drive letter; content (token): "move" | "regenerate"
-// Creates an awaiting_approval plan (system settings never run without approval):
+// Creates an awaiting_approval plan (a proposal never runs without approval; only below 10 % free
+// on C: does the service change hibernation and the page file on its own, decision 003):
 // {"plan": int, "state": "awaiting_approval"}. Fails with invalid_state when nothing would
 // change (already at the requested value, or no healthy target with room).
 inline constexpr std::string_view plans_propose_optimization_method = "plans.propose_optimization";
@@ -321,6 +322,14 @@ inline constexpr std::string_view space_top_method = "space.top";
 //   {..., "folder": string|null, "files": [{"id", "path", "size", "size_on_disk", "created",
 //    "modified", "age_days", "origin": {"zone_id", "host_url", "referrer_url"}|null}]}
 inline constexpr std::string_view space_old_downloads_method = "space.old_downloads";
+
+// Parameters: refresh (boolean, optional). Large forgotten files: files of the owner's Desktop,
+// Documents, Downloads, Pictures, Videos and Music of at least 512 MiB on disk whose creation and
+// last-write times are both more than 180 days ago, largest first (cloud placeholders and links
+// left out). A report: nothing is proposed by itself.
+//   {..., "roots": [string], "min_size": int, "idle_days": int, "files": [{"id", "path", "size",
+//    "size_on_disk", "created", "modified", "idle_days"}]}
+inline constexpr std::string_view space_forgotten_files_method = "space.forgotten_files";
 
 // Parameters: refresh (boolean, optional), mode (token, optional): "exact" (default) or "photos".
 // Duplicates in the owner's Desktop, Documents, Downloads, Pictures, Videos and Music.

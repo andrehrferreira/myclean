@@ -1,6 +1,7 @@
 // Win32DiagnosticsLog against this machine: the log is only read. Run elevated (or as SYSTEM),
 // every event it returns parses as an event 100 or 101; run as a plain user, the channel's DACL
-// refuses the query and the reader reports access_denied, not an empty log.
+// refuses the query and the reader reports access_denied, not an empty log. A machine without the
+// channel at all (Windows Server, which hosted CI runners use) skips: there is nothing to read.
 
 #include "platform/diagnostics/win32_diagnostics_log.hpp"
 
@@ -18,6 +19,11 @@ namespace {
 TEST(Win32DiagnosticsLogTest, ReadsEvents100And101OrReportsThatItMayNot) {
   const Win32DiagnosticsLog log;
   const Result<std::vector<std::string>> events = log.events();
+  if (!events && events.error().code == Errc::not_found) {
+    GTEST_SKIP() << "this Windows has no Diagnostics-Performance channel (Windows Server, as on a "
+                    "hosted CI runner): "
+                 << events.error().message;
+  }
   if (!events) {
     EXPECT_EQ(events.error().code, Errc::access_denied) << events.error().message;
     return;

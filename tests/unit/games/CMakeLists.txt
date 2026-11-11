@@ -6,6 +6,7 @@ myclean_add_test(games
     epic_test.cpp
     fullscreen_test.cpp
     library_roots_test.cpp
+    owner_games_test.cpp
     steam_test.cpp
   DEPENDS
     myclean::games

@@ -58,6 +58,7 @@
 #include "core/sched/schedule_repository.hpp"
 #include "core/space/downloads.hpp"
 #include "core/space/duplicates.hpp"
+#include "core/space/forgotten.hpp"
 #include "core/space/installers.hpp"
 #include "core/space/json.hpp"
 #include "core/space/photos.hpp"
@@ -1093,6 +1094,9 @@ Result<Json> CleaningService::analyze(const std::string& key, const std::stop_to
   if (key == "indexed_folders") {
     return analyze_indexed_folders(stop);
   }
+  if (key == "forgotten_files") {
+    return analyze_forgotten(stop);
+  }
   const std::optional<fs::path> downloads = owner_->downloads;
   if (!downloads) {
     return fail(Errc::not_found, "the owner's Downloads folder is unknown");
@@ -1224,6 +1228,31 @@ std::vector<space::ScanResult> CleaningService::scan_owner_folders(const std::st
     }
   }
   return scans;
+}
+
+Result<Json> CleaningService::analyze_forgotten(const std::stop_token& stop) {
+  Json roots_json;
+  const std::vector<space::ScanResult> scans = scan_owner_folders(stop, roots_json);
+  const WallTime now = sources_.clock->now();
+  std::vector<Candidate> found;
+  Json files = Json::array();
+  for (const space::ForgottenFile& file : space::forgotten_files(scans, now)) {
+    found.push_back(file_candidate(
+        file.path, file.size_on_disk,
+        "large file untouched for " + std::to_string(file.idle_days) + " days", now));
+    files.push_back(file);
+  }
+  if (Result<void> stored = store_candidates(*sources_.store, "space.forgotten_files", found);
+      !stored) {
+    return tl::unexpected(stored.error());
+  }
+  for (std::size_t index = 0; index < found.size(); ++index) {
+    files[index]["id"] = found[index].id;
+  }
+  return Json{{"roots", std::move(roots_json)},
+              {"min_size", space::default_forgotten_size.count()},
+              {"idle_days", space::default_forgotten_age.count()},
+              {"files", std::move(files)}};
 }
 
 Result<Json> CleaningService::analyze_duplicates(const std::stop_token& stop) {
@@ -1840,6 +1869,7 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
   for (const auto& [method, key] :
        {std::pair{ipc::space_old_downloads_method, "old_downloads"},
         std::pair{ipc::space_used_installers_method, "used_installers"},
+        std::pair{ipc::space_forgotten_files_method, "forgotten_files"},
         std::pair{ipc::space_owner_decisions_method, "owner_decisions"},
         std::pair{ipc::space_dev_drive_method, "dev_drive"},
         std::pair{ipc::space_vhdx_method, "vhdx"},

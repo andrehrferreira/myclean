@@ -1,4 +1,5 @@
-# Quality targets: check-core-includes (part of every build), lint, format-check and format.
+# Quality targets: check-core-includes (part of every build), lint, format-check and format, and
+# the forbidden-code test.
 # Included at the end of the root CMakeLists.txt, after every module registered its sources.
 
 # Prefer the clang tools bundled with the Visual Studio instance that provides the compiler, so
@@ -17,6 +18,13 @@ add_custom_target(check-core-includes ALL
           -P "${PROJECT_SOURCE_DIR}/cmake/scripts/check-core-includes.cmake"
   COMMENT "Checking that src/core includes no platform headers"
   VERBATIM)
+
+# NFR-SEC-2 and NFR-OPS-1: no kernel driver and no scheduled task anywhere in the code, data and
+# scripts. A test rather than part of every build: it reads every file of the tree.
+add_test(NAME ForbiddenCode.NoDriverAndNoScheduledTask
+  COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}" "-DWORK_DIR=${CMAKE_BINARY_DIR}"
+          -P "${PROJECT_SOURCE_DIR}/cmake/scripts/check-forbidden-test.cmake")
+set_tests_properties(ForbiddenCode.NoDriverAndNoScheduledTask PROPERTIES LABELS guard TIMEOUT 600)
 
 # A target that only reports a missing tool, so configure still works without clang tools.
 function(_myclean_missing_tool_target target tool)

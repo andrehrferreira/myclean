@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -13,7 +14,9 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <wil/resource.h>
 #include <windows.h>
+#include <winioctl.h>
 
 #include "core/model/action.hpp"
 #include "core/model/result.hpp"
@@ -222,6 +225,33 @@ TEST(Win32SystemSpace, ReadsShadowStorageOrNeedsAdministratorRights) {
   }
 }
 
+// Why no disk answered the seek-penalty query, asked directly; empty when one does (then
+// Win32SeekPenalty should have answered too).
+std::string why_no_disk_answers() {
+  std::string why;
+  for (std::uint32_t disk = 0; disk < 32; ++disk) {
+    const std::wstring device = LR"(\\.\PhysicalDrive)" + std::to_wstring(disk);
+    const wil::unique_hfile handle{::CreateFileW(
+        device.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr)};
+    if (!handle) {
+      continue;
+    }
+    STORAGE_PROPERTY_QUERY query{};
+    query.PropertyId = StorageDeviceSeekPenaltyProperty;
+    query.QueryType = PropertyStandardQuery;
+    DEVICE_SEEK_PENALTY_DESCRIPTOR descriptor{};
+    DWORD returned = 0;
+    if (::DeviceIoControl(handle.get(), IOCTL_STORAGE_QUERY_PROPERTY, &query, sizeof(query),
+                          &descriptor, sizeof(descriptor), &returned, nullptr) != FALSE &&
+        returned >= sizeof(descriptor)) {
+      return {};
+    }
+    why +=
+        std::format("PhysicalDrive{} refuses the query (Win32 error {}); ", disk, ::GetLastError());
+  }
+  return why.empty() ? "no physical disk can be opened" : why;
+}
+
 TEST(Win32SeekPenalty, AtLeastOneDiskAnswers) {
   const Win32SeekPenalty seek;
   int answered = 0;
@@ -229,6 +259,14 @@ TEST(Win32SeekPenalty, AtLeastOneDiskAnswers) {
     if (const std::optional<bool> penalty = seek.seek_penalty(disk)) {
       ++answered;
       std::cout << "disk " << disk << (*penalty ? " rotates\n" : " has no seek penalty\n");
+    }
+  }
+  if (answered == 0) {
+    // A virtual machine's disks (a hosted CI runner's) do not report a seek penalty. When a disk
+    // does answer the query asked directly, Win32SeekPenalty is wrong: that fails below.
+    const std::string why = why_no_disk_answers();
+    if (!why.empty()) {
+      GTEST_SKIP() << "no disk of this machine reports a seek penalty: " << why;
     }
   }
   EXPECT_GT(answered, 0);

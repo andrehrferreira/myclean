@@ -528,6 +528,36 @@ TEST_F(CleaningServiceTest, ManyDuplicatesStillFitOnePipeMessage) {
   EXPECT_LT(answer.dump().size(), ipc::max_payload_size);
 }
 
+// SPC-5: large files of the owner's folders that nobody wrote for half a year, as a report whose
+// rows the owner can send to the Recycle Bin.
+TEST_F(CleaningServiceTest, LargeForgottenFilesAreListedWithIdsTheOwnerCanAct) {
+  start();
+  work();
+  const path videos = L"C:\\Users\\owner\\Videos";
+  space::ListedEntry recent = space::testing::file("recent.mkv", 2ULL << 30U, 2);
+  recent.created = clock().now() - std::chrono::days{10};
+  recent.modified = recent.created;
+  reader().listings[videos] = {space::testing::file("holiday-2019.mkv", 3ULL << 30U, 1), recent,
+                               space::testing::file("small.mp4", 1ULL << 20U, 3)};
+  fs().add_file(videos / L"holiday-2019.mkv", 1_MiB);
+  EXPECT_EQ(call("space.forgotten_files", Json{{"refresh", true}}, false).at("state"), "scanning");
+  work_space();
+
+  const Json answer = call("space.forgotten_files", Json::object(), false);
+  ASSERT_EQ(answer.at("state"), "ready") << answer.dump();
+  EXPECT_EQ(answer.at("min_size"), 512LL << 20U);
+  EXPECT_EQ(answer.at("idle_days"), 180);
+  EXPECT_NE(std::ranges::find(answer.at("roots"), Json("C:\\Users\\owner\\Videos")),
+            answer.at("roots").end());
+  ASSERT_EQ(answer.at("files").size(), 1U);
+  const Json& file = answer.at("files")[0];
+  EXPECT_EQ(file.at("path"), "C:\\Users\\owner\\Videos\\holiday-2019.mkv");
+  EXPECT_EQ(file.at("size_on_disk"), 3LL << 30U);
+  EXPECT_GT(file.at("idle_days").get<std::int64_t>(), 180);
+  EXPECT_EQ(call("plans.recycle", Json{{"candidates", {{"ids", {file.at("id")}}}}}).at("state"),
+            "approved");
+}
+
 TEST_F(CleaningServiceTest, PhotoModeGroupsNearDuplicatesWhoseCopiesCanBeProposedOnly) {
   start();
   work();

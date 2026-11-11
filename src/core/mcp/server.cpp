@@ -238,6 +238,14 @@ const Json& tool_list() {
                        "installed already.") +
                std::string(space_note),
            object_schema({{"refresh", refresh_property()}})),
+      tool("find_forgotten_files",
+           std::string("Large files in the owner's Desktop, Documents, Downloads, Pictures, Videos "
+                       "and Music that nobody has written for a long time: at least 512 MiB on "
+                       "disk, created and modified more than 180 days ago, largest first, with "
+                       "size, dates and idle days. Cloud placeholders and links are left out. A "
+                       "report: only the owner decides what goes.") +
+               std::string(space_note),
+           object_schema({{"refresh", refresh_property()}})),
       tool("find_owner_decisions",
            std::string("What only the owner can decide: folders of the owner's profile on an SSD "
                        "that nothing has changed for six months (at least 1 GiB), with the HDD "
@@ -423,7 +431,8 @@ const Json& tool_list() {
            "registry views), Startup-folder files, scheduled tasks with a logon or boot trigger "
            "and auto-start services not published by Microsoft Windows, each with its source, "
            "command, signer and whether it is enabled (null for RunOnce, which cannot be "
-           "disabled). The 'id' values are what propose_disable_startup takes. Reads only.",
+           "disabled). The 'id' values are what propose_disable_startup and "
+           "propose_enable_startup take. Reads only.",
            object_schema()),
       tool("boot_times",
            "How long the latest boot and logon took as Windows measured them (Diagnostics-"
@@ -437,6 +446,21 @@ const Json& tool_list() {
           "Proposes disabling startup items the way Windows does (StartupApproved for Run and "
           "Startup-folder items, the task's Enabled flag, a service's start type set to Manual); "
           "nothing is deleted and each change is undone exactly. It only creates a plan in state "
+          "'awaiting_approval' and notifies the owner: nothing changes until the owner approves "
+          "it in the MyClean tray. Takes only the 'id' values of the latest list_startup answer.",
+          object_schema({{"item_ids",
+                          {{"type", "array"},
+                           {"items", {{"type", "integer"}}},
+                           {"minItems", 1},
+                           {"maxItems", 64},
+                           {"description", "Up to 64 'id' values from list_startup"}}}},
+                        Json::array({"item_ids"}))),
+      proposal_tool(
+          "propose_enable_startup",
+          "Proposes enabling startup items that are disabled, the way Windows does "
+          "(StartupApproved for Run and Startup-folder items, the task's Enabled flag, a "
+          "service's start type set back to Automatic); each change is undone exactly. It only "
+          "creates a plan in state "
           "'awaiting_approval' and notifies the owner: nothing changes until the owner approves "
           "it in the MyClean tray. Takes only the 'id' values of the latest list_startup answer.",
           object_schema({{"item_ids",
@@ -716,9 +740,20 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
   return std::nullopt;
 }
 
-// The service method and parameters of a backup or installed-app tool; nullopt for the others.
+// The service method and parameters of a backup, installed-app, report, large-forgotten-files or
+// startup-enabling tool; nullopt for the others.
 std::optional<ServiceCall> guard_call(std::string_view tool, const Json& arguments,
                                       const std::string& client) {
+  if (tool == "find_forgotten_files") {
+    return ServiceCall{.method = ipc::space_forgotten_files_method,
+                       .params = Json{{"refresh", arguments.value("refresh", false)}}};
+  }
+  if (tool == "propose_enable_startup") {
+    return ServiceCall{.method = ipc::plans_propose_startup_method,
+                       .params = Json{{"candidates", {{"ids", arguments.at("item_ids")}}},
+                                      {"enable", true},
+                                      {"client", client}}};
+  }
   if (tool == "check_backups") {
     return ServiceCall{.method = ipc::backups_check_method,
                        .params = Json{{"refresh", arguments.value("refresh", false)}}};
@@ -853,7 +888,8 @@ Json Server::initialize(const Json& params) {
        "(explain_process), disk health, alerts, copy/paste freezes, the largest files, old "
        "downloads, duplicates, used installers, startup items and MyClean's plans. No tool "
        "changes anything: nothing can close, suspend or reprioritize a process, and "
-       "propose_cleanup, propose_optimization, propose_disable_startup and propose_pause only "
+       "propose_cleanup, propose_optimization, propose_disable_startup, propose_enable_startup "
+       "and propose_pause only "
        "create plans "
        "that wait for the owner's approval in the "
        "MyClean tray; no tool approves or executes a plan. A process flagged "

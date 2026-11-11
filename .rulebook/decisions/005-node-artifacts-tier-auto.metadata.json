@@ -1,0 +1,9 @@
+{
+  "id": 5,
+  "slug": "node-artifacts-tier-auto",
+  "title": "Node build artifacts are deleted automatically (tier auto)",
+  "status": "accepted",
+  "date": "2026-11-01",
+  "relatedTasks": [],
+  "supersededBy": null
+}

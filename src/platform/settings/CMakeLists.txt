@@ -18,6 +18,7 @@ myclean_add_library(platform_settings
     win32_support.hpp
   DEPENDS
     myclean::placement
+    myclean::platform_fs
     WIL::WIL
     advapi32
     ole32

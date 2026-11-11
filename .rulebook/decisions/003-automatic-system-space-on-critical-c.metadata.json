@@ -1,0 +1,9 @@
+{
+  "id": 3,
+  "slug": "automatic-system-space-on-critical-c",
+  "title": "Automatic system-space changes when C: is critically low (PLC-2)",
+  "status": "accepted",
+  "date": "2026-11-01",
+  "relatedTasks": [],
+  "supersededBy": null
+}
