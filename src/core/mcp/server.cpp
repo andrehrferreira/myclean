@@ -21,6 +21,7 @@
 #include "core/ipc/json_rpc.hpp"
 #include "core/ipc/plans.hpp"
 #include "core/ipc/resident.hpp"
+#include "core/ipc/security.hpp"
 #include "core/ipc/telemetry.hpp"
 #include "core/mcp/client.hpp"
 #include "core/os/clock.hpp"
@@ -379,6 +380,41 @@ const Json& tool_list() {
                            {"maxItems", 64},
                            {"description", "Up to 64 'id' values from list_vhdx"}}}},
                         Json::array({"disk_ids"}))),
+      tool("scan_suspicious",
+           "The intruder scan: every persistence point (Run and RunOnce values, Startup-folder "
+           "files, logon and boot tasks, auto-start services, WMI event subscriptions, Image File "
+           "Execution Options debuggers, Winlogon Shell and Userinit, AppInit_DLLs), each with "
+           "where it is stored, what it runs, the file on disk, signer, trust signal, "
+           "knowledge-base entry and a status: 'default' (Windows' own value), 'ok', 'suspicious' "
+           "with its concrete reasons, or 'known_dangerous', which only Microsoft Defender's "
+           "detections or the owner's opt-in VirusTotal hash lookup can give ('verdict' names the "
+           "source). Also Defender's detection history. Call nothing dangerous or malicious "
+           "unless its status is known_dangerous; say 'suspicious because <reasons>' otherwise. "
+           "An item with a 'startup_item' can be proposed for disabling with "
+           "propose_disable_startup (by its id in list_startup); nothing is disabled without the "
+           "owner's approval in the MyClean tray. Reads only; changes nothing.",
+           object_schema()),
+      tool("list_browser_extensions",
+           "The extensions of every Chrome, Edge and Brave profile and every Firefox profile of "
+           "the owner: name, id, browser, profile, version, install time, whether enabled, and "
+           "the install origin (store, external, policy, unpacked). Extensions forced by a "
+           "policy or installed from outside the browser carry the flag 'probably not installed "
+           "by you'. Reads only; nothing can remove or disable an extension.",
+           object_schema()),
+      tool("list_network_processes",
+           "Processes that used the network over the last `hours`, from MyClean's per-minute "
+           "network history and the current TCP/UDP tables: image, signer and trust signal, "
+           "whether it is running and whether it owned a visible window (a windowless "
+           "background talker has false), bytes sent and received, first and last seen, the "
+           "minutes with traffic, each remote address with port and its reverse-DNS name (null "
+           "unless the owner enabled reverse DNS) and open connections, and listening ports. "
+           "Loopback traffic is left out. Reads only; nothing can close a connection or a "
+           "process.",
+           object_schema({{"hours",
+                           {{"type", "number"},
+                            {"exclusiveMinimum", 0},
+                            {"maximum", ipc::security_max_hours},
+                            {"description", "How far back from now, in hours (default 24)"}}}})),
       tool("list_startup",
            "Every program that starts automatically: Run and RunOnce registry values (both "
            "registry views), Startup-folder files, scheduled tasks with a logon or boot trigger "
@@ -536,6 +572,16 @@ struct ServiceCall {
 std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json& arguments,
                                               const std::string& client) {
   const Json refresh{{"refresh", arguments.value("refresh", false)}};
+  if (tool == "scan_suspicious") {
+    return ServiceCall{.method = ipc::security_scan_method, .params = Json::object()};
+  }
+  if (tool == "list_browser_extensions") {
+    return ServiceCall{.method = ipc::security_extensions_method, .params = Json::object()};
+  }
+  if (tool == "list_network_processes") {
+    return ServiceCall{.method = ipc::security_network_method,
+                       .params = Json{{"hours", arguments.value("hours", 24.0)}}};
+  }
   if (tool == "storage_top") {
     return ServiceCall{.method = ipc::space_top_method,
                        .params = Json{{"path", arguments.value("path", "C")},
@@ -737,7 +783,8 @@ Json Server::initialize(const Json& params) {
        "MyClean tray; no tool approves or executes a plan. A process flagged "
        "'unrecognized' is not in MyClean's knowledge base and has a stated reason (unsigned, "
        "invalid signature, signer not listed, user-writable path); describe it with those "
-       "reasons and never as dangerous or malicious."}};
+       "reasons and never as dangerous or malicious. Only an item scan_suspicious marks "
+       "known_dangerous (a Microsoft Defender or VirusTotal verdict) may be called dangerous."}};
 }
 
 tl::expected<Json, std::string> Server::call_tool(const Json& params) const {

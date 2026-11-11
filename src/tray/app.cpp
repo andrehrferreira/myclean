@@ -1,5 +1,7 @@
 #include "tray/app.hpp"
 
+#include <algorithm>
+#include <bit>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -12,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include <dwmapi.h>
 #include <spdlog/spdlog.h>
 #include <wil/resource.h>
 #include <windows.h>
@@ -63,6 +66,34 @@ std::optional<tray_model::UserStateReading> read_user_state() {
   }
   return tray_model::UserStateReading{.state = std::string(games::to_string(*state)),
                                       .foreground_pid = static_cast<std::uint32_t>(pid)};
+}
+
+// The processes that own a visible top-level window of the owner's desktop, for the intruder
+// scan's "no visible window": shown, not cloaked (a suspended Store app's frame), owned by no
+// other window and no tool window, as the taskbar and Alt+Tab list them. Reads only.
+std::optional<std::vector<std::uint32_t>> read_visible_windows() {
+  std::vector<std::uint32_t> pids;
+  const auto add = [](HWND window, LPARAM context) -> BOOL {
+    auto& found = *std::bit_cast<std::vector<std::uint32_t>*>(context);
+    DWORD cloaked = 0;
+    const auto style = static_cast<DWORD>(::GetWindowLongPtrW(window, GWL_EXSTYLE));
+    if (::IsWindowVisible(window) == FALSE || ::GetWindow(window, GW_OWNER) != nullptr ||
+        (style & WS_EX_TOOLWINDOW) != 0 ||
+        (SUCCEEDED(::DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+         cloaked != 0)) {
+      return TRUE;
+    }
+    DWORD pid = 0;
+    ::GetWindowThreadProcessId(window, &pid);
+    if (pid != 0 && std::ranges::find(found, pid) == found.end()) {
+      found.push_back(pid);
+    }
+    return TRUE;
+  };
+  if (::EnumWindows(add, std::bit_cast<LPARAM>(&pids)) == FALSE) {
+    return std::nullopt;
+  }
+  return pids;
 }
 
 class App {
@@ -143,7 +174,7 @@ Result<void> App::start() {
       [this] { poll_->wake(); });
   poll_ = std::make_unique<PollThread>(
       link_, clock_, shared_, [window] { ::PostMessageW(window, update_message, 0, 0); },
-      &incidents_, tasks_.get(), &read_user_state);
+      &incidents_, tasks_.get(), &read_user_state, &read_visible_windows);
   // The freeze watchdog: raw input and a clipboard listener on a message-only window, no hook.
   // Without it the tray still runs; the Freezes view says why it is missing.
   Result<std::unique_ptr<platform::InputWatchdog>> watchdog =

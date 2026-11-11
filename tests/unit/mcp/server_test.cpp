@@ -188,6 +188,9 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
                                              "propose_optimization",
                                              "propose_index_exclusion",
                                              "propose_compact_vhdx",
+                                             "scan_suspicious",
+                                             "list_browser_extensions",
+                                             "list_network_processes",
                                              "list_startup",
                                              "boot_times",
                                              "propose_disable_startup",
@@ -206,6 +209,33 @@ TEST_F(ServerTest, ListsReadToolsAndProposalToolsEachWithAnInputSchema) {
   for (const Json& tool : tools) {
     const std::string description = tool.at("description").get<std::string>();
     EXPECT_EQ(description.find("null until"), std::string::npos) << description;
+  }
+}
+
+// Security spec, "Intruder Scan Changes Nothing": the intruder-scan tools only read.
+TEST_F(ServerTest, IntruderScanToolsCallTheirReadMethods) {
+  static_cast<void>(text(call_tool("scan_suspicious"), false));
+  static_cast<void>(text(call_tool("list_browser_extensions"), false));
+  static_cast<void>(text(call_tool("list_network_processes"), false));
+  static_cast<void>(text(call_tool("list_network_processes", {{"hours", 2.5}}), false));
+  ASSERT_EQ(calls().size(), 4U);
+  EXPECT_EQ(calls()[0].method, "security.scan");
+  EXPECT_EQ(calls()[0].params, Json::object());
+  EXPECT_EQ(calls()[1].method, "security.extensions");
+  EXPECT_EQ(calls()[2].method, "security.network");
+  EXPECT_EQ(calls()[2].params, (Json{{"hours", 24.0}}));
+  EXPECT_EQ(calls()[3].params, (Json{{"hours", 2.5}}));
+  EXPECT_NE(text(call_tool("list_network_processes", {{"hours", 0}}), true).find("out of range"),
+            std::string::npos);
+  EXPECT_NE(text(call_tool("scan_suspicious", {{"item", 1}}), true).find("unknown argument"),
+            std::string::npos);
+  const Json listed = Server::tools();
+  for (const Json& tool : listed.at("tools")) {
+    const std::string name = tool.at("name").get<std::string>();
+    if (name == "scan_suspicious" || name == "list_browser_extensions" ||
+        name == "list_network_processes") {
+      EXPECT_TRUE(tool.at("annotations").at("readOnlyHint").get<bool>()) << name;
+    }
   }
 }
 
@@ -478,7 +508,7 @@ TEST_F(ServerTest, ServeAnswersOneLinePerRequest) {
   ASSERT_EQ(responses.size(), 2U);
   EXPECT_EQ(responses[0].at("id"), 1);
   EXPECT_EQ(responses[1].at("id"), 2);
-  EXPECT_EQ(responses[1].at("result").at("tools").size(), 31U);
+  EXPECT_EQ(responses[1].at("result").at("tools").size(), 34U);
 }
 
 }  // namespace

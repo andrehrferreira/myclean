@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <set>
@@ -18,7 +19,9 @@
 #include "core/ipc/disk_health.hpp"
 #include "core/ipc/governor.hpp"
 #include "core/ipc/input.hpp"
+#include "core/ipc/json_rpc.hpp"
 #include "core/ipc/plans.hpp"
+#include "core/ipc/security.hpp"
 #include "core/ipc/telemetry.hpp"
 #include "core/model/result.hpp"
 #include "core/model/series.hpp"
@@ -113,6 +116,7 @@ PollResult Poller::poll(WallTime now, bool dashboard_open, const std::vector<Req
   }
   fetch_rest(now, dashboard_open, result);
   fetch_governor(result);
+  report_windows(now);
   fetch_cleanup(now, dashboard_open, refresh_plans, result);
   run_tasks(result);
   // The service may have gone away after the first call.
@@ -297,6 +301,27 @@ void Poller::fetch_governor(PollResult& result) {
   }
   result.governor =
       fetch(*link_, ipc::governor_status_method, Json::object(), &parse_governor_status);
+}
+
+void Poller::report_windows(WallTime now) {
+  if (!windows_ || (next_windows_ && now < *next_windows_)) {
+    return;
+  }
+  next_windows_ = now + windows_interval;
+  const std::optional<std::vector<std::uint32_t>> pids = windows_();
+  if (!pids) {
+    return;
+  }
+  // A record holds at most max_record_elements ids: as many calls as needed.
+  for (std::size_t first = 0; first < pids->size(); first += ipc::max_record_elements) {
+    const std::size_t last = std::min(pids->size(), first + ipc::max_record_elements);
+    Json chunk = Json::array();
+    for (std::size_t index = first; index < last; ++index) {
+      chunk.push_back((*pids)[index]);
+    }
+    static_cast<void>(
+        link_->call(ipc::security_windows_method, Json{{"windows", {{"pids", std::move(chunk)}}}}));
+  }
 }
 
 void Poller::ask_again(bool dashboard_open, const std::vector<Request>& requests,

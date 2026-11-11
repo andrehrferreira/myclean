@@ -14,6 +14,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/ipc/security.hpp"
 #include "core/model/result.hpp"
 #include "core/model/series.hpp"
 #include "core/model/units.hpp"
@@ -188,6 +189,10 @@ struct PollResult {
 // read this second.
 using UserStateSource = std::function<std::optional<UserStateReading>()>;
 
+// The processes that own a visible top-level window in the owner's session, for security.windows;
+// nullopt when they cannot be read now.
+using WindowSource = std::function<std::optional<std::vector<std::uint32_t>>()>;
+
 // Polls the service, once per second, for what the tray shows.
 //
 // Every poll: metrics.latest (tooltip, live charts; they keep filling while the dashboard is
@@ -207,8 +212,9 @@ using UserStateSource = std::function<std::optional<UserStateReading>()>;
 // every poll, when a task runner is set, the finished task's report is delivered and, while the
 // runner is idle, the next task is taken. The governor: every poll, governor.user_state with the
 // owner's session state when a source is set, then governor.status (its notifications become
-// toasts); the owner's choices, pause and game-mode override are sent before it. Not thread-safe:
-// one poll thread owns it.
+// toasts); the owner's choices, pause and game-mode override are sent before it. The intruder
+// scan: every windows_interval, when a window source is set, security.windows with the processes
+// that own a visible window. Not thread-safe: one poll thread owns it.
 class Poller {
  public:
   static constexpr int top_trees = 25;
@@ -218,17 +224,20 @@ class Poller {
   // How far back the Alerts section lists alerts.
   static constexpr std::chrono::days recent_alerts{30};
   static constexpr std::chrono::seconds plans_interval{10};
+  static constexpr std::chrono::seconds windows_interval{ipc::security_windows_seconds};
 
   // `window` is how far back the live charts reach: nothing older is fetched. `incidents`, when
   // set, is forwarded at every poll; `tasks`, when set, runs the user tasks. Both must outlive
-  // the poller. `user_state`, when set, is read and sent at every poll.
+  // the poller. `user_state`, when set, is read and sent at every poll; `windows`, when set,
+  // every windows_interval.
   Poller(IServiceLink& link, std::chrono::seconds window, IncidentQueue* incidents = nullptr,
-         ITaskRunner* tasks = nullptr, UserStateSource user_state = {})
+         ITaskRunner* tasks = nullptr, UserStateSource user_state = {}, WindowSource windows = {})
       : link_(&link),
         window_(window),
         incidents_(incidents),
         tasks_(tasks),
-        user_state_(std::move(user_state)) {}
+        user_state_(std::move(user_state)),
+        windows_(std::move(windows)) {}
 
   [[nodiscard]] PollResult poll(WallTime now, bool dashboard_open,
                                 const std::vector<Request>& requests = {});
@@ -253,6 +262,7 @@ class Poller {
   // Sends the governor's requests; other requests are left alone.
   void handle_governor(const Request& request, PollResult& result);
   void fetch_governor(PollResult& result);
+  void report_windows(WallTime now);
   [[nodiscard]] RangeHistory fetch_range(WallTime now);
 
   IServiceLink* link_;
@@ -260,6 +270,8 @@ class Poller {
   IncidentQueue* incidents_;
   ITaskRunner* tasks_;
   UserStateSource user_state_;
+  WindowSource windows_;
+  std::optional<WallTime> next_windows_;
   bool connected_ = false;  // the previous poll reached the service
   bool dashboard_open_ = false;
   std::optional<WallTime> next_slow_;

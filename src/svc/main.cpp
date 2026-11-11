@@ -56,6 +56,7 @@
 #include "platform/scan/directory_reader.hpp"
 #include "platform/scan/file_content.hpp"
 #include "platform/scan/installer_inspector.hpp"
+#include "platform/security/win32_security.hpp"
 #include "platform/service/scm.hpp"
 #include "platform/settings/process_runner.hpp"
 #include "platform/settings/seek_penalty.hpp"
@@ -75,6 +76,7 @@
 #include "svc/input_component.hpp"
 #include "svc/owner_session.hpp"
 #include "svc/resident_component.hpp"
+#include "svc/security_component.hpp"
 #include "svc/startup_component.hpp"
 #include "svc/telemetry_component.hpp"
 #include "svc/trust_component.hpp"
@@ -288,6 +290,38 @@ Result<std::vector<myclean::resident::ProcessTraffic>> network_traffic(myclean::
   return traffic;
 }
 
+// The intruder scan: the owner's persistence points and browser extensions, Defender, the opt-in
+// VirusTotal and reverse-DNS lookups, the network history and the current TCP/UDP tables.
+std::unique_ptr<svc::SecurityComponent> make_security(svc::TrustComponent& trust,
+                                                      const svc::TelemetryComponent& telemetry) {
+  namespace platform = myclean::platform;
+  namespace security = myclean::security;
+  return std::make_unique<svc::SecurityComponent>(svc::SecuritySources{
+      .startup = [](std::string_view owner) -> std::unique_ptr<myclean::startup::IStartupSystem> {
+        return std::make_unique<platform::Win32StartupSystem>(std::string(owner));
+      },
+      .persistence = [](std::string_view owner) -> std::unique_ptr<security::IPersistenceSystem> {
+        return std::make_unique<platform::Win32PersistenceSystem>(std::string(owner));
+      },
+      .browsers = [](std::string_view owner) -> std::unique_ptr<security::IBrowserProfiles> {
+        return std::make_unique<platform::Win32BrowserProfiles>(std::string(owner));
+      },
+      .paths = [](std::string_view owner) -> std::unique_ptr<security::IPathResolver> {
+        return std::make_unique<platform::Win32PathResolver>(std::string(owner));
+      },
+      .defender = std::make_unique<platform::Win32Defender>(),
+      .stamps = std::make_unique<platform::WinImageInspector>(),
+      .hasher = std::make_unique<platform::Win32ContentHasher>(),
+      .virustotal = std::make_unique<platform::Win32HashLookup>(),
+      .resolver = std::make_unique<platform::Win32Resolver>(),
+      .connections = std::make_unique<platform::etw::IpHelperConnectionTable>(),
+      .settings = platform::read_security_settings,
+      .image_trust = [&trust](const std::filesystem::path& image) { return trust.image(image); },
+      .process_trust = [&trust](std::uint32_t pid,
+                                myclean::WallTime created) { return trust.process(pid, created); },
+      .view = [&telemetry] { return telemetry.processes(); }});
+}
+
 // Every component the service runs, in start order: a component starts after those it uses and
 // stops before them. Collectors are registered here.
 std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOptions& options) {
@@ -318,6 +352,7 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
                         .connections = std::make_unique<platform::etw::IpHelperConnectionTable>(),
                         .processes = std::make_unique<platform::NtProcessTable>()},
       trust.get());
+  auto security = make_security(*trust, *telemetry);
 
   auto governor = make_governor(options, files, *telemetry, *events);
   // Guided freeze elimination suspends a suspect only where the governor protects nothing.
@@ -366,6 +401,7 @@ std::vector<std::unique_ptr<svc::IComponent>> make_components(const svc::HostOpt
   components.push_back(std::make_unique<svc::InputComponent>());
   components.push_back(std::move(startup));
   components.push_back(std::move(resident));
+  components.push_back(std::move(security));
   components.push_back(std::move(elimination));
   components.push_back(std::move(cleaning));
   components.push_back(std::move(backups));

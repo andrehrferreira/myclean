@@ -24,6 +24,7 @@
 #include "cli/map_command.hpp"
 #include "cli/packs_command.hpp"
 #include "cli/scan_all_command.hpp"
+#include "cli/security_command.hpp"
 #include "cli/text.hpp"
 #include "core/ipc/alerts.hpp"
 #include "core/ipc/disk_health.hpp"
@@ -307,6 +308,12 @@ std::string_view usage() {
          "  packs list | validate [<path>] [--data <dir>]\n"
          "                              the knowledge packs and whether they apply here; or\n"
          "                              validate packs and run their fixtures (no service)\n"
+         "  security scan | extensions | network [--hours <n>]\n"
+         "                              the intruder scan: persistence points with their\n"
+         "                              verdict or reasons, browser extensions with their\n"
+         "                              origin, processes that used the network\n"
+         "  security defender-scan <id> Microsoft Defender scans the file of scan item <id>;\n"
+         "                              it reports only and removes nothing\n"
          "  mcp                         MCP server on stdin/stdout with read-only tools\n"
          "--json writes one JSON document to stdout; --pipe <name> talks to \\\\.\\pipe\\<name>\n"
          "instead of the service's pipe. Nothing here changes the system.\n";
@@ -364,6 +371,11 @@ int run(std::span<const std::string> args, std::istream& in, std::ostream& out, 
       return exit_usage;
     }
     pipe = LR"(\\.\pipe\)" + std::wstring(name->begin(), name->end());
+  }
+  if (line->words.front() == "security" && line->words.size() >= 2) {
+    return security_command(std::span<const std::string>(line->words).subspan(1),
+                            find_option(*line, "hours"), line->json,
+                            pipe_caller(std::move(pipe), timeout), out, err);
   }
   return dispatch(*line, pipe_caller(std::move(pipe), timeout), clock, in, out, err);
 }

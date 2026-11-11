@@ -283,7 +283,7 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   (`src/core/ipc`). Methods are typed and registered by the service
   components; the exact JSON of each is documented in the contract headers
   of `src/core/ipc/` (`status.hpp`, `telemetry.hpp`, `disk_health.hpp`,
-  `alerts.hpp`, `input.hpp`, `plans.hpp`, `governor.hpp`, `resident.hpp`).
+  `alerts.hpp`, `input.hpp`, `plans.hpp`, `governor.hpp`, `resident.hpp`, `security.hpp`).
   Phase 1, the governor and the resident processes:
 
   | Method | Parameters | Component |
@@ -312,6 +312,11 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   | `governor.user_state` (tray only) | state, foreground_pid | governor |
   | `resident.costs` | none | resident |
   | `resident.trend` | key | resident |
+  | `security.scan` | none | security |
+  | `security.extensions` | none | security |
+  | `security.network` | hours | security |
+  | `security.defender_scan` | item | security |
+  | `security.windows` (tray only) | windows (record) | security |
 
   Tray-only methods are checked via the client process image and session. Later phases add
   `scan.run` and so on (the cleaning methods are in `plans.hpp`).
@@ -331,14 +336,16 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   members rejected), both checked before the handler runs. Its strings are
   stored and displayed as data only and are never passed to a file,
   process, registry or any other OS API. A new record parameter needs its
-  own schema and the same guarantee.
+  own schema and the same guarantee: the `windows` of `security.windows`
+  holds only process ids (`core/security/network.hpp`).
 - **MCP:** `myclean mcp` runs a stdio server. Its read tools map to read
   methods: `health_snapshot` (qualifying trees with trust and the
   unrecognized ones, system signals), `metrics_latest`, `metrics_history`,
   `top_processes`, `list_volumes`, `explain_process`, `disk_health`,
   `list_alerts`, `freeze_summary`, `freeze_elimination`, the storage tools, `dev_drive_advice`, `list_vhdx`, `list_plans`,
   `get_plan`, `list_startup`, `boot_times`, `background_costs`,
-  `memory_trend` and `find_indexed_build_folders`. Proposal tools (`propose_cleanup`,
+  `memory_trend`, `find_indexed_build_folders` and the intruder scan's `scan_suspicious`,
+  `list_browser_extensions` and `list_network_processes`. Proposal tools (`propose_cleanup`,
   `propose_optimization`, `propose_disable_startup`, `propose_index_exclusion`,
   `propose_compact_vhdx`, `propose_pause`;
   `propose_uninstall`
@@ -379,6 +386,28 @@ the foreground app, as `governing::Governor::protects` judges), each process rec
 owner's early end, at the clean stop and by a service restarted after a crash. Each pause records
 its baseline (the 7 days before it, earlier pauses left out) and the incidents and hours during
 it, and the plan's verification compares the two rates.
+
+**Intruder scan (E1–E3, `core/security`, `svc::SecurityComponent`):** `security.scan` lists every
+persistence point: the startup items of `core/startup` plus WMI event subscriptions
+(`root\subscription`), IFEO `Debugger` values, Winlogon `Shell`/`Userinit` (HKLM and the owner's
+hive) and `AppInit_DLLs`, each with its location, command, the file it runs (resolved for the
+owner) and that file's trust signal. A verdict ("known dangerous") comes only from Microsoft
+Defender (its `MSFT_MpThreatDetection` history, read at most every 5 minutes, or an
+`MpCmdRun -Scan -ScanType 3 -File <file> -DisableRemediation` scan the owner starts for one item
+of the latest answer, `security.defender_scan`) or from the opt-in VirusTotal lookup; everything
+else is "suspicious because <reasons>", and Windows' defaults are "default". VirusTotal and
+reverse DNS are off unless the owner turns them on in `%ProgramData%\MyClean\security.toml`
+(accepted only when administrators alone can write to it); VirusTotal also needs the owner's API
+key and receives only the SHA-256 of a suspicious file, at most one lookup per 15 s, results kept 7
+days (`file_verdict`). `security.extensions` reads the owner's Chrome, Edge, Brave and Firefox
+profiles with each extension's origin (store, external, policy, unpacked; policy and external are
+"probably not installed by you"). `security.network` combines `net_minute` over the requested
+hours with the current TCP/UDP tables, the trust signal of each process and whether it owned a
+visible window, which the tray reports every minute (`security.windows`, kept in `visible_window`).
+Reverse-DNS names are resolved on the component's worker, a few per second, bounded and cached.
+Nothing here closes, removes or disables anything: a persistence point that is a startup item
+names it (`startup_item`), and disabling it is a `plans.propose_startup` plan that waits for the
+owner's approval in the tray.
 
 ## 9. Security
 

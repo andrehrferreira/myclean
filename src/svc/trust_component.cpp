@@ -126,6 +126,10 @@ Result<trust::TrustSignal> TrustComponent::process(std::uint32_t pid, WallTime c
   });
 }
 
+Result<trust::TrustSignal> TrustComponent::image(const std::filesystem::path& image) {
+  return evaluator_->evaluate(image, kb_);
+}
+
 std::optional<std::string> TrustComponent::signer(std::string_view image) {
   const std::filesystem::path path(std::u8string(image.begin(), image.end()));
   if (!path.is_absolute()) {

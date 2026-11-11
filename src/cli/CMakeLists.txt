@@ -10,6 +10,8 @@ myclean_add_library(cli
     packs_command.hpp
     scan_all_command.cpp
     scan_all_command.hpp
+    security_command.cpp
+    security_command.hpp
     text.cpp
     text.hpp
   DEPENDS

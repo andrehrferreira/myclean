@@ -67,6 +67,9 @@ class TrustComponent final : public IComponent, public events::ISignerLookup {
   // The trust signal of process `pid` created at `created`. Fails when its image cannot be
   // located or read. Thread-safe, after start().
   [[nodiscard]] Result<trust::TrustSignal> process(std::uint32_t pid, WallTime created);
+  // The trust signal of the image file `image` (a persistence target). Fails when it cannot be
+  // read. Thread-safe, after start().
+  [[nodiscard]] Result<trust::TrustSignal> image(const std::filesystem::path& image);
 
   // events::ISignerLookup. Thread-safe; never blocks on a signature check.
   [[nodiscard]] std::optional<std::string> signer(std::string_view image) override;

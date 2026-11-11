@@ -112,14 +112,16 @@ src/core/resident/      resident processes: per-program use from the process tab
                         resident_hour), the 30-day cost report and the memory-leak detector
 src/core/user_tasks/    the user-scope plans the tray runs under the owner's token: native
                         commands, user-profile cleanup handlers, relocations; their reports
+src/core/security/      the intruder scan: persistence points, browser extensions and their origin,
+                        network talkers over time, reverse DNS, Defender and VirusTotal verdicts
 src/platform/<module>/  Win32 implementations of src/core interfaces (proc, perf, disk,
                         disk_health, etw, trust, input, ipc, fs, service, scan, clean, git,
                         cleanup, settings, ntfs, compress, defrag, packs, jobs, games, image,
-                        indexer, devdrive, vhdx)
+                        indexer, devdrive, vhdx, security)
 src/svc/                myclean-svc: host, Service and its components (see below)
 src/tray/               myclean-tray: tray icon, toasts, dashboard (approval inbox, Space),
                         input watchdog, the worker that runs user tasks
-src/cli/                myclean: read-only CLI, `map`, `scan-all`, `packs` and `myclean mcp`
+src/cli/                myclean: read-only CLI, `map`, `scan-all`, `packs`, `security` and `myclean mcp`
 tests/fakes/            in-memory fakes of the src/core/os interfaces (myclean::fakes)
 tests/unit/<module>/    GoogleTest suite of one module
 cmake/                  helper functions, lint/format targets, vcpkg toolchain
@@ -276,6 +278,7 @@ started in this order (stopped in reverse), so that each starts after those it u
 | `input` | `input_incident` table for the tray's watchdog | `input.*` |
 | `startup` | measures the first 2 minutes of each owner logon (`logon_impact`) and, every 10 min, records the boots Windows measured from the Diagnostics-Performance log (`boot_time`) | (read by `startup.*`) |
 | `resident` | every second hands the newest process table to `resident::Tracker`: per program (the lower-case image of its trees' root) and minute, CPU time, private bytes, RAM, disk I/O and the network bytes of `net_minute`; 5-minute private bytes in `resident_fine` (2 days), hourly totals in `resident_hour` (35 days); at each closed 5-minute bucket the leak readings go to `alerts` (rule `process.memory-leak`). Reads only: it cannot act on a process | `resident.*` |
+| `security` | the intruder scan (`core/security`): persistence points with Defender's and the opt-in VirusTotal verdicts, browser extensions with their origin, network talkers over time from `net_minute` and the current TCP/UDP tables; the tray's visible-window reports (`visible_window`), stored verdicts (`file_verdict`); its worker resolves reverse-DNS names and makes VirusTotal lookups only when `%ProgramData%\MyClean\security.toml` turns them on. Reads only: a Defender file scan runs with `-DisableRemediation` | `security.*` |
 | `elimination` | guided freeze elimination (`core/elimination`): the pauses the cleaning executor starts for approved `PauseSuspect` plans, ticked every 5 s (period end, the spans of a guided pause), suspend pauses resumed as recorded at the start after a crash and at the stop; suspends only processes `governing::Governor::protects` leaves alone | `input.pauses`, `input.end_pause` |
 | `cleaning` | rule scans (the clean cases of the knowledge packs that apply, reloaded at every scan) and plans by tier; runs approved service-scope plans and, after every scan, its auto-tier plan; auto run hourly (catch-up, waits while the system disk is under 10 % idle) and hourly quarantine purge (runs past 7 days, and at once every run on a volume under 10 % free) on the in-app scheduler; user tasks for the tray; space analyses, including the build-output and cache folders Windows Search indexes (`space.indexed_folders`, with `plans.propose_index_exclusion`); the startup items, their impact and the boot and logon times | `cleaning.*`, `plans.*`, `user_tasks.*`, `quarantine.*`, `space.*`, `startup.*` |
 | `backup` | the backup check (`core/backup`) at its start, once a day and on request: every Windows backup source (File History, system images, restore points, shadow copies, OneDrive folder backup), installed backup tools, the artifacts on the drives labelled as backup drives, the last-backup age (to `alerts`, rule `backup.age`), the recommendation when no backup exists and the git repositories of `data/workspaces.toml` with no remote, unpushed or uncommitted work (git as the owner, local refs only). Reads only: it sets nothing up | `backups.check` |

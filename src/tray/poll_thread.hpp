@@ -31,10 +31,12 @@ class PollThread {
   // Starts polling at once. `link`, `clock`, `shared`, `incidents` and `tasks` (when set) must
   // outlive the thread. `on_update` runs on the poll thread after each result is applied (the
   // tray posts itself a message). `user_state`, when set, is read on the poll thread at every
-  // poll for governor.user_state.
+  // poll for governor.user_state; `windows`, when set, every Poller::windows_interval for
+  // security.windows.
   PollThread(tray_model::IServiceLink& link, const os::IClock& clock, SharedModel& shared,
              std::function<void()> on_update, tray_model::IncidentQueue* incidents = nullptr,
-             tray_model::ITaskRunner* tasks = nullptr, tray_model::UserStateSource user_state = {});
+             tray_model::ITaskRunner* tasks = nullptr, tray_model::UserStateSource user_state = {},
+             tray_model::WindowSource windows = {});
   PollThread(const PollThread&) = delete;
   PollThread& operator=(const PollThread&) = delete;
   PollThread(PollThread&&) = delete;

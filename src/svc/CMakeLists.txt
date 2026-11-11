@@ -25,6 +25,8 @@ myclean_add_library(svc
     owner_session.hpp
     resident_component.cpp
     resident_component.hpp
+    security_component.cpp
+    security_component.hpp
     service.cpp
     service.hpp
     startup_component.cpp
@@ -60,6 +62,7 @@ myclean_add_library(svc
     myclean::platform_vhdx
     myclean::resident
     myclean::rules
+    myclean::security
     myclean::startup
     myclean::store
     myclean::telemetry
@@ -74,7 +77,8 @@ target_link_libraries(myclean-svc PRIVATE
   myclean::svc myclean::platform_cleanup myclean::platform_devdrive myclean::platform_diagnostics
   myclean::platform_disk myclean::platform_disk_health myclean::platform_etw myclean::platform_games
   myclean::platform_git myclean::platform_image myclean::platform_jobs myclean::platform_packs
-  myclean::platform_perf myclean::platform_proc myclean::platform_settings myclean::platform_trust)
+  myclean::platform_perf myclean::platform_proc myclean::platform_security myclean::platform_settings
+  myclean::platform_trust)
 if(MYCLEAN_ASAN)
   add_custom_command(TARGET myclean-svc POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${MYCLEAN_ASAN_RUNTIME}" "$<TARGET_FILE_DIR:myclean-svc>"

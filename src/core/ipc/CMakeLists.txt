@@ -14,6 +14,7 @@ myclean_add_library(ipc
     plans.cpp
     plans.hpp
     resident.hpp
+    security.hpp
     status.cpp
     status.hpp
     telemetry.cpp
