@@ -28,7 +28,8 @@ ctest --preset debug -R "AcceptanceTest.Prompt3"    # one prompt
 knowledge packs), telemetry (its pipeline polled by the test), security, cleaning (space, startup,
 apps, plans) and backup. The MCP server reaches that dispatcher as any client but the tray does;
 the tests make the owner's clicks (approve, undo) as the tray caller. Nothing touches the real
-PC: no file, registry value, process, Defender scan or network call.
+PC: no file, registry value, process, Defender scan or network call. The monthly report component
+starts last, as in the service, and writes its reports to the test's temporary folder.
 
 | Area | What the machine holds (2026-10-31 12:00 UTC) |
 |---|---|
@@ -49,6 +50,7 @@ PC: no file, registry value, process, Defender scan or network call.
 | 4 | `list_installed_apps` (`unused_days` 180), `propose_uninstall` | Only the apps unused for 180 days or never used; each has last use with its source (or "no usage recorded" with no source and no date), a description ("unknown" when the knowledge base does not know it) and a verdict with its reason; the uninstall waits and no tray task exists before approval |
 | 5 | `scan_suspicious`, `list_browser_extensions`, `list_network_processes` | Every persistence point has a status and a summary; only the Defender detection is `known_dangerous`, with its verdict source; every other item has no verdict and no "dangerous" word, suspicious ones their reasons; extensions with origin and the "probably not installed by you" flag; network talkers with trust, listeners and the 6 hours of background traffic; no startup change, Defender scan or VirusTotal lookup |
 | 6 | `check_backups` | All seven sources checked; restore points listed but not counted; "no backup exists" with a recommendation naming the healthy drives L: and K:; the repositories without a remote or with unpushed or uncommitted work; once File History copies to K:, the last backup's source, location and age (9 days) |
+| 7 | `get_report`, `compare_snapshots` | October's snapshot makes the first report (nothing to compare). A startup item (Teams), a service (BackupAgent) and a listening port (9000) are then added; on 2026-11-01 the in-app schedule runs nothing at 08:59 and makes November's report at 09:00. It is compared with October and lists exactly those three additions (nothing removed, no other set changed), in the diff and in its Markdown, with its Markdown and HTML files written; `compare_snapshots` gives the same diff and names a missing month; a later poll that month makes no second report |
 
 ### The audit-log check
 

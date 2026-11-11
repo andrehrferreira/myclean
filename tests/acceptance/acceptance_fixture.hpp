@@ -36,6 +36,7 @@
 #include "core/model/units.hpp"
 #include "core/packs/loader.hpp"
 #include "core/placement/drives.hpp"
+#include "core/report/repository.hpp"
 #include "core/resident/history.hpp"
 #include "core/security/extensions.hpp"
 #include "core/security/network.hpp"
@@ -57,6 +58,7 @@
 #include "svc/backup_component.hpp"
 #include "svc/component.hpp"
 #include "svc/phase1_fakes.hpp"
+#include "svc/report_component.hpp"
 #include "svc/security_component.hpp"
 #include "svc/telemetry_component.hpp"
 #include "svc/trust_component.hpp"
@@ -85,6 +87,7 @@
 //              listening on 8080
 //   backups    restore points only (no backup), K: "Backup 1" and L: "Backup 2" healthy HDDs,
 //              repositories F:\app (no remote), F:\lib (unpushed and uncommitted), F:\ok
+//   reports    no snapshot yet; the monthly report's scheduler is polled by the test
 namespace myclean::acceptance {
 
 using Json = nlohmann::json;
@@ -108,6 +111,9 @@ inline const std::filesystem::path onedrive =
     LR"(C:\Program Files\Microsoft OneDrive\OneDrive.exe)";
 inline const std::filesystem::path armoury =
     LR"(C:\Program Files\ASUS\ArmouryCrate\ArmouryCrate.Service.exe)";
+// Programs that start automatically only once the prompt-7 test installs them.
+inline const std::filesystem::path teams = LR"(C:\Program Files\Teams\ms-teams.exe)";
+inline const std::filesystem::path backup_agent = LR"(C:\Program Files\Backup Co\agent-svc.exe)";
 
 inline std::string quoted(const std::filesystem::path& path) {
   return '"' + path.string() + '"';
@@ -296,7 +302,7 @@ class FakePaths final : public security::IPathResolver {
       std::string_view target) const override {
     const std::filesystem::path path{target};
     for (const std::filesystem::path& known :
-         {discord, steam, updater, agent, spotify, onedrive, armoury}) {
+         {discord, steam, updater, agent, spotify, onedrive, armoury, teams, backup_agent}) {
       if (path == known) {
         return known;
       }
@@ -451,10 +457,14 @@ class AcceptanceTest : public ::testing::Test {
     start_security();
     start_cleaning();
     start_backup();
+    start_report();
     initialize_mcp();
   }
 
   void TearDown() override {
+    if (report_) {
+      report_->stop();
+    }
     if (backup_) {
       backup_->stop();
     }
@@ -531,6 +541,18 @@ class AcceptanceTest : public ::testing::Test {
   void work() { cleaning_->work({}); }
   // The backup component's daily check, now.
   void run_backup_check() { backup_->check_now(std::stop_token{}); }
+  // The monthly report's scheduler polled now, as its thread does every 30 s.
+  void poll_reports() { report_->poll_now(std::stop_token{}); }
+  // The report of the current month, made now (the scheduler's job).
+  [[nodiscard]] Result<void> produce_report() { return report_->produce(std::stop_token{}); }
+  // The connections, listeners and UDP endpoints the next network read sees.
+  void set_connections(std::vector<events::Connection> connections) {
+    connections_ = std::move(connections);
+    connection_table_->set(connections_);
+  }
+  [[nodiscard]] const std::vector<events::Connection>& connections() const { return connections_; }
+  // Where the monthly reports are written.
+  [[nodiscard]] std::filesystem::path reports_folder() const { return folder_.path() / "reports"; }
 
   // ---- State -----------------------------------------------------------------------------------
 
@@ -600,7 +622,9 @@ class AcceptanceTest : public ::testing::Test {
                              {agent.native(), none},
                              {spotify.native(), signed_by("Spotify AB")},
                              {onedrive.native(), signed_by("Microsoft Corporation")},
-                             {armoury.native(), signed_by("ASUSTeK COMPUTER INC.")}};
+                             {armoury.native(), signed_by("ASUSTeK COMPUTER INC.")},
+                             {teams.native(), signed_by("Microsoft Corporation")},
+                             {backup_agent.native(), signed_by("Backup Co")}};
   }
 
   void build_startup() {
@@ -725,7 +749,8 @@ class AcceptanceTest : public ::testing::Test {
         actions::action_migrations(), cleaning::cleaning_migrations(),
         startup::impact_migrations(), resident::resident_migrations(),
         input::input_migrations(),    elimination::elimination_migrations(),
-        events::event_migrations(),   security::security_migrations()};
+        events::event_migrations(),   security::security_migrations(),
+        report::report_migrations()};
     Result<std::unique_ptr<store::Store>> opened =
         store::Store::open(folder_.path() / "myclean.db", clock_, sets);
     ASSERT_TRUE(opened.has_value()) << opened.error().message;
@@ -799,6 +824,7 @@ class AcceptanceTest : public ::testing::Test {
     virustotal->lookups = &virustotal_lookups_;
     auto connections = std::make_unique<events::testing::FakeConnectionTable>();
     connections->set(connections_);
+    connection_table_ = connections.get();
     security_ = std::make_unique<svc::SecurityComponent>(svc::SecuritySources{
         .startup = [this](std::string_view) -> std::unique_ptr<startup::IStartupSystem> {
           return std::make_unique<SharedStartup>(startup_);
@@ -876,6 +902,27 @@ class AcceptanceTest : public ::testing::Test {
             .period = {}},
         &alerts_);
     ASSERT_TRUE(backup_->start(context(cleaning::testing::data_dir)).has_value());
+  }
+
+  // Last, as in myclean-svc: the monthly report calls the other components' read methods. Its
+  // calls stand in for the service's space worker too: a storage analysis it starts runs at once.
+  void start_report() {
+    report_ = std::make_unique<svc::ReportComponent>(
+        svc::ReportSources{
+            .call = [this](std::string_view method, const Json& params) -> Result<Json> {
+              Result<Json> answer = other_call(method, params);
+              if (answer && answer->value("state", "") == "scanning") {
+                cleaning_->work_space({});
+                answer = other_call(method, params);
+              }
+              return answer;
+            },
+            .reports_dir = folder_.path() / "reports",
+            .warm_up = std::chrono::seconds::zero(),
+            .poll_period = std::chrono::seconds::zero(),
+            .analysis_poll = std::chrono::seconds::zero()},
+        &alerts_);
+    ASSERT_TRUE(report_->start(context(cleaning::testing::data_dir)).has_value());
   }
 
   void initialize_mcp() {
@@ -978,6 +1025,8 @@ class AcceptanceTest : public ::testing::Test {
   std::unique_ptr<svc::SecurityComponent> security_;
   std::unique_ptr<cleaning::CleaningService> cleaning_;
   std::unique_ptr<svc::BackupComponent> backup_;
+  std::unique_ptr<svc::ReportComponent> report_;
+  events::testing::FakeConnectionTable* connection_table_ = nullptr;  // owned by security_
 
   // The MCP client.
   std::unique_ptr<mcp::Server> server_;

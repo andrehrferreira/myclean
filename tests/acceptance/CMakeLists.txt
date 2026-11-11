@@ -6,6 +6,7 @@ myclean_add_test(acceptance
   SOURCES
     acceptance_fixture.hpp
     audit_check_test.cpp
+    prompt7_test.cpp
     prompts_test.cpp
   DEPENDS
     myclean::mcp
