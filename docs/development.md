@@ -33,6 +33,7 @@ cmake --preset debug                    # configure; the first run builds the vc
 cmake --build --preset debug            # build (warnings are errors)
 ctest --preset debug                    # all unit tests
 ctest --preset debug -L model           # one module's tests (label = module name)
+ctest --preset debug -L acceptance      # the seven-prompt acceptance suite (acceptance.md)
 cmake --build --preset debug --target format-check   # clang-format, fails on any difference
 cmake --build --preset debug --target format         # rewrite files in the repository style
 cmake --build --preset debug --target lint           # clang-tidy, fails on any finding
@@ -127,6 +128,7 @@ src/tray/               myclean-tray: tray icon, toasts, dashboard (approval inb
 src/cli/                myclean: read-only CLI, `map`, `scan-all`, `packs`, `security` and `myclean mcp`
 tests/fakes/            in-memory fakes of the src/core/os interfaces (myclean::fakes)
 tests/unit/<module>/    GoogleTest suite of one module
+tests/acceptance/       the seven-prompt acceptance suite over one fixture machine (acceptance.md)
 cmake/                  helper functions, lint/format targets, vcpkg toolchain
 ```
 
