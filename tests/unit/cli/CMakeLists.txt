@@ -4,6 +4,7 @@
 myclean_add_test(cli
   SOURCES
     cli_test.cpp
+    read_commands_test.cpp
     text_guard_test.cpp
   DEPENDS
     myclean::cli

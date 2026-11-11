@@ -21,11 +21,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cli/command.hpp"
 #include "cli/map_command.hpp"
 #include "cli/packs_command.hpp"
 #include "cli/report_command.hpp"
 #include "cli/scan_all_command.hpp"
 #include "cli/security_command.hpp"
+#include "cli/space_command.hpp"
 #include "cli/text.hpp"
 #include "core/ipc/alerts.hpp"
 #include "core/ipc/apps.hpp"
@@ -49,33 +51,17 @@ namespace {
 
 using Json = nlohmann::json;
 
-std::string dump(const Json& value) {
-  return value.dump(-1, ' ', false, Json::error_handler_t::replace);
-}
-
-// A parsed command line: the command words, --json, and the options that take a value.
-struct CommandLine {
-  std::vector<std::string> words;
-  bool json = false;
-  std::vector<std::pair<std::string, std::string>> options;  // name without "--", value
-};
-
-// The value of option `name`, or null.
-const std::string* find_option(const CommandLine& line, std::string_view name) {
-  const auto found =
-      std::ranges::find(line.options, name, &std::pair<std::string, std::string>::first);
-  return found == line.options.end() ? nullptr : &found->second;
-}
-
 Result<CommandLine> parse(std::span<const std::string> args) {
-  constexpr std::array<std::string_view, 10> valued{"pipe",  "sort",       "limit",  "entity",
-                                                    "hours", "max-points", "min-gb", "depth",
-                                                    "data",  "unused-days"};
+  constexpr std::array<std::string_view, 11> valued{"pipe",  "sort",        "limit",  "entity",
+                                                    "hours", "max-points",  "min-gb", "depth",
+                                                    "data",  "unused-days", "mode"};
   CommandLine line;
   for (std::size_t index = 0; index < args.size(); ++index) {
     const std::string& arg = args[index];
     if (arg == "--json") {
       line.json = true;
+    } else if (arg == "--refresh") {
+      line.refresh = true;
     } else if (arg.starts_with("--")) {
       const std::string name = arg.substr(2);
       if (std::ranges::find(valued, name) == valued.end() || index + 1 >= args.size()) {
@@ -90,34 +76,6 @@ Result<CommandLine> parse(std::span<const std::string> args) {
     return fail(Errc::invalid_argument, "no command");
   }
   return line;
-}
-
-template <typename T>
-Result<std::optional<T>> option(const CommandLine& line, std::string_view name) {
-  const std::string* text = find_option(line, name);
-  if (text == nullptr) {
-    return std::optional<T>{};
-  }
-  const char* const last = std::to_address(text->end());
-  T value{};
-  const auto [end, error] = std::from_chars(text->data(), last, value);
-  if (error != std::errc{} || end != last) {
-    return fail(Errc::invalid_argument, "--" + std::string(name) + ": not a number: " + *text);
-  }
-  return std::optional<T>{value};
-}
-
-// Prints a failed call and returns exit_unavailable.
-int report(const mcp::CallError& error, bool json, std::ostream& out, std::ostream& err) {
-  if (json) {
-    out << dump(error.reached ? Json{{"error", error.message}}
-                              : Json{{"health", "unreachable"}, {"reason", error.message}})
-        << '\n';
-  } else {
-    err << "myclean: " << (error.reached ? error.message : mcp::unavailable_text(error.message))
-        << '\n';
-  }
-  return exit_unavailable;
 }
 
 int status(const mcp::Caller& call, bool json, std::ostream& out, std::ostream& err) {
@@ -146,16 +104,6 @@ int status(const mcp::Caller& call, bool json, std::ostream& out, std::ostream& 
   }
   out << (json ? dump(document) + "\n" : text::status(document));
   return status->healthy ? exit_ok : exit_degraded;
-}
-
-// Calls `method` and prints its result as JSON or as `render` makes it.
-int show(const mcp::Reply& reply, bool json, std::ostream& out, std::ostream& err,
-         std::string (*render)(const Json&)) {
-  if (!reply) {
-    return report(reply.error(), json, out, err);
-  }
-  out << (json ? dump(*reply) + "\n" : render(*reply));
-  return exit_ok;
 }
 
 std::string render_volumes(const Json& reply) {
@@ -293,6 +241,9 @@ int dispatch(const CommandLine& line, const mcp::Caller& call, const os::IClock&
   if (command == "explain" && words.size() == 2) {
     return explain(line, call, out, err);
   }
+  if (command == "space" && words.size() >= 2) {
+    return space_command(line, call, out, err);
+  }
   if (command == "metrics" && words.size() == 2 && words[1] == "latest") {
     return show(call(ipc::metrics_latest_method, Json::object()), line.json, out, err,
                 &text::system);
@@ -331,6 +282,17 @@ std::string_view usage() {
          "                              repositories with work that exists nowhere else\n"
          "  apps [--unused-days <n>]    installed apps with last use (source, confidence),\n"
          "                              description and keep/remove verdict\n"
+         "  space top <drive>|downloads|profile [--limit <n>] [--refresh]\n"
+         "                              the largest files and folders there (at most 100)\n"
+         "  space old-downloads | forgotten-files | duplicates [--mode exact|photos] |\n"
+         "        used-installers | owner-decisions | dev-drive | vhdx | indexed-folders\n"
+         "        [--refresh]           the service's space analyses: downloads older than 90\n"
+         "                              days, large files untouched for 180 days, duplicate\n"
+         "                              files or photos, installers already installed, cold\n"
+         "                              folders and programs only you can decide on, Dev Drive\n"
+         "                              advice, WSL and Docker disks, indexed build folders;\n"
+         "                              each runs in the background (--refresh starts it again)\n"
+         "                              and shows its previous result until it is ready\n"
          "  metrics latest              the newest CPU, memory, disk and GPU values\n"
          "  metrics query <metric> [--entity <entity>] [--hours <n>] [--max-points <n>]\n"
          "                              history of one metric over the last hours\n"

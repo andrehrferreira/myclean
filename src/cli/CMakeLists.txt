@@ -4,6 +4,8 @@ myclean_add_library(cli
   SOURCES
     cli.cpp
     cli.hpp
+    command.cpp
+    command.hpp
     map_command.cpp
     map_command.hpp
     packs_command.cpp
@@ -14,6 +16,8 @@ myclean_add_library(cli
     scan_all_command.hpp
     security_command.cpp
     security_command.hpp
+    space_command.cpp
+    space_command.hpp
     text.cpp
     text.hpp
   DEPENDS

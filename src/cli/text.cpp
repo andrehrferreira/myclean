@@ -14,52 +14,19 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cli/command.hpp"
+
 namespace myclean::cli::text {
 
 namespace {
 
 using Json = nlohmann::json;
 
-std::optional<double> number(const Json& object, std::string_view key) {
-  if (!object.is_object()) {
-    return std::nullopt;
-  }
-  const auto found = object.find(key);
-  return found != object.end() && found->is_number() ? std::optional(found->get<double>())
-                                                     : std::nullopt;
-}
-
-std::string text_of(const Json& object, std::string_view key) {
-  const auto found = object.find(key);
-  return found != object.end() && found->is_string() ? found->get<std::string>() : "n/a";
-}
-
-std::string bytes(std::optional<double> value) {
-  if (!value) {
-    return "n/a";
-  }
-  constexpr std::array<std::string_view, 5> units{"B", "KiB", "MiB", "GiB", "TiB"};
-  double size = *value;
-  std::size_t unit = 0;
-  while (std::abs(size) >= 1024.0 && unit + 1 < units.size()) {
-    size /= 1024.0;
-    ++unit;
-  }
-  return unit == 0 ? std::format("{:.0f} B", size) : std::format("{:.1f} {}", size, units.at(unit));
-}
-
-std::string fixed(std::optional<double> value, int decimals = 1) {
-  return value ? std::format("{:.{}f}", *value, decimals) : "n/a";
-}
-
-std::string utc(const Json& object, std::string_view key) {
-  const std::optional<double> seconds = number(object, key);
-  if (!seconds) {
-    return "n/a";
-  }
-  const std::chrono::sys_seconds time{std::chrono::seconds{static_cast<std::int64_t>(*seconds)}};
-  return std::format("{:%Y-%m-%d %H:%M:%S} UTC", time);
-}
+using render::bytes;
+using render::fixed;
+using render::number;
+using render::text_of;
+using render::utc;
 
 std::string fill(const Json& volume) {
   const Json& projection = volume.value("fill", Json::object());
