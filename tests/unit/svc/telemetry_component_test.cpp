@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -17,6 +18,7 @@
 #include "core/ipc/status.hpp"
 #include "core/ipc/telemetry.hpp"
 #include "core/model/result.hpp"
+#include "core/store/database.hpp"
 #include "core/store/migrations.hpp"
 #include "core/store/store.hpp"
 #include "core/telemetry/pipeline.hpp"
@@ -95,6 +97,7 @@ class TelemetryMethodsTest : public ::testing::Test {
   [[nodiscard]] testing::FakeMachine& machine() { return machine_; }
   [[nodiscard]] const Collectors& collectors() const { return collectors_; }
   [[nodiscard]] const TelemetryMethods& methods() const { return *methods_; }
+  [[nodiscard]] store::Store& store() { return *store_; }
 
  private:
   testing::TempDir dir_;
@@ -337,6 +340,38 @@ TEST_F(TelemetryMethodsTest, VolumesProjectDaysUntilFull) {
   ASSERT_EQ(facts->size(), 3U);
   EXPECT_EQ(facts->at(2).metric, "volume.days_until_full");
   EXPECT_NEAR(facts->at(2).value, 97.0 / 24.0, 0.02);
+}
+
+TEST_F(TelemetryMethodsTest, TheFillProjectionIsComputedOncePerVolumeSample) {
+  // C: loses 1 GiB an hour for three hours, sampled every minute.
+  poll();
+  telemetry::VolumeStatus& volume = machine().volumes->list().front();
+  for (int minute = 1; minute <= 180; ++minute) {
+    volume.free =
+        Bytes{(100_GiB).count() - (static_cast<std::uint64_t>(minute) * (1_GiB).count() / 60)};
+    advance(60s);
+  }
+  const Json filling = ok(ipc::metrics_latest_method).at("volumes").at(0).at("fill");
+  ASSERT_EQ(filling.at("state"), "filling");
+
+  // Six days ago C: had far less free space: a fresh projection would say "not filling".
+  const std::int64_t six_days_ago = unix_seconds(clock().now() - std::chrono::days{6});
+  const std::string insert = std::format(
+      "INSERT INTO ts_minute(series, time, min, max, mean, count) SELECT id, {}, 1, 1, 1, 60 "
+      "FROM series WHERE metric = 'volume.free' AND entity = 'C:'",
+      six_days_ago);
+  ASSERT_TRUE(
+      store().write([&](store::Database& database) { return database.exec(insert); }).has_value());
+
+  // The 1 s collectors sample again, but not the volumes: the projection of this sample stays.
+  advance(1s);
+  EXPECT_EQ(ok(ipc::metrics_latest_method).at("volumes").at(0).at("fill"), filling);
+  EXPECT_EQ(ok(ipc::volumes_list_method).at("volumes").at(0).at("fill"), filling);
+
+  // The next volume sample computes it again.
+  advance(59s);
+  EXPECT_EQ(ok(ipc::metrics_latest_method).at("volumes").at(0).at("fill").at("state"),
+            "not_filling");
 }
 
 // The component inside a running service, over the pipe.

@@ -22,6 +22,7 @@
 #include "core/os/clock.hpp"
 #include "core/store/store.hpp"
 #include "core/telemetry/collector.hpp"
+#include "core/telemetry/history.hpp"
 #include "core/telemetry/memory_status.hpp"
 #include "core/telemetry/perf_counters.hpp"
 #include "core/telemetry/pipeline.hpp"
@@ -106,6 +107,11 @@ class TelemetryMethods {
 
  private:
   [[nodiscard]] Result<nlohmann::json> volume_list() const;
+  // The fill projection of `entity` for the volume sample taken at `sampled`. It reads about 7
+  // days of minute rows and metrics.latest is called every second, so it is computed once per
+  // volume sample (every 60 s) and kept until the next.
+  [[nodiscard]] Result<telemetry::FillProjection> fill_of(const std::string& entity,
+                                                          WallTime sampled) const;
   [[nodiscard]] std::optional<trust::TrustSignal> signal_of(
       const telemetry::ProcessInfo& process) const;
   // The trust JSON of a process, null when unknown.
@@ -118,6 +124,13 @@ class TelemetryMethods {
   unsigned logical_processors_;
   std::string system_drive_;
   ProcessTrust trust_;
+
+  struct CachedFill {
+    WallTime sampled;
+    telemetry::FillProjection fill;
+  };
+  mutable std::mutex fills_mutex_;                                // guards fills_
+  mutable std::map<std::string, CachedFill, std::less<>> fills_;  // by volume entity
 };
 
 // Samples the machine on a thread of its own: a telemetry::Pipeline over every collector, with

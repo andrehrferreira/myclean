@@ -511,7 +511,6 @@ Result<std::vector<alerts::Reading>> TelemetryMethods::volume_facts() const {
     return facts;
   }
   constexpr double gib = 1024.0 * 1024.0 * 1024.0;
-  const WallTime now = clock_->now();
   for (const telemetry::VolumeStatus& volume : view->volumes) {
     const std::string entity = telemetry::volume_entity(volume);
     // The toast shows only the title and this detail, so the detail names the drive.
@@ -530,8 +529,7 @@ Result<std::vector<alerts::Reading>> TelemetryMethods::volume_facts() const {
                                     .entity = entity,
                                     .value = static_cast<double>(volume.free.count()) / gib,
                                     .detail = free});
-    const Result<telemetry::FillProjection> fill =
-        telemetry::project_volume_fill(*store_, entity, now);
+    const Result<telemetry::FillProjection> fill = fill_of(entity, view->time);
     if (!fill) {
       return tl::unexpected(fill.error());
     }
@@ -565,11 +563,9 @@ Result<Json> TelemetryMethods::volume_list() const {
   if (!view) {
     return list;
   }
-  const WallTime now = clock_->now();
   for (const telemetry::VolumeStatus& volume : view->volumes) {
     const std::string entity = telemetry::volume_entity(volume);
-    const Result<telemetry::FillProjection> fill =
-        telemetry::project_volume_fill(*store_, entity, now);
+    const Result<telemetry::FillProjection> fill = fill_of(entity, view->time);
     if (!fill) {
       return tl::unexpected(fill.error());
     }
@@ -588,6 +584,21 @@ Result<Json> TelemetryMethods::volume_list() const {
                                                                      : Json(nullptr)}}}});
   }
   return list;
+}
+
+Result<telemetry::FillProjection> TelemetryMethods::fill_of(const std::string& entity,
+                                                            WallTime sampled) const {
+  const std::scoped_lock lock(fills_mutex_);
+  if (const auto cached = fills_.find(entity);
+      cached != fills_.end() && cached->second.sampled == sampled) {
+    return cached->second.fill;
+  }
+  Result<telemetry::FillProjection> fill =
+      telemetry::project_volume_fill(*store_, entity, clock_->now());
+  if (fill) {
+    fills_.insert_or_assign(entity, CachedFill{.sampled = sampled, .fill = *fill});
+  }
+  return fill;
 }
 
 TelemetryComponent::TelemetryComponent(TelemetrySources sources, ProcessTrust trust,
