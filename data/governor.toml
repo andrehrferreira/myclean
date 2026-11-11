@@ -13,10 +13,13 @@
 # (cap and suspend only for build and test trees, which go first; suspend only on a memory
 # shortage; hard faults only while memory is short); act comes back once the recorded decisions
 # show it spares the owner's programs and the owner approves.
+# Act again on 2026-11-11, approved by the owner after AI sessions, cargo and node test runs held
+# the CPU at 100 % from 10:30 until a restart at 11:26: the 17,109 decisions recorded in observe
+# since 2026-11-10 capped only build and test trees; other trees got priority and EcoQoS steps.
 # Crash recovery and the clean stop lift MyClean's own caps and resume its own suspends in
 # either mode.
 [governor]
-mode = "observe"
+mode = "act"
 
 # Entering the pressure state: any one signal is enough.
 [pressure]

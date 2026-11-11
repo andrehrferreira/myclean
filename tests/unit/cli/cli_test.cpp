@@ -141,14 +141,14 @@ TEST(CliGovernorTest, GovernorAnswersInBothForms) {
 
   const Outcome human = run_cli(args, {}, 5s, clock);
   EXPECT_EQ(human.code, exit_ok) << human.err;
-  EXPECT_TRUE(human.out.starts_with("Governor: observe mode, normal")) << human.out;
+  EXPECT_TRUE(human.out.starts_with("Governor: act mode, normal")) << human.out;
   EXPECT_NE(human.out.find("Game mode: off (override auto), build CPU cap 75 %"), std::string::npos)
       << human.out;
 
   std::vector<std::string> json_args = args;
   json_args.emplace_back("--json");
   const Json status = document(run_cli(json_args, {}, 5s, clock));
-  EXPECT_EQ(status.at("mode"), "observe");
+  EXPECT_EQ(status.at("mode"), "act");
   EXPECT_TRUE(status.at("jobs").empty());
 }
 

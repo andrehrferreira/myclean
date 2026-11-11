@@ -82,8 +82,8 @@ TEST(GovernorPolicy, ShippedFileHoldsTheDefaults) {
       load_policy(rules::DiskDataFiles{}, std::filesystem::path{MYCLEAN_DATA_DIR});
   ASSERT_TRUE(loaded.has_value()) << loaded.error().message;
   const GovernorPolicy defaults;
-  // Observe until the fixed ladder's recorded decisions are approved (2026-11-05).
-  EXPECT_EQ(loaded->mode, GovernorMode::observe);
+  // Act since the owner approved the fixed ladder's recorded decisions (2026-11-11).
+  EXPECT_EQ(loaded->mode, GovernorMode::act);
   EXPECT_EQ(loaded->pressure.cpu_enter_percent, defaults.pressure.cpu_enter_percent);
   EXPECT_EQ(loaded->pressure.cpu_dwell, defaults.pressure.cpu_dwell);
   EXPECT_EQ(loaded->pressure.available_enter, defaults.pressure.available_enter);
