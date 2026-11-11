@@ -84,20 +84,20 @@ each item, and nothing ran without your click in the tray.
 | # | Prompt, as written | Pass when | Claude Code | MyClean UI |
 |---|---|---|---|---|
 | 1 | List every process above 5 % CPU or memory, explain each simply, flag what you don't recognize. Close nothing. | All qualifying trees listed with plain description, signer, trust flag; nothing closed | [ ] | [ ] Processes |
-| 2 | Show everything that starts automatically, say which I need, disable only what I select. | All sources listed with impact; only approved items disabled; undo works | [ ] | [ ] none yet (see below) |
+| 2 | Show everything that starts automatically, say which I need, disable only what I select. | All sources listed with impact; only approved items disabled; undo works | [ ] | [ ] Startup |
 | 3 | Top 20 files and folders, old downloads, duplicate photos, installers already used. Sizes. Delete nothing without permission. | All four lists with sizes; nothing deleted without approval | [ ] | [ ] Space |
-| 4 | Apps not opened in six months, what each does, which are safe to uninstall, which came with the PC. I decide. | Each app has last-used with source, description and verdict | [ ] | [ ] none yet (see below) |
-| 5 | Unrecognized processes, browser extensions I didn't install, programs talking to the internet in the background. Known dangerous? Remove nothing. | Each item explained; "dangerous" only from a verdict; nothing removed | [ ] | [ ] none yet (see below) |
-| 6 | Is there any backup, where, and when was the last one? If none, explain the simplest setup with what I have. | All sources checked; last-backup age; concrete recommendation | [ ] | [ ] none yet (see below) |
+| 4 | Apps not opened in six months, what each does, which are safe to uninstall, which came with the PC. I decide. | Each app has last-used with source, description and verdict | [ ] | [ ] Apps |
+| 5 | Unrecognized processes, browser extensions I didn't install, programs talking to the internet in the background. Known dangerous? Remove nothing. | Each item explained; "dangerous" only from a verdict; nothing removed | [ ] | [ ] Security |
+| 6 | Is there any backup, where, and when was the last one? If none, explain the simplest setup with what I have. | All sources checked; last-backup age; concrete recommendation | [ ] | [ ] Backups |
 | 7 | On the 1st of each month: health check, storage analysis, intruder scan, then a short report of what changed. Make it a scheduled task. | Runs on day 1 or next boot; report diffs against previous month | [ ] | [ ] report toast, Open report |
 
 For prompts 2 and 4, approve only some items in the tray (Cleanup section) and check that only
 those changed; for prompt 2, undo the plan there and check the items are back. For prompt 7,
 the "scheduled task" is MyClean's own monthly schedule, never a Windows scheduled task.
 
-The UI shows no Startup, Apps, Security or Backups screen yet, and its Space section offers exact
-duplicates only, not duplicate photos (prd.md UI-3). Until those screens exist, the UI lines of
-prompts 2, 4, 5 and 6 cannot pass, and prompt 3's UI pass covers the exact duplicates only.
+The Space section offers exact duplicates only, not duplicate photos, so prompt 3's UI pass
+covers the exact duplicates; the duplicate photos are checked in Claude Code. The Audit screen
+shows the `action_log` read only, for the check below.
 
 After the seven prompts, check that nothing ran without your approval: in Claude Code, ask for
 `list_plans`; every plan past `awaiting_approval` must be one you approved in the tray. With a

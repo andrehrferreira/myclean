@@ -126,7 +126,7 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     class `system`: in observe mode the ladder had chosen `vmms.exe`, `NVDisplay.Container.exe`
     and vendor services. Security suites, WSL/Hyper-V, WMI hosts, database servers and remote
     access tools are listed as `system` in the process classes (pack 1.1.0).
-- **Optimize (M4, in progress):**
+- **Optimize (M4):**
   - Startup items: every automatic start source (Run and RunOnce in both registry views,
     Startup folders, logon and boot tasks, auto-start services not signed by Microsoft
     Windows) with its enabled state from StartupApproved (`startup.list`, MCP
@@ -134,11 +134,81 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     the numbers of that list and create a plan that waits for the owner's approval; the
     service then disables each item the way Task Manager does (StartupApproved, the task's
     Enabled flag, a service's start type set to Manual), deletes nothing, and undo restores
-    the exact state before.
+    the exact state before. MCP `propose_enable_startup` turns one back on the same way.
+  - Boot and logon durations per boot (`startup.boot_times`), from the Diagnostics-Performance
+    log when Windows records it.
+  - Resident programs: what each costs over 30 days (`resident.costs`, MCP
+    `background_costs`) and an alert when a program's memory keeps growing for 6 hours
+    (`process.memory-leak`).
+  - Near-duplicate photos (WIC decode, 64-bit dHash), Windows Search scope for build output
+    and caches (exclusion on approval), Dev Drive advice, and WSL/Docker virtual disks
+    compacted on approval.
+  - Every applied optimization is measured before and after; one that made things worse is
+    undone automatically and reported.
+  - Guided freeze elimination: with the owner's approval, one suspect at a time is paused and
+    the freeze rates before and after are compared.
+- **Guard (M5):**
+  - Intruder scan (`security.scan`, MCP `scan_suspicious`): every persistence point (startup
+    items, WMI event subscriptions, IFEO Debugger, Winlogon Shell/Userinit, AppInit_DLLs)
+    with the file it runs and that file's trust signal.
+  - Browser extensions of every Chrome, Edge, Brave and Firefox profile with their install
+    origin (MCP `list_browser_extensions`); policy-forced and external ones are flagged
+    "probably not installed by you".
+  - Background network talkers over time with trust and whether they had a visible window
+    (MCP `list_network_processes`); reverse DNS is off by default.
+  - Verdicts come only from Defender's detection history, a Defender scan of one item the owner
+    asks for, or the opt-in, hash-only VirusTotal lookup (off until a key is put in the
+    administrators-only `security.toml`). Everything else is "suspicious because …".
+  - Installed apps (Uninstall keys and Appx) with size, publisher and last use from UserAssist,
+    Prefetch, BAM and MyClean's own history, each with its source; a keep / removable /
+    unknown verdict; an uninstall plan runs the app's own uninstaller after tray approval
+    (MCP `list_installed_apps`, `propose_uninstall`).
+  - Backup check (MCP `check_backups`): File History, system images, restore points, shadow
+    copies, OneDrive folder backup, backup products and dated copies on backup volumes; the
+    last-backup age with an alert after 7 days; a recommendation naming healthy drives when
+    none exists; git repositories with no remote, unpushed or uncommitted work.
+  - CLI `myclean security`, `myclean apps` and `myclean backups`, each with `--json`.
+- **Monthly report (M6):**
+  - On the 1st at 09:00, or at the next service start when the PC was off, at most once a
+    month, through MyClean's own scheduler: a snapshot of startup items, extensions,
+    services, listening ports, unsigned binaries, top folders, disk health, the C: free-space
+    trend, governor interventions, freeze incidents and space freed, with health from
+    30-day aggregates. A category that cannot be collected says why.
+  - The report lists what changed since the newest earlier snapshot, and is written as
+    Markdown and a self-contained HTML file under `%ProgramData%\MyClean\reports\YYYY-MM\`;
+    a toast opens it. The run is read-only and sends nothing off the machine.
+  - `reports.list`, `reports.get`, `reports.compare`; MCP `get_report`, `compare_snapshots`;
+    `myclean report get|compare`.
+- **Tray screens:** Placement, Optimize, Startup, Apps, Security, Backups, Audit (the
+  append-only action log, read only), Settings and Reports, besides the dashboard, Cleanup,
+  Space, Governor and Freezes. Every change they offer is a plan that waits for approval.
+- **Acceptance suite** (`tests/acceptance`, `docs/acceptance.md`): the owner's seven prompts
+  asked through the MCP server against one fixture machine, each checked against its pass
+  condition, and the audit log checked for any action without a tray approval.
+- **P0 audit** (`docs/analysis/p0-audit/`): every P0 requirement mapped to its implementation
+  and tests, with the gaps and their fixes.
+- Owner decisions recorded under `.rulebook/decisions/`: automatic system-space recovery when
+  C: is critically low, the governor's ladder (cap and suspend only build and test trees), and
+  automatic removal of idle, git-ignored node artifacts.
 - Spike notes X1–X8 under `docs/spikes/`.
 
 ### Fixed
 
+- The quality gate runs at below-normal priority on half the logical processors: at the
+  default it started one compiler or clang-tidy per processor and held the owner's CPU at
+  100 %.
+- The tray's once-a-second `metrics.latest` no longer recomputes each volume's days-until-full
+  projection over a week of minute rows; it is computed once per 60 s volume sample.
+- Governor: children a build started before its root was placed now join its job; steps are
+  rolled back when telemetry stalls for 30 s; saved priorities, memory priorities, EcoQoS and
+  the pause survive a crash or restart; a suspended tree never loses its Resume, and a resume
+  Windows refuses is retried and shown.
+- Report-view items sent to the Recycle Bin are carried out by the tray instead of stopping at
+  an unreadable task; `alerts.snooze`, `alerts.dismiss` and `cleaning.scan` are tray-only;
+  quarantine never falls back to a critically low volume; signers resolved after a process
+  started are stored, and process stops are recorded.
+- The governor acts again (mode `act`, approved by the owner on 2026-11-11): the decisions
+  recorded in observe mode since 2026-11-10 capped only build and test trees.
 - The governor no longer freezes programs the owner works in: a stress test on the reference
   machine had it suspend VS Code, Chrome, Substance Painter and Claude, chosen by size while
   a memory hog elsewhere caused the pressure. Cap jobs and suspends now apply only to the

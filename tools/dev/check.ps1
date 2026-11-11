@@ -45,6 +45,15 @@ if (-not $InOwnConsole) {
 }
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
+# The gate runs on the owner's workstation next to their programs: at the default it started one
+# compiler or clang-tidy per logical processor at normal priority and held the CPU at 100 % on
+# 2026-11-11. Below-normal priority is inherited by every compiler, linter and test it starts, and
+# half the logical processors are left free.
+(Get-Process -Id $PID).PriorityClass = [Diagnostics.ProcessPriorityClass]::BelowNormal
+if (-not $env:CMAKE_BUILD_PARALLEL_LEVEL) {
+    $env:CMAKE_BUILD_PARALLEL_LEVEL = [string][Math]::Max(1, [Environment]::ProcessorCount / 2)
+}
+
 function Initialize-DevShell {
     if (Get-Command cl.exe -ErrorAction SilentlyContinue) { return }
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
