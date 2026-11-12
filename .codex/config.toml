@@ -1,0 +1,17 @@
+[shell_environment_policy]
+inherit = "core"
+
+[shell_environment_policy.set]
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1"
+
+[mcp_servers.myclean]
+command = 'C:\Program Files\MyClean\current\bin\myclean.exe'
+args = ["mcp"]
+
+[mcp_servers.rulebook]
+command = "npx"
+args = [
+    "-y",
+    "--package=@hivehub/rulebook@7.5.0",
+    "rulebook-mcp",
+]
