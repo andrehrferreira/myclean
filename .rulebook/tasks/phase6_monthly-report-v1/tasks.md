@@ -1,11 +1,11 @@
 ## 1. Implementation
-- [ ] 1.1 RP1: monthly snapshot of startup items, extensions, services, listening ports, unsigned binaries, top folders, disk health, plus 30-day aggregates; diff against the previous snapshot
-- [ ] 1.2 RP2: monthly report on the 1st at 09:00 with catch-up at next boot: Markdown + HTML in %ProgramData%\MyClean\reports\YYYY-MM, toast with Open report, get_report and compare_snapshots MCP tools
-- [ ] 1.3 Q1: seven-prompt acceptance suite: MCP tool calls against fixture machine state for prompts 1-7, plus a manual pass of each prompt in Claude Code
-- [ ] 1.4 Audit every P0 requirement in docs/prd.md against its implementation and tests; fix gaps
-- [ ] 1.5 CHANGELOG.md v1.0.0 entry
+- [x] 1.1 RP1: monthly snapshot of startup items, extensions, services, listening ports, unsigned binaries, top folders, disk health, plus 30-day aggregates; diff against the previous snapshot; done in b9a54c8 (core/report snapshot through the service's read methods, 30-day health aggregates, "not collected" with the reason, diff against the newest earlier snapshot, first-report baseline and gap month; tables snapshot and report)
+- [x] 1.2 RP2: monthly report on the 1st at 09:00 with catch-up at next boot: Markdown + HTML in %ProgramData%\MyClean\reports\YYYY-MM, toast with Open report, get_report and compare_snapshots MCP tools; done in b9a54c8 (job monthly-report 0 9 1 * * on core/sched, catch-up once at the next start, report.md and self-contained report.html under <state>\reports\YYYY-MM, report.ready toast that opens the HTML, reports.list/get/compare, MCP get_report/compare_snapshots, myclean report list|get|compare; read-only) and 05c8a03 (tray Reports screen); not yet run inside the deployed service
+- [ ] 1.3 Q1: seven-prompt acceptance suite: MCP tool calls against fixture machine state for prompts 1-7, plus a manual pass of each prompt in Claude Code (automated suite done in 7f434ee and 3af95eb, 11 tests; open: the manual pass in Claude Code and the UI after the deploy)
+- [ ] 1.4 Audit every P0 requirement in docs/prd.md against its implementation and tests; fix gaps (audit in 16f76e3: 35 met, 14 partial, 4 no test, 0 missing; fixed by c06fe09, 4852d72, 1f2f863, f801c22, fd33b3e, b015b55, 05c8a03, 261d3d9, 2754970, d3e4bbf, dd88552; open: NFR-OPS-2 rollback never exercised, NFR-REL-2 LocalSystem re-adoption check, the admin spikes of phase4 1.1 and 1.17)
+- [ ] 1.5 CHANGELOG.md v1.0.0 entry (the entry is written under [Unreleased]; it becomes [1.0.0] once 1.3 and 1.4 close)
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 2.1 Update or create documentation covering the implementation
-- [ ] 2.2 Write tests covering the new behavior
-- [ ] 2.3 Run tests and confirm they pass
+- [x] 2.1 Update or create documentation covering the implementation; architecture.md (monthly report, tray screens, CLI, governor), development.md, acceptance.md, CHANGELOG and docs/analysis/p0-audit came with b9a54c8, 7f434ee, 05c8a03, 16f76e3, 2754970 and d3e4bbf
+- [x] 2.2 Write tests covering the new behavior; tests/unit/report, svc/report_component_test, tests/acceptance (prompts 1-7 and the audit-log check), tray_model screens, cli read commands, space treemap and folder ids, dashboard feed
+- [x] 2.3 Run tests and confirm they pass; the pre-commit gate of dd88552 ran the full suite green
