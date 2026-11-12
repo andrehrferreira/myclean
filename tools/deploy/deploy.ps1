@@ -75,6 +75,8 @@ $WatchRootFiles = @('CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json')
 
 # ---------------------------------------------------------------- helpers
 
+. (Join-Path $RepoRoot 'tools\dev\DepsPrefix.ps1')
+
 function Write-Step([string]$Message) { Write-Host "[$(Get-Date -Format HH:mm:ss)] $Message" -ForegroundColor Cyan }
 function Write-Ok([string]$Message)   { Write-Host "[$(Get-Date -Format HH:mm:ss)] $Message" -ForegroundColor Green }
 function Write-Fail([string]$Message) { Write-Host "[$(Get-Date -Format HH:mm:ss)] $Message" -ForegroundColor Red }
@@ -163,6 +165,8 @@ function Get-BinaryDir {
 function Invoke-Gate {
     Write-Step "Configure (preset '$Preset')"
     Invoke-Native cmake @('--preset', $Preset)
+    # Configuring rewrites rules.ninja with a garbled /showIncludes prefix (DepsPrefix.ps1).
+    Repair-DepsPrefix (Get-BinaryDir)
     Write-Step 'Build'
     Invoke-Native cmake @('--build', '--preset', $Preset)
     Write-Step 'Test'
