@@ -100,6 +100,7 @@ tray_model::CleanupPoll cleanup_poll() {
   space(tray_model::SpaceList::duplicates, fixtures::duplicates_json());
   space(tray_model::SpaceList::used_installers, fixtures::used_installers_json());
   space(tray_model::SpaceList::owner_decisions, fixtures::owner_decisions_json());
+  space(tray_model::SpaceList::forgotten_files, fixtures::forgotten_files_json());
   poll.task_activity = "Running plan 8: Run `pnpm store prune`";
   poll.task_note = "Plan 6 (Run `npm cache verify`): done, cache_bytes better";
   return poll;
@@ -277,7 +278,7 @@ TEST(DashboardUiTest, DrawsEverySpaceListAndAsksForEachOnceWhenShown) {
   for (const tray_model::SpaceList list :
        {tray_model::SpaceList::top, tray_model::SpaceList::old_downloads,
         tray_model::SpaceList::duplicates, tray_model::SpaceList::used_installers,
-        tray_model::SpaceList::owner_decisions}) {
+        tray_model::SpaceList::owner_decisions, tray_model::SpaceList::forgotten_files}) {
     UiState state{.section = Section::space};
     state.space = list;
     EXPECT_GT(render(model, state), 0);
@@ -288,6 +289,28 @@ TEST(DashboardUiTest, DrawsEverySpaceListAndAsksForEachOnceWhenShown) {
     EXPECT_FALSE(load->refresh);
     EXPECT_EQ(load->volume, list == tray_model::SpaceList::top ? "C:" : "");
   }
+}
+
+// SPC-1: the treemap of the volume draws; a folder opened in it is asked for by its id, once.
+TEST(DashboardUiTest, AFolderOpenedInTheTreemapIsAskedForByItsId) {
+  const HeadlessUi ui;
+  apply_style(1.0F);
+  const tray_model::DashboardModel model = full_model();
+  UiState state{.section = Section::space};
+  EXPECT_GT(render(model, state), 0);
+  ASSERT_EQ(state.requests.size(), 1U);
+  state.requests.clear();
+
+  state.space_trail.open(61);
+  EXPECT_GT(render(model, state), 0);
+  ASSERT_EQ(state.requests.size(), 1U);
+  const auto* load = std::get_if<tray_model::LoadSpace>(&state.requests.front());
+  ASSERT_NE(load, nullptr);
+  EXPECT_EQ(load->folder, 61);
+  EXPECT_EQ(load->volume, "C:");
+  state.requests.clear();
+  EXPECT_GT(render(model, state), 0);
+  EXPECT_TRUE(state.requests.empty()) << "asked once";
 }
 
 // Owner-decisions spec: a row the owner clicked says its plan started; nothing is sent unasked.

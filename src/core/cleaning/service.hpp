@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <deque>
 #include <filesystem>
 #include <functional>
@@ -167,8 +168,11 @@ class CleaningService {
   struct SpaceEntry {
     bool running = false;
     std::optional<WallTime> scanned_at;
+    WallTime asked;  // when a client last asked for it
     std::optional<std::string> error;
     nlohmann::json result = nlohmann::json::object();
+    std::optional<std::filesystem::path> folder;  // space.top of a folder id: the folder
+    std::vector<std::int64_t> folder_ids;         // the folder ids `result` hands out
   };
 
   [[nodiscard]] Result<void> register_methods(ipc::Dispatcher& methods);
@@ -258,6 +262,13 @@ class CleaningService {
   // Purges the runs the owner asked to purge early (the cleaning worker only).
   void run_purges();
   [[nodiscard]] Result<nlohmann::json> space_top(const nlohmann::json& params);
+  // Gives every folder of the space.top result of `entry` a new id; the ids of its previous
+  // result are no longer known. mutex_ must be held.
+  void number_folders(SpaceEntry& entry);
+  // Drops the least recently asked space.top result of a folder, with its folder ids, when
+  // ipc::max_space_folders of them are kept; returns the candidate source to clear, if any.
+  // mutex_ must be held.
+  [[nodiscard]] std::optional<std::string> evict_folder();
   // `work` on the executor, or the reason cleaning is unavailable.
   [[nodiscard]] Result<nlohmann::json> on_executor(
       const std::function<Result<nlohmann::json>(Executor& executor)>& work) const;
@@ -301,6 +312,8 @@ class CleaningService {
   std::optional<WallTime> last_completed_;
   std::map<std::string, SpaceEntry, std::less<>> space_;
   std::deque<std::string> space_queue_;
+  std::map<std::int64_t, std::filesystem::path> space_folders_;  // folder id -> folder
+  std::int64_t next_folder_ = 1;
 
   std::mutex apps_mutex_;          // guards the members below; held while apps.list reads
   apps::ProcessHistory history_;   // proc_start, read up to its newest row

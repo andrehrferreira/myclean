@@ -29,12 +29,17 @@ struct TopFolder {
 
 struct TopItems {
   std::vector<TopFile> files;      // largest first
-  std::vector<TopFolder> folders;  // largest first
+  std::vector<TopFolder> folders;  // largest first, at any depth
+  // The folders directly inside the root, largest first: they do not overlap, so with the
+  // root's own files they add up to the root (a treemap of one level).
+  std::vector<TopFolder> children;
+  Bytes size_on_disk;      // the root and everything below it
+  Bytes own_size_on_disk;  // the files directly inside the root
 };
 
-// The `count` largest files and folders below the scan root, by size on disk; ties by path.
-// The root itself is not listed (every folder of the scan is inside it), nor are links or the
-// extra hard links of a file already listed.
+// The `count` largest files and folders below the scan root, and its `count` largest direct
+// child folders, by size on disk; ties by path. The root itself is not listed (every folder of
+// the scan is inside it), nor are links or the extra hard links of a file already listed.
 [[nodiscard]] TopItems top_items(const ScanResult& scan, std::size_t count = default_top_count);
 
 }  // namespace myclean::space

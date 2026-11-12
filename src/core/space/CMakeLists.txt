@@ -1,6 +1,6 @@
 # Scanner v1 (folder tree with sizes on disk) and the read-only space analyses: top-N, old
 # downloads, used installers, large forgotten files, exact duplicates, near-duplicate photos, and
-# their JSON forms.
+# their JSON forms; the squarified treemap layout.
 # Win32 in platform/scan and platform/image.
 myclean_add_library(space
   SOURCES
@@ -23,6 +23,8 @@ myclean_add_library(space
     text.hpp
     top.cpp
     top.hpp
+    treemap.cpp
+    treemap.hpp
   DEPENDS
     myclean::os
     nlohmann_json::nlohmann_json)

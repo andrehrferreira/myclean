@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <functional>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -1093,6 +1094,7 @@ Result<Json> CleaningService::space_answer(const std::string& key, bool refresh)
   {
     const std::scoped_lock lock(mutex_);
     SpaceEntry& entry = space_[key];
+    entry.asked = now;
     const bool stale = !entry.scanned_at ||
                        now - *entry.scanned_at > std::chrono::minutes{ipc::space_result_minutes};
     if (!entry.running && (refresh || stale)) {
@@ -1135,6 +1137,9 @@ void CleaningService::work_space(const std::stop_token& stop) {
     if (result) {
       entry.result = *std::move(result);
       entry.error.reset();
+      if (key.starts_with("top:")) {
+        number_folders(entry);
+      }
     } else {
       entry.error = result.error().message;
     }
@@ -1201,6 +1206,13 @@ Result<Json> CleaningService::analyze_top(const std::string& key, const std::sto
     root = *downloads;
   } else if (where == "profile") {
     root = owner_->locations.owner_profile;
+  } else if (where.starts_with("folder:")) {
+    const std::scoped_lock lock(mutex_);
+    const auto entry = space_.find(key);
+    if (entry == space_.end() || !entry->second.folder) {
+      return fail(Errc::not_found, "the folder of " + key + " is unknown");
+    }
+    root = *entry->second.folder;
   } else {
     root = fs::path(std::wstring{static_cast<wchar_t>(where.front()), L':', L'\\'});
   }
@@ -1733,24 +1745,100 @@ Json CleaningService::request_scan() {
 }
 
 Result<Json> CleaningService::space_top(const Json& params) {
-  std::string where = params.at("path").get<std::string>();
-  if (where.size() == 1 && std::isalpha(static_cast<unsigned char>(where[0])) != 0) {
-    where[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(where[0])));
-  } else if (where != "downloads" && where != "profile") {
-    return fail(Errc::invalid_argument, R"(path is a drive letter, "downloads" or "profile")");
+  if (params.contains("path") == params.contains("folder")) {
+    return fail(Errc::invalid_argument, "space.top takes either path or folder");
   }
   const std::int64_t count = params.value("n", std::int64_t{20});
   if (count < 1 || count > ipc::max_space_top) {
     return fail(Errc::invalid_argument, "n must be 1..100");
   }
+  std::string where;
+  if (params.contains("folder")) {
+    const std::int64_t id = params.at("folder").get<std::int64_t>();
+    where = "folder:" + std::to_string(id);
+    std::optional<std::string> evicted;
+    {
+      const std::scoped_lock lock(mutex_);
+      const auto folder = space_folders_.find(id);
+      if (folder == space_folders_.end()) {
+        return fail(Errc::not_found, "no folder " + std::to_string(id) +
+                                         " in the latest space.top answers; run space.top again");
+      }
+      if (const std::string key = "top:" + where; !space_.contains(key)) {
+        fs::path chosen = folder->second;  // the eviction may drop its id
+        evicted = evict_folder();
+        space_[key].folder = std::move(chosen);
+      }
+    }
+    if (evicted) {
+      std::vector<Candidate> none;
+      if (Result<void> cleared = store_candidates(*sources_.store, *evicted, none); !cleared) {
+        return tl::unexpected(cleared.error());
+      }
+    }
+  } else {
+    where = params.at("path").get<std::string>();
+    if (where.size() == 1 && std::isalpha(static_cast<unsigned char>(where[0])) != 0) {
+      where[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(where[0])));
+    } else if (where != "downloads" && where != "profile") {
+      return fail(Errc::invalid_argument, R"(path is a drive letter, "downloads" or "profile")");
+    }
+  }
   Result<Json> answer = space_answer("top:" + where, params.value("refresh", false));
-  for (const char* list : {"files", "folders"}) {
+  for (const char* list : {"files", "folders", "children"}) {
     if (answer && answer->contains(list) &&
         (*answer)[list].size() > static_cast<std::size_t>(count)) {
       (*answer)[list].erase((*answer)[list].begin() + count, (*answer)[list].end());
     }
   }
   return answer;
+}
+
+void CleaningService::number_folders(SpaceEntry& entry) {
+  for (const std::int64_t id : entry.folder_ids) {
+    space_folders_.erase(id);
+  }
+  entry.folder_ids.clear();
+  std::map<std::string, std::int64_t, std::less<>> ids;  // a folder in both lists has one id
+  for (const char* list : {"folders", "children"}) {
+    const auto rows = entry.result.find(list);
+    if (rows == entry.result.end()) {
+      continue;
+    }
+    for (Json& folder : *rows) {
+      const std::string text = folder.at("path").get<std::string>();
+      const auto [named, added] = ids.try_emplace(text, next_folder_);
+      if (added) {
+        space_folders_.emplace(next_folder_, fs::path(std::u8string(text.begin(), text.end())));
+        entry.folder_ids.push_back(next_folder_++);
+      }
+      folder["id"] = named->second;
+    }
+  }
+}
+
+std::optional<std::string> CleaningService::evict_folder() {
+  std::size_t kept = 0;
+  auto oldest = space_.end();
+  for (auto entry = space_.begin(); entry != space_.end(); ++entry) {
+    if (!entry->second.folder) {
+      continue;
+    }
+    ++kept;
+    if (!entry->second.running &&
+        (oldest == space_.end() || entry->second.asked < oldest->second.asked)) {
+      oldest = entry;
+    }
+  }
+  if (kept < ipc::max_space_folders || oldest == space_.end()) {
+    return std::nullopt;
+  }
+  for (const std::int64_t id : oldest->second.folder_ids) {
+    space_folders_.erase(id);
+  }
+  std::string source = "space." + oldest->first;
+  space_.erase(oldest);
+  return source;
 }
 
 Result<Json> CleaningService::on_executor(
@@ -1942,7 +2030,8 @@ Result<void> CleaningService::register_methods(ipc::Dispatcher& methods) {
       [this](const Json& params) { return request_purge(plan_param(params, "plan")); },
       Access::tray));
   added.push_back(add(ipc::space_top_method,
-                      {Param{.name = "path", .type = ParamType::token, .required = true},
+                      {Param{.name = "path", .type = ParamType::token},
+                       Param{.name = "folder", .type = ParamType::integer},
                        Param{.name = "n", .type = ParamType::integer}, refresh},
                       [this](const Json& params) { return space_top(params); }));
   added.push_back(

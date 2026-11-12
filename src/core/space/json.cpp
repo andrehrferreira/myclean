@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -63,14 +64,21 @@ void to_json(nlohmann::json& json, const TopItems& top) {
                      {"size", file.size.count()},
                      {"modified", unix_seconds(file.modified)}});
   }
-  nlohmann::json folders = nlohmann::json::array();
-  for (const TopFolder& folder : top.folders) {
-    folders.push_back({{"path", utf8(folder.path)},
-                       {"size_on_disk", folder.size_on_disk.count()},
-                       {"size", folder.size.count()},
-                       {"files", folder.file_count}});
-  }
-  json = {{"files", std::move(files)}, {"folders", std::move(folders)}};
+  const auto folders = [](const std::vector<TopFolder>& list) {
+    nlohmann::json rows = nlohmann::json::array();
+    for (const TopFolder& folder : list) {
+      rows.push_back({{"path", utf8(folder.path)},
+                      {"size_on_disk", folder.size_on_disk.count()},
+                      {"size", folder.size.count()},
+                      {"files", folder.file_count}});
+    }
+    return rows;
+  };
+  json = {{"files", std::move(files)},
+          {"folders", folders(top.folders)},
+          {"children", folders(top.children)},
+          {"size_on_disk", top.size_on_disk.count()},
+          {"own_size_on_disk", top.own_size_on_disk.count()}};
 }
 
 void to_json(nlohmann::json& json, const ForgottenFile& file) {

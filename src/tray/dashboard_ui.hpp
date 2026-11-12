@@ -14,6 +14,7 @@
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/replies.hpp"
 #include "core/tray_model/screens.hpp"
+#include "core/tray_model/space_map.hpp"
 
 namespace myclean::tray {
 
@@ -55,6 +56,8 @@ struct UiState {
   tray_model::SpaceList space = tray_model::SpaceList::top;
   std::string space_volume;
   std::set<std::string> space_asked;
+  // The folders opened in the treemap of the largest items, below space_volume.
+  tray_model::FolderTrail space_trail;
   // The owner-decision candidates the owner clicked: their row says the plan started instead of
   // offering the button again.
   std::set<std::int64_t> acted;

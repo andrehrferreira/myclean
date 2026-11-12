@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <iterator>
 #include <vector>
 
 #include "core/model/units.hpp"
@@ -49,23 +50,31 @@ TopItems top_items(const ScanResult& scan, std::size_t count) {
   keep_largest(
       files, count, [](const FileRef& ref) { return ref.file->size_on_disk; },
       [](const FileRef& ref) { return path_of(*ref.folder, *ref.file); });
-  keep_largest(
-      folders, count, [](const Folder* folder) { return folder->size_on_disk; },
-      [](const Folder* folder) -> const auto& { return folder->path; });
+  std::vector<const Folder*> children;
+  for (const std::size_t child : scan.root().folders) {
+    children.push_back(&scan.folders[child]);
+  }
+  const auto folder_size = [](const Folder* folder) { return folder->size_on_disk; };
+  const auto folder_path = [](const Folder* folder) -> const auto& { return folder->path; };
+  keep_largest(folders, count, folder_size, folder_path);
+  keep_largest(children, count, folder_size, folder_path);
 
-  TopItems top;
+  const auto row = [](const Folder* folder) {
+    return TopFolder{.path = folder->path,
+                     .size_on_disk = folder->size_on_disk,
+                     .size = folder->size,
+                     .file_count = folder->file_count};
+  };
+  TopItems top{.size_on_disk = scan.root().size_on_disk,
+               .own_size_on_disk = scan.root().own_size_on_disk};
   for (const FileRef& ref : files) {
     top.files.push_back(TopFile{.path = path_of(*ref.folder, *ref.file),
                                 .size_on_disk = ref.file->size_on_disk,
                                 .size = ref.file->size,
                                 .modified = ref.file->modified});
   }
-  for (const Folder* folder : folders) {
-    top.folders.push_back(TopFolder{.path = folder->path,
-                                    .size_on_disk = folder->size_on_disk,
-                                    .size = folder->size,
-                                    .file_count = folder->file_count});
-  }
+  std::ranges::transform(folders, std::back_inserter(top.folders), row);
+  std::ranges::transform(children, std::back_inserter(top.children), row);
   return top;
 }
 

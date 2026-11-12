@@ -22,6 +22,7 @@
 #include "core/tray_model/format.hpp"
 #include "core/tray_model/poller.hpp"
 #include "core/tray_model/snapshot.hpp"
+#include "core/tray_model/space_map.hpp"
 #include "tray/dashboard_ui.hpp"
 #include "tray/ui_text.hpp"
 
@@ -400,8 +401,73 @@ void recycle_button(std::vector<std::int64_t> candidates, const char* label, boo
   ImGui::EndDisabled();
 }
 
+// What UiState::space_asked holds for a list, its volume and the folder opened in it.
+std::string space_key(tray_model::SpaceList list, std::string_view volume,
+                      std::optional<std::int64_t> folder) {
+  return std::format("{}/{}", static_cast<int>(list), volume) +
+         (folder ? std::format("/{}", *folder) : std::string());
+}
+
+// The owner moved in the treemap: the folder now shown is asked for again, as the view holds
+// only the newest answer of the list.
+void moved(UiState& state) {
+  state.space_asked.erase(
+      space_key(tray_model::SpaceList::top, state.space_volume, state.space_trail.current()));
+}
+
+// The treemap of the folder shown: a rectangle per folder directly inside it, which a click
+// opens, one for its own files and one for the folders the answer leaves out.
+void draw_treemap(const tray_model::SpaceReply& reply, bool reachable, UiState& state) {
+  const ImVec2 origin = ImGui::GetCursorScreenPos();
+  const ImVec2 size{ImGui::GetContentRegionAvail().x, ImGui::GetFontSize() * 16.0F};
+  if (size.x <= 0.0F || reply.top_size.count() == 0) {
+    return;
+  }
+  ImGui::InvisibleButton("treemap", size);
+  const std::vector<tray_model::TreemapCell> cells = tray_model::treemap_cells(
+      reply, {.x = origin.x, .y = origin.y, .width = size.x, .height = size.y});
+  const ImVec2 mouse = ImGui::GetIO().MousePos;
+  const tray_model::TreemapCell* hovered =
+      ImGui::IsItemHovered() ? tray_model::cell_at(cells, mouse.x, mouse.y) : nullptr;
+  ImDrawList* draw = ImGui::GetWindowDrawList();
+  for (const tray_model::TreemapCell& cell : cells) {
+    const ImVec2 min{static_cast<float>(cell.rect.x), static_cast<float>(cell.rect.y)};
+    const ImVec2 max{static_cast<float>(cell.rect.x + cell.rect.width),
+                     static_cast<float>(cell.rect.y + cell.rect.height)};
+    const unsigned fill =
+        cell.kind == tray_model::TreemapCell::Kind::folder ? color::accent : color::muted;
+    draw->AddRectFilled(min, max,
+                        ImGui::GetColorU32(ui::rgb(fill, &cell == hovered ? 0.6F : 0.3F)));
+    draw->AddRect(min, max, ImGui::GetColorU32(ui::rgb(color::background)));
+    const std::string label = cell.label + "\n" + size_text(cell.size_on_disk);
+    const ImVec2 room = ImGui::CalcTextSize(label.c_str());
+    if (room.x + 8.0F <= max.x - min.x && room.y + 6.0F <= max.y - min.y) {
+      draw->AddText({min.x + 4.0F, min.y + 3.0F}, ImGui::GetColorU32(ui::rgb(color::text)),
+                    label.c_str());
+    }
+  }
+  if (hovered == nullptr) {
+    return;
+  }
+  const bool opens = hovered->kind == tray_model::TreemapCell::Kind::folder && hovered->folder != 0;
+  if (ImGui::BeginTooltip()) {
+    text(hovered->label + "  " + size_text(hovered->size_on_disk));
+    if (opens) {
+      muted_text("Click to look inside");
+    }
+    ImGui::EndTooltip();
+  }
+  if (opens && reachable && ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+    state.space_trail.open(hovered->folder);
+    moved(state);
+  }
+}
+
 void draw_top(const tray_model::SpaceReply& reply, const std::chrono::time_zone& zone,
               bool reachable, UiState& state) {
+  muted_text(reply.top_path.empty() ? "Volume " + reply.volume
+                                    : reply.top_path + "  -  " + size_text(reply.top_size));
+  draw_treemap(reply, reachable, state);
   ImGui::SeparatorText("Largest folders");
   if (ImGui::BeginTable("folders", 3, table_flags)) {
     ImGui::TableSetupColumn("Folder", ImGuiTableColumnFlags_WidthStretch, 5.0F);
@@ -537,6 +603,43 @@ void draw_installers(const std::vector<tray_model::UsedInstallerRow>& installers
   ImGui::EndTable();
 }
 
+void draw_forgotten(const tray_model::SpaceReply& reply, const std::chrono::time_zone& zone,
+                    bool reachable, UiState& state) {
+  muted_text(
+      std::format("Files of at least {} in your Desktop, Documents, Downloads, Pictures, "
+                  "Videos and Music that nothing has written for {}.",
+                  size_text(reply.forgotten_min_size), plural(reply.forgotten_idle_days, "day")));
+  if (reply.forgotten.empty()) {
+    return;
+  }
+  if (!ImGui::BeginTable("forgotten", 5, table_flags)) {
+    return;
+  }
+  ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 3.0F);
+  ImGui::TableSetupColumn("On disk", ImGuiTableColumnFlags_WidthStretch, 0.8F);
+  ImGui::TableSetupColumn("Last written", ImGuiTableColumnFlags_WidthStretch, 1.4F);
+  ImGui::TableSetupColumn("Idle", ImGuiTableColumnFlags_WidthStretch, 0.7F);
+  ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch, 1.2F);
+  ImGui::TableHeadersRow();
+  for (const tray_model::ForgottenFileRow& file : reply.forgotten) {
+    ImGui::TableNextRow();
+    ImGui::PushID(std::to_string(file.id).c_str());
+    ImGui::TableNextColumn();
+    wrapped_text(color::text, file.path);
+    ImGui::TableNextColumn();
+    text(size_text(file.size_on_disk));
+    ImGui::TableNextColumn();
+    muted_text(local_date_time(zone, file.modified));
+    ImGui::TableNextColumn();
+    text(plural(file.idle_days, "day"));
+    ImGui::TableNextColumn();
+    propose_button({file.id}, "Propose cleanup", reachable, state);
+    recycle_button({file.id}, "To Recycle Bin", reachable, state);
+    ImGui::PopID();
+  }
+  ImGui::EndTable();
+}
+
 // One owner decision's button: the click is the owner's approval of that one plan, which the tray
 // then runs; afterwards the row says so instead.
 void owner_button(std::int64_t candidate, const char* label, bool reachable, UiState& state) {
@@ -650,26 +753,39 @@ void draw_volume_picker(const DashboardModel& model, UiState& state) {
         continue;  // space.top takes a drive letter; a folder mount has none
       }
       if (ImGui::Selectable(volume.name.c_str(), volume.name == state.space_volume)) {
-        state.space_volume = volume.name;
+        if (volume.name != state.space_volume) {
+          state.space_trail.reset();
+          state.space_volume = volume.name;
+          moved(state);
+        }
       }
     }
     ImGui::EndCombo();
   }
+  ImGui::SameLine();
+  ImGui::BeginDisabled(state.space_trail.at_volume());
+  if (ImGui::Button("Back")) {
+    state.space_trail.back();
+    moved(state);
+  }
+  ImGui::EndDisabled();
   ImGui::SameLine();
 }
 
 // Loads the list shown once (the service's newest result, or a first analysis), and again on
 // Refresh with a new analysis.
 void request_space(bool reachable, UiState& state) {
-  const std::string volume =
-      state.space == tray_model::SpaceList::top ? state.space_volume : std::string();
-  const std::string key = std::format("{}/{}", static_cast<int>(state.space), volume);
+  const bool top = state.space == tray_model::SpaceList::top;
+  const std::string volume = top ? state.space_volume : std::string();
+  const std::optional<std::int64_t> folder =
+      top ? state.space_trail.current() : std::optional<std::int64_t>();
+  const std::string key = space_key(state.space, volume, folder);
   ImGui::BeginDisabled(!reachable);
   const bool refresh = ImGui::Button("Refresh");
   ImGui::EndDisabled();
   if (refresh || (reachable && state.space_asked.insert(key).second)) {
-    state.requests.emplace_back(
-        tray_model::LoadSpace{.list = state.space, .volume = volume, .refresh = refresh});
+    state.requests.emplace_back(tray_model::LoadSpace{
+        .list = state.space, .volume = volume, .refresh = refresh, .folder = folder});
   }
 }
 
@@ -760,11 +876,12 @@ void draw_space(const DashboardModel& model, const std::chrono::time_zone& zone,
                "Nothing here changes a file by itself. Propose cleanup creates a plan that waits "
                "in Cleanup until you approve it; in Your decisions each button is your approval "
                "of that one action.");
-  static constexpr std::array<std::pair<tray_model::SpaceList, const char*>, 5> lists = {{
+  static constexpr std::array<std::pair<tray_model::SpaceList, const char*>, 6> lists = {{
       {tray_model::SpaceList::top, "Largest"},
       {tray_model::SpaceList::old_downloads, "Old downloads"},
       {tray_model::SpaceList::duplicates, "Duplicates"},
       {tray_model::SpaceList::used_installers, "Installers already used"},
+      {tray_model::SpaceList::forgotten_files, "Large forgotten files"},
       {tray_model::SpaceList::owner_decisions, "Your decisions"},
   }};
   for (const auto& [list, label] : lists) {
@@ -782,14 +899,15 @@ void draw_space(const DashboardModel& model, const std::chrono::time_zone& zone,
     wrapped_text(color::bad, model.cleanup().action_error());
   }
   const auto& reply = model.cleanup().space(state.space);
-  if (!reply) {
+  // The answer of the folder left is not shown while that of the folder opened is on its way.
+  if (!reply ||
+      (state.space == tray_model::SpaceList::top && reply->folder != state.space_trail.current())) {
     muted_text("Loading...");
     return;
   }
   draw_space_state(*reply, zone);
   switch (state.space) {
     case tray_model::SpaceList::top:
-      muted_text("Volume " + reply->volume);
       draw_top(*reply, zone, reachable, state);
       break;
     case tray_model::SpaceList::old_downloads:
@@ -803,6 +921,9 @@ void draw_space(const DashboardModel& model, const std::chrono::time_zone& zone,
       break;
     case tray_model::SpaceList::owner_decisions:
       draw_owner_decisions(*reply, reachable, state);
+      break;
+    case tray_model::SpaceList::forgotten_files:
+      draw_forgotten(*reply, zone, reachable, state);
       break;
   }
 }

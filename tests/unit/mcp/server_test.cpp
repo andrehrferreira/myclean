@@ -325,6 +325,14 @@ TEST_F(ServerTest, StorageAndPlanToolsCallTheirMethods) {
   EXPECT_EQ(calls()[10].params, (Json{{"refresh", true}}));
 }
 
+// SPC-1: a folder is looked inside by the id of an earlier answer, never by a path.
+TEST_F(ServerTest, StorageTopLooksInsideAFolderByItsId) {
+  static_cast<void>(text(call_tool("storage_top", {{"folder", 42}, {"n", 10}}), false));
+  ASSERT_EQ(calls().size(), 1U);
+  EXPECT_EQ(calls()[0].method, "space.top");
+  EXPECT_EQ(calls()[0].params, (Json{{"folder", 42}, {"n", 10}, {"refresh", false}}));
+}
+
 TEST_F(ServerTest, VirtualDiskToolsCallTheirMethodsWithDiskIdsOnly) {
   static_cast<void>(send(Json{{"jsonrpc", "2.0"},
                               {"id", 1},

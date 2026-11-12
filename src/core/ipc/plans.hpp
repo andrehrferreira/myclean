@@ -317,13 +317,22 @@ inline constexpr std::string_view quarantine_purge_method = "quarantine.purge";
 // previous result (if any) is returned. Call again until "ready". Every file entry carries an
 // "id": a candidate id for plans.propose_cleanup and plans.recycle.
 
-// Parameters: path (token, required): a drive letter ("C") or "downloads" or "profile" (the
-// owner's); n (integer 1..100, optional, default 20); refresh (boolean, optional).
-//   {..., "path": string, "files": [{"id", "path", "size_on_disk", "size", "modified",
-//    "protected"?}], "folders": [{"path", "size_on_disk", "size", "files"}]}
+// Parameters: either path (token): a drive letter ("C") or "downloads" or "profile" (the
+// owner's), or folder (integer): the "id" of a folder of an earlier space.top answer, to look
+// inside it; n (integer 1..100, optional, default 20); refresh (boolean, optional).
+//   {..., "path": string, "size_on_disk": int, "own_size_on_disk": int, "files": [{"id",
+//    "path", "size_on_disk", "size", "modified", "protected"?}], "folders": [{"id", "path",
+//    "size_on_disk", "size", "files"}], "children": [{"id", "path", "size_on_disk", "size",
+//    "files"}]}
+// "folders" are the largest folders at any depth below "path"; "children" the largest folders
+// directly inside it, which do not overlap: with "own_size_on_disk" (the files directly inside
+// "path") they add up to "size_on_disk" when every child is listed. A folder "id" names the
+// folder of that one result, like a candidate id: a new analysis of the same path gives new ids,
+// and a folder id that is unknown or of an older result fails with not_found ("run space.top
+// again"). The service keeps the results of the last max_space_folders folders asked for.
 // "protected" names the deny-list entry that refuses the file (core/safety/deny_list.hpp, such
 // as "page_file" or "system_volume_information"); a plan of it would be refused, so it is shown
-// but not proposed.
+// but not proposed. Fails with invalid_argument when neither or both of path and folder are given.
 inline constexpr std::string_view space_top_method = "space.top";
 
 // Parameters: refresh (boolean, optional). Files of the owner's Downloads folder created and
@@ -417,5 +426,6 @@ inline constexpr std::string_view space_indexed_folders_method = "space.indexed_
 
 inline constexpr int space_result_minutes = 60;
 inline constexpr int max_space_top = 100;
+inline constexpr std::size_t max_space_folders = 16;
 
 }  // namespace myclean::ipc

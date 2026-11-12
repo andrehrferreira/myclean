@@ -365,9 +365,9 @@ void Poller::ask_again(bool dashboard_open, const std::vector<Request>& requests
 }
 
 void Poller::load_space(const LoadSpace& load, PollResult& result) {
-  SpaceReply space{.list = load.list, .volume = load.volume};
-  const Result<Json> reply =
-      link_->call(space_method(load.list), space_params(load.list, load.volume, load.refresh));
+  SpaceReply space{.list = load.list, .volume = load.volume, .folder = load.folder};
+  const Result<Json> reply = link_->call(
+      space_method(load.list), space_params(load.list, load.volume, load.refresh, load.folder));
   const Result<void> parsed =
       reply ? parse_space(*reply, space) : Result<void>(tl::unexpected(reply.error()));
   if (!parsed) {
@@ -376,7 +376,8 @@ void Poller::load_space(const LoadSpace& load, PollResult& result) {
   }
   if (space.state == "scanning") {
     // Asked again, without starting another analysis, until it is ready.
-    analysing_.push_back(LoadSpace{.list = load.list, .volume = load.volume, .refresh = false});
+    analysing_.push_back(LoadSpace{
+        .list = load.list, .volume = load.volume, .refresh = false, .folder = load.folder});
   }
   result.cleanup.space.push_back(std::move(space));
 }

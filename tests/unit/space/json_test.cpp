@@ -52,8 +52,12 @@ TEST(SpaceJson, WritesTopItems) {
                  .size_on_disk = Bytes{4096},
                  .size = Bytes{4000},
                  .modified = day_one}},
-      .folders = {
-          {.path = L"C:\\dir", .size_on_disk = Bytes{8192}, .size = Bytes{8000}, .file_count = 2}}};
+      .folders =
+          {{.path = L"C:\\dir", .size_on_disk = Bytes{8192}, .size = Bytes{8000}, .file_count = 2}},
+      .children =
+          {{.path = L"C:\\dir", .size_on_disk = Bytes{8192}, .size = Bytes{8000}, .file_count = 2}},
+      .size_on_disk = Bytes{12288},
+      .own_size_on_disk = Bytes{4096}};
 
   const nlohmann::json json = top;
 
@@ -62,6 +66,9 @@ TEST(SpaceJson, WritesTopItems) {
   EXPECT_EQ(json["files"][0]["size"], 4000);
   EXPECT_EQ(json["files"][0]["modified"], 86400);
   EXPECT_EQ(json["folders"][0]["files"], 2);
+  EXPECT_EQ(json["children"][0]["path"], "C:\\dir");
+  EXPECT_EQ(json["size_on_disk"], 12288);
+  EXPECT_EQ(json["own_size_on_disk"], 4096);
 }
 
 TEST(SpaceJson, WritesOldDownloadsWithAndWithoutOrigin) {

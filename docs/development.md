@@ -63,7 +63,7 @@ src/core/packs/         knowledge packs (data/packs, docs/packs.md): loader, app
 src/core/clean/         rule engine: evaluates clean cases and finds dev artifacts (git-aware)
 src/core/cleanup/       Windows cleanup handlers, native prune commands and DISM as actions
 src/core/space/         scanner v1 and the space analyses (top-N, old downloads, installers,
-                        duplicates, near-duplicate photos by dHash)
+                        duplicates, near-duplicate photos by dHash), the squarified treemap layout
 src/core/index/         NTFS volume index from the $MFT with USN refresh and folder growth
 src/core/indexer/       Windows Search scope: build-output and cache folders it indexes (from the
                         packs' attribution areas and project cases), IndexerExclusion with undo

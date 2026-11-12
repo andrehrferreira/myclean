@@ -117,6 +117,13 @@ inline InboxJson space_top_json(std::string_view state = "ready") {
                                                   {"size_on_disk", 40'000'000'000LL},
                                                   {"size", 41'000'000'000LL},
                                                   {"files", 300'000}}});
+  answer["size_on_disk"] = 120'000'000'000LL;
+  answer["own_size_on_disk"] = 54'653'000'000LL;
+  answer["children"] = InboxJson::array({InboxJson{{"id", 61},
+                                                   {"path", R"(C:\Windows)"},
+                                                   {"size_on_disk", 40'000'000'000LL},
+                                                   {"size", 41'000'000'000LL},
+                                                   {"files", 300'000}}});
   return answer;
 }
 
@@ -169,6 +176,22 @@ inline InboxJson used_installers_json() {
                                                {"installed_as", "Tool 1.2"},
                                                {"product_code", "{1234}"}}});
   answer["errors"] = InboxJson::array();
+  return answer;
+}
+
+// space.forgotten_files: a film nobody wrote for two years.
+inline InboxJson forgotten_files_json() {
+  InboxJson answer = space_state("ready");
+  answer["roots"] = InboxJson::array({R"(C:\Users\owner\Videos)"});
+  answer["min_size"] = 512LL << 20U;
+  answer["idle_days"] = 180;
+  answer["files"] = InboxJson::array({InboxJson{{"id", 851},
+                                                {"path", R"(C:\Users\owner\Videos\holiday.mkv)"},
+                                                {"size", 3'000'000'000LL},
+                                                {"size_on_disk", 3'000'000'512LL},
+                                                {"created", 900'000},
+                                                {"modified", 900'000},
+                                                {"idle_days", 730}}});
   return answer;
 }
 

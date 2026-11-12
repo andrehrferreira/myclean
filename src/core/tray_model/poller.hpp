@@ -81,6 +81,8 @@ struct LoadSpace {
   SpaceList list = SpaceList::top;
   std::string volume;    // space.top: "C:"
   bool refresh = false;  // start a new analysis
+  // space.top: the id of a folder of an earlier answer, to look inside; nullopt for the volume.
+  std::optional<std::int64_t> folder;
 };
 struct ProposeCleanup {
   std::vector<std::int64_t> candidates;  // Space candidate ids

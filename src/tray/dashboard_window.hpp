@@ -3,6 +3,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include <d3d11.h>
@@ -30,7 +31,8 @@ class DashboardWindow {
   using Send = std::function<void(tray_model::Request)>;
 
   // Creates and shows the window. `shared` and `zone` must outlive it. `send` takes the owner's
-  // requests (snooze, dismiss, explain, chart range) to the poll thread.
+  // requests (snooze, dismiss, explain, chart range) to the poll thread. Called on the owner's
+  // click: the tray log gets the time from here to the first frame presented (NFR-PERF-2).
   [[nodiscard]] static Result<std::unique_ptr<DashboardWindow>> open(
       HINSTANCE instance, SharedModel& shared, const std::chrono::time_zone& zone, Send send);
 
@@ -82,6 +84,8 @@ class DashboardWindow {
   bool minimized_ = false;
   bool resized_ = false;
   int frames_ = settle_frames;
+  // When open() began; reset once the first frame is presented and its time logged.
+  std::optional<std::chrono::steady_clock::time_point> opening_;
 };
 
 }  // namespace myclean::tray

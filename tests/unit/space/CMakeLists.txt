@@ -9,5 +9,6 @@ myclean_add_test(space
     scanner_test.cpp
     space_fakes.hpp
     top_test.cpp
+    treemap_test.cpp
   DEPENDS
     myclean::space)

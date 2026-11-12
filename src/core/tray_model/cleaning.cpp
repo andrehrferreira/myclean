@@ -137,11 +137,20 @@ void parse_top(const Json& answer, SpaceReply& reply) {
                    .modified = time_of(file, "modified"),
                    .protected_by = optional_text(file, "protected").value_or("")});
   }
-  for (const Json& folder : answer.at("folders")) {
-    reply.top_folders.push_back(TopFolderRow{.path = folder.at("path").get<std::string>(),
-                                             .size_on_disk = bytes_of(folder, "size_on_disk"),
-                                             .files = folder.at("files").get<std::uint64_t>()});
-  }
+  // A service older than the treemap gives no folder ids, children or totals.
+  const auto folders = [](const Json& rows, std::vector<TopFolderRow>& into) {
+    for (const Json& folder : rows) {
+      into.push_back(TopFolderRow{.id = folder.value("id", std::int64_t{0}),
+                                  .path = folder.at("path").get<std::string>(),
+                                  .size_on_disk = bytes_of(folder, "size_on_disk"),
+                                  .files = folder.at("files").get<std::uint64_t>()});
+    }
+  };
+  folders(answer.at("folders"), reply.top_folders);
+  folders(answer.value("children", Json::array()), reply.top_children);
+  reply.top_path = answer.value("path", std::string());
+  reply.top_size = Bytes{answer.value("size_on_disk", std::uint64_t{0})};
+  reply.top_own_size = Bytes{answer.value("own_size_on_disk", std::uint64_t{0})};
 }
 
 void parse_downloads(const Json& answer, SpaceReply& reply) {
@@ -186,6 +195,19 @@ void parse_installers(const Json& answer, SpaceReply& reply) {
   }
 }
 
+void parse_forgotten(const Json& answer, SpaceReply& reply) {
+  for (const Json& file : answer.at("files")) {
+    reply.forgotten.push_back(
+        ForgottenFileRow{.id = file.at("id").get<std::int64_t>(),
+                         .path = file.at("path").get<std::string>(),
+                         .size_on_disk = bytes_of(file, "size_on_disk"),
+                         .modified = time_of(file, "modified"),
+                         .idle_days = file.at("idle_days").get<std::int64_t>()});
+  }
+  reply.forgotten_min_size = bytes_of(answer, "min_size");
+  reply.forgotten_idle_days = answer.at("idle_days").get<std::int64_t>();
+}
+
 void parse_owner_decisions(const Json& answer, SpaceReply& reply) {
   for (const Json& folder : answer.at("cold")) {
     reply.cold.push_back(
@@ -222,6 +244,7 @@ const char* result_member(SpaceList list) {
       return "cold";
     case SpaceList::top:
     case SpaceList::old_downloads:
+    case SpaceList::forgotten_files:
       break;
   }
   return "files";
@@ -407,15 +430,20 @@ std::string_view space_method(SpaceList list) {
       return ipc::space_duplicates_method;
     case SpaceList::owner_decisions:
       return ipc::space_owner_decisions_method;
+    case SpaceList::forgotten_files:
+      return ipc::space_forgotten_files_method;
     case SpaceList::used_installers:
       break;
   }
   return ipc::space_used_installers_method;
 }
 
-Json space_params(SpaceList list, std::string_view volume, bool refresh) {
+Json space_params(SpaceList list, std::string_view volume, bool refresh,
+                  std::optional<std::int64_t> folder) {
   Json params = Json::object();
-  if (list == SpaceList::top) {
+  if (list == SpaceList::top && folder) {
+    params["folder"] = *folder;
+  } else if (list == SpaceList::top) {
     params["path"] = std::string(volume.substr(0, volume.find(':')));
   }
   if (refresh) {
@@ -447,6 +475,9 @@ Result<void> parse_space(const Json& answer, SpaceReply& reply) {
         break;
       case SpaceList::owner_decisions:
         parse_owner_decisions(answer, reply);
+        break;
+      case SpaceList::forgotten_files:
+        parse_forgotten(answer, reply);
         break;
     }
   });

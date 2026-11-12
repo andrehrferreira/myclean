@@ -121,6 +121,7 @@ struct TopFileRow {
   std::string protected_by;  // the deny-list entry that refuses it; empty when it can be proposed
 };
 struct TopFolderRow {
+  std::int64_t id = 0;  // the folder id space.top takes to look inside; 0 from an older service
   std::string path;
   Bytes size_on_disk;
   std::uint64_t files = 0;
@@ -148,6 +149,16 @@ struct UsedInstallerRow {
   std::string kind;  // msi or exe
   Bytes size_on_disk;
   std::string installed_as;
+};
+
+// A large file of the owner's folders that nothing has written for half a year
+// (space.forgotten_files): a report the owner may act on.
+struct ForgottenFileRow {
+  std::int64_t id = 0;
+  std::string path;
+  Bytes size_on_disk;
+  WallTime modified;
+  std::int64_t idle_days = 0;
 };
 
 // The owner decisions (space.owner_decisions); `id` is the candidate id plans.owner_action takes.
@@ -179,20 +190,36 @@ struct ProgramRow {
 [[nodiscard]] std::string_view protected_text(std::string_view rule);
 
 // What the owner can ask for in the Space view.
-enum class SpaceList { top, old_downloads, duplicates, used_installers, owner_decisions };
+enum class SpaceList {
+  top,
+  old_downloads,
+  duplicates,
+  used_installers,
+  owner_decisions,
+  forgotten_files
+};
 
 // One answer of a space method, or why the call failed.
 struct SpaceReply {
   SpaceList list = SpaceList::top;
   std::string volume;  // space.top: the volume asked for, "C:"
-  std::string state;   // ready, scanning (the previous result, if any, is shown) or failed
+  // space.top: the id of the folder looked inside; nullopt for the volume itself.
+  std::optional<std::int64_t> folder;
+  std::string state;  // ready, scanning (the previous result, if any, is shown) or failed
   std::optional<WallTime> scanned_at;
   std::string error;  // why the call or the analysis failed; empty otherwise
   std::vector<TopFileRow> top_files;
-  std::vector<TopFolderRow> top_folders;
+  std::vector<TopFolderRow> top_folders;   // the largest at any depth
+  std::vector<TopFolderRow> top_children;  // the largest directly inside top_path
+  std::string top_path;                    // the volume root or folder analysed
+  Bytes top_size;                          // of top_path and everything below it
+  Bytes top_own_size;                      // of the files directly inside top_path
   std::vector<OldDownloadRow> downloads;
   std::vector<DuplicateGroupRow> duplicates;
   std::vector<UsedInstallerRow> installers;
+  std::vector<ForgottenFileRow> forgotten;
+  Bytes forgotten_min_size;              // space.forgotten_files: the size a file has at least
+  std::int64_t forgotten_idle_days = 0;  // and the days nothing has written it
   std::vector<ColdFolderRow> cold;
   std::vector<ProgramRow> programs;
   std::vector<std::string> notes;  // owner decisions: what could not be judged, and why
@@ -231,8 +258,10 @@ struct Selection {
                                                        std::optional<std::int64_t> item);
 
 [[nodiscard]] std::string_view space_method(SpaceList list);
-// space.top takes the volume as a drive letter ("C" for "C:"); `refresh` starts a new analysis.
-[[nodiscard]] nlohmann::json space_params(SpaceList list, std::string_view volume, bool refresh);
+// space.top takes the volume as a drive letter ("C" for "C:"), or the id of a folder of an earlier
+// answer to look inside; `refresh` starts a new analysis.
+[[nodiscard]] nlohmann::json space_params(SpaceList list, std::string_view volume, bool refresh,
+                                          std::optional<std::int64_t> folder = std::nullopt);
 // Fills `reply` (whose list is set) from the method's answer.
 [[nodiscard]] Result<void> parse_space(const nlohmann::json& answer, SpaceReply& reply);
 
@@ -298,7 +327,7 @@ class CleanupView {
   std::vector<PlanDetail> details_;
   std::optional<std::vector<QuarantineRun>> quarantine_;
   std::string action_error_;
-  std::array<std::optional<SpaceReply>, 5> space_;
+  std::array<std::optional<SpaceReply>, 6> space_;
   std::string task_activity_;
   std::string task_note_;
 };

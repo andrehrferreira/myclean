@@ -6,6 +6,7 @@ myclean_add_test(svc
     backup_component_test.cpp
     cleaning_component_test.cpp
     cleaning_smoke_test.cpp
+    dashboard_feed_test.cpp
     disk_health_component_test.cpp
     events_adapter_test.cpp
     fake_machine.hpp
@@ -25,6 +26,7 @@ myclean_add_test(svc
     ../platform_fs/sandbox.hpp
   DEPENDS
     myclean::svc
+    myclean::tray_model
     myclean::fakes)
 target_compile_definitions(myclean_svc_tests PRIVATE MYCLEAN_TEST_VERSION="${PROJECT_VERSION}"
   MYCLEAN_DATA_DIR="${PROJECT_SOURCE_DIR}/data" MYCLEAN_SVC_EXE="$<TARGET_FILE:myclean-svc>")

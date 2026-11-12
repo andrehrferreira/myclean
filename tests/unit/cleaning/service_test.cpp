@@ -22,6 +22,7 @@
 #include "core/actions/audit_log.hpp"
 #include "core/ipc/frame.hpp"
 #include "core/ipc/json_rpc.hpp"
+#include "core/ipc/plans.hpp"
 #include "core/model/units.hpp"
 #include "core/placement/settings.hpp"
 #include "core/safety/deny_list.hpp"
@@ -756,6 +757,92 @@ TEST_F(CleaningServiceTest, ALargestFileTheDenyListRefusesSaysWhy) {
   EXPECT_EQ(files[0].at("protected"), "page_file");
   EXPECT_EQ(files[1].at("path"), "F:\\big.iso");
   EXPECT_FALSE(files[1].contains("protected"));
+}
+
+// SPC-1: any folder of an answer is looked inside by its id, never by a path from the client;
+// an id names the folder of one result only.
+TEST_F(CleaningServiceTest, SpaceTopLooksInsideAFolderByItsIdFromAnEarlierAnswer) {
+  start();
+  work();
+  reader().listings[path(L"F:\\")] = {space::testing::file("big.iso", 5ULL << 30U, 1),
+                                      space::testing::folder("games")};
+  reader().listings[path(L"F:\\games")] = {space::testing::file("save.dat", 1ULL << 20U, 2),
+                                           space::testing::folder("a")};
+  reader().listings[path(L"F:\\games\\a")] = {space::testing::file("x.bin", 3ULL << 20U, 3)};
+  fs().add_file(L"F:\\games\\a\\x.bin", 3_MiB);
+  call("space.top", Json{{"path", "F"}, {"refresh", true}});
+  work_space();
+  const Json top = call("space.top", Json{{"path", "F"}});
+  EXPECT_EQ(top.at("size_on_disk"), (5LL << 30U) + (4LL << 20U));
+  EXPECT_EQ(top.at("own_size_on_disk"), 5LL << 30U);
+  ASSERT_EQ(top.at("children").size(), 1U);
+  EXPECT_EQ(top.at("children")[0].at("path"), "F:\\games");
+  ASSERT_EQ(top.at("folders").size(), 2U);
+  EXPECT_EQ(top.at("folders")[0].at("path"), "F:\\games");
+  const Json games = top.at("children")[0].at("id");
+  EXPECT_EQ(top.at("folders")[0].at("id"), games);  // one folder, one id
+  EXPECT_NE(top.at("folders")[1].at("id"), games);
+
+  EXPECT_EQ(call("space.top", Json{{"folder", games}}).at("state"), "scanning");
+  work_space();
+  const Json inside = call("space.top", Json{{"folder", games}, {"n", 5}});
+  ASSERT_EQ(inside.at("state"), "ready") << inside.dump();
+  EXPECT_EQ(inside.at("path"), "F:\\games");
+  EXPECT_EQ(inside.at("own_size_on_disk"), 1LL << 20U);
+  ASSERT_EQ(inside.at("files").size(), 2U);
+  EXPECT_EQ(inside.at("files")[0].at("path"), "F:\\games\\a\\x.bin");
+  EXPECT_EQ(call("plans.recycle", Json{{"candidates", {{"ids", {inside.at("files")[0].at("id")}}}}})
+                .at("state"),
+            "approved");
+  ASSERT_EQ(inside.at("children").size(), 1U);
+  EXPECT_EQ(inside.at("children")[0].at("path"), "F:\\games\\a");
+  EXPECT_TRUE(inside.at("children")[0].at("id").is_number_integer());
+
+  // Either path or folder; an unknown id, or one of an older result, is not found.
+  EXPECT_EQ(error_of("space.top", Json::object(), false).at("data").at("errc"), "invalid_argument");
+  EXPECT_EQ(
+      error_of("space.top", Json{{"path", "F"}, {"folder", games}}, false).at("data").at("errc"),
+      "invalid_argument");
+  EXPECT_EQ(error_of("space.top", Json{{"folder", 9999}}, false).at("data").at("errc"),
+            "not_found");
+  call("space.top", Json{{"path", "F"}, {"refresh", true}});
+  work_space();
+  const Json again = call("space.top", Json{{"path", "F"}});
+  EXPECT_NE(again.at("children")[0].at("id"), games);
+  const Json stale = error_of("space.top", Json{{"folder", games}}, false);
+  EXPECT_EQ(stale.at("data").at("errc"), "not_found");
+  EXPECT_NE(stale.at("message").get<std::string>().find("run space.top again"), std::string::npos);
+}
+
+// The results of looked-inside folders are bounded: the least recently asked one goes, with
+// its folder ids.
+TEST_F(CleaningServiceTest, SpaceTopKeepsTheResultsOfTheLastFoldersAskedFor) {
+  start();
+  work();
+  std::vector<space::ListedEntry> root;
+  for (std::size_t index = 0; index <= ipc::max_space_folders; ++index) {
+    const std::string name = "d" + std::to_string(index);
+    root.push_back(space::testing::folder(name));
+    reader().listings[path(L"F:\\") / name] = {space::testing::folder("inner")};
+    reader().listings[path(L"F:\\") / name / "inner"] = {};
+  }
+  reader().listings[path(L"F:\\")] = root;
+  call("space.top", Json{{"path", "F"}, {"n", 100}, {"refresh", true}});
+  work_space();
+  const Json children = call("space.top", Json{{"path", "F"}, {"n", 100}}).at("children");
+  ASSERT_EQ(children.size(), ipc::max_space_folders + 1);
+  std::vector<Json> inner;
+  for (const Json& child : children) {
+    call("space.top", Json{{"folder", child.at("id")}});
+    work_space();
+    inner.push_back(call("space.top", Json{{"folder", child.at("id")}}).at("children")[0]);
+    clock().advance(1s);
+  }
+  // The first folder's result went when the last one was asked for.
+  EXPECT_EQ(
+      error_of("space.top", Json{{"folder", inner.front().at("id")}}, false).at("data").at("errc"),
+      "not_found");
+  EXPECT_EQ(call("space.top", Json{{"folder", inner.back().at("id")}}).at("state"), "scanning");
 }
 
 TEST_F(CleaningServiceTest, AnMcpProposalWaitsForTheOwnerAndCannotBeApprovedByAnotherCaller) {

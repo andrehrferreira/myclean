@@ -19,6 +19,7 @@ myclean_add_test(tray_model
     reports_test.cpp
     screens_fixtures.hpp
     screens_test.cpp
+    space_map_test.cpp
     tray_model_test_support.hpp
     tray_state_test.cpp
   DEPENDS

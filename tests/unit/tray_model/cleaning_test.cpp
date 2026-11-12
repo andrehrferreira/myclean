@@ -205,6 +205,8 @@ TEST(CleaningRepliesTest, RequestParameters) {
   EXPECT_EQ(space_params(SpaceList::duplicates, "C:", false), Json::object());
   EXPECT_EQ(space_method(SpaceList::used_installers), "space.used_installers");
   EXPECT_EQ(space_method(SpaceList::owner_decisions), "space.owner_decisions");
+  EXPECT_EQ(space_method(SpaceList::forgotten_files), "space.forgotten_files");
+  EXPECT_EQ(space_params(SpaceList::forgotten_files, "", false), Json::object());
   EXPECT_EQ(space_params(SpaceList::owner_decisions, "", true), (Json{{"refresh", true}}));
   EXPECT_EQ(owner_action_params(901), (Json{{"candidate", 901}}));
 }
@@ -303,6 +305,15 @@ TEST(CleaningRepliesTest, SpaceListsWithCandidateIds) {
   ASSERT_TRUE(parse_space(testing::used_installers_json(), installers).has_value());
   ASSERT_EQ(installers.installers.size(), 1U);
   EXPECT_EQ(installers.installers[0].installed_as, "Tool 1.2");
+
+  SpaceReply forgotten{.list = SpaceList::forgotten_files};
+  ASSERT_TRUE(parse_space(testing::forgotten_files_json(), forgotten).has_value());
+  ASSERT_EQ(forgotten.forgotten.size(), 1U);
+  EXPECT_EQ(forgotten.forgotten[0].id, 851);
+  EXPECT_EQ(forgotten.forgotten[0].size_on_disk, Bytes{3'000'000'512});
+  EXPECT_EQ(forgotten.forgotten[0].idle_days, 730);
+  EXPECT_EQ(forgotten.forgotten_min_size, Bytes{512ULL << 20U});
+  EXPECT_EQ(forgotten.forgotten_idle_days, 180);
 
   // The first analysis still runs: no result yet.
   SpaceReply first{.list = SpaceList::duplicates};

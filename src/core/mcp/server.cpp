@@ -201,12 +201,19 @@ const Json& tool_list() {
            object_schema()),
       tool("storage_top",
            std::string("The largest files and folders of a drive or of the owner's Downloads or "
-                       "profile folder, by size on disk.") +
+                       "profile folder, by size on disk, and the folders directly inside it "
+                       "('children'). Each folder has an id: pass it as 'folder' to look inside "
+                       "that folder.") +
                std::string(space_note),
            object_schema({{"path",
                            {{"type", "string"},
                             {"description",
                              "A drive letter such as 'C' (default), or 'downloads' or 'profile'"}}},
+                          {"folder",
+                           {{"type", "integer"},
+                            {"description",
+                             "The id of a folder of an earlier storage_top answer, instead of "
+                             "path. An unknown or outdated id fails: call storage_top again"}}},
                           {"n",
                            {{"type", "integer"},
                             {"minimum", 1},
@@ -647,6 +654,17 @@ struct ServiceCall {
   Json params;
 };
 
+// space.top of storage_top: a folder id of an earlier answer, or else a drive or folder token.
+Json storage_top_params(const Json& arguments) {
+  Json params{{"n", arguments.value("n", 20)}, {"refresh", arguments.value("refresh", false)}};
+  if (arguments.contains("folder")) {
+    params["folder"] = arguments.at("folder");
+  } else {
+    params["path"] = arguments.value("path", "C");
+  }
+  return params;
+}
+
 std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json& arguments,
                                               const std::string& client) {
   const Json refresh{{"refresh", arguments.value("refresh", false)}};
@@ -661,10 +679,7 @@ std::optional<ServiceCall> space_or_plan_call(std::string_view tool, const Json&
                        .params = Json{{"hours", arguments.value("hours", 24.0)}}};
   }
   if (tool == "storage_top") {
-    return ServiceCall{.method = ipc::space_top_method,
-                       .params = Json{{"path", arguments.value("path", "C")},
-                                      {"n", arguments.value("n", 20)},
-                                      {"refresh", arguments.value("refresh", false)}}};
+    return ServiceCall{.method = ipc::space_top_method, .params = storage_top_params(arguments)};
   }
   if (tool == "find_old_downloads") {
     return ServiceCall{.method = ipc::space_old_downloads_method, .params = refresh};

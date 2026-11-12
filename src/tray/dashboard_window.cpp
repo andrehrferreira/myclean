@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -15,6 +16,7 @@
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 #include <implot.h>
+#include <spdlog/spdlog.h>
 #include <wil/com.h>
 #include <wil/resource.h>
 #include <windows.h>
@@ -38,6 +40,8 @@ constexpr int base_width = 1280;
 constexpr int base_height = 880;
 constexpr float base_dpi = 96.0F;
 constexpr std::array<float, 4> clear_color = {0x11 / 255.0F, 0x14 / 255.0F, 0x18 / 255.0F, 1.0F};
+// NFR-PERF-2: the dashboard opens in under a second.
+constexpr std::chrono::milliseconds open_target{1000};
 
 Result<void> register_class(HINSTANCE instance, WNDPROC procedure) {
   WNDCLASSEXW window_class{};
@@ -80,11 +84,13 @@ Result<std::unique_ptr<DashboardWindow>> DashboardWindow::open(HINSTANCE instanc
                                                                SharedModel& shared,
                                                                const std::chrono::time_zone& zone,
                                                                Send send) {
+  const std::chrono::steady_clock::time_point clicked = std::chrono::steady_clock::now();
   if (Result<void> registered = register_class(instance, &DashboardWindow::window_proc);
       !registered) {
     return tl::unexpected(registered.error());
   }
   std::unique_ptr<DashboardWindow> self(new DashboardWindow(shared, zone, std::move(send)));
+  self->opening_ = clicked;
   const float system_scale = static_cast<float>(::GetDpiForSystem()) / base_dpi;
   HWND window = ::CreateWindowExW(0, class_name, L"MyClean", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
                                   CW_USEDEFAULT, static_cast<int>(base_width * system_scale),
@@ -210,6 +216,14 @@ void DashboardWindow::render() {
   ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
   swap_chain_->Present(1, 0);  // waits for the vertical blank: at most one frame per refresh
   --frames_;
+  if (opening_) {
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - *opening_);
+    opening_.reset();
+    spdlog::log(elapsed < open_target ? spdlog::level::info : spdlog::level::warn,
+                "dashboard: first frame presented {} ms after the click (target under {} ms)",
+                elapsed.count(), open_target.count());
+  }
 }
 
 void DashboardWindow::activate() const {

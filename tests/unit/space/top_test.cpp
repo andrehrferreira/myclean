@@ -48,6 +48,24 @@ TEST(TopItems, ListsTheLargestFilesAndFoldersBelowTheRoot) {
   EXPECT_EQ(top.folders[2].path, root / "a" / "deep");
 }
 
+// The direct children do not overlap: with the root's own files they add up to the root.
+TEST(TopItems, ListsTheDirectChildrenOfTheRootThatAddUpToIt) {
+  const TopItems top = top_items(sample(), 3);
+
+  ASSERT_EQ(top.children.size(), 2U);
+  EXPECT_EQ(top.children[0].path, root / "a");
+  EXPECT_EQ(top.children[0].size_on_disk, Bytes{650});
+  EXPECT_EQ(top.children[1].path, root / "b");
+  EXPECT_EQ(top.own_size_on_disk, Bytes{900});
+  EXPECT_EQ(top.size_on_disk, Bytes{1650});
+  EXPECT_EQ(top.own_size_on_disk + top.children[0].size_on_disk + top.children[1].size_on_disk,
+            top.size_on_disk);
+
+  const TopItems one = top_items(sample(), 1);
+  ASSERT_EQ(one.children.size(), 1U);
+  EXPECT_EQ(one.children[0].path, root / "a");
+}
+
 TEST(TopItems, KeepsEveryEntryInsideTheScannedPath) {
   const TopItems top = top_items(sample());
 
