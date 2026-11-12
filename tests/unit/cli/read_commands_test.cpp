@@ -173,7 +173,8 @@ TEST_F(CliReadTest, SpaceTopSendsTheDriveTokenAndListsFilesAndFolders) {
                                                          {"size_on_disk", 5368709120},
                                                          {"size", 5368709120},
                                                          {"modified", noon_seconds}}})},
-                             {"folders", Json::array({Json{{"path", R"(C:\Users)"},
+                             {"folders", Json::array({Json{{"id", 3},
+                                                           {"path", R"(C:\Users)"},
                                                            {"size_on_disk", 107374182400},
                                                            {"size", 107374182400},
                                                            {"files", 1234}}})}});
@@ -188,10 +189,34 @@ TEST_F(CliReadTest, SpaceTopSendsTheDriveTokenAndListsFilesAndFolders) {
   expect_has(text,
              R"([7]   16.0 GiB  C:\pagefile.sys  (protected: page_file; it cannot be proposed))");
   expect_has(text, "[8]    5.0 GiB  C:\\Users\\owner\\big.iso\n");
-  expect_has(text, R"(  100.0 GiB  C:\Users (1234 files))");
+  expect_has(text, R"(  [3]  100.0 GiB  C:\Users (1234 files))");
+  expect_has(text, "Open a folder with: myclean space top --folder <id>\n");
 
   static_cast<void>(cli({"space", "top", "downloads"}));
   EXPECT_EQ(sent(ipc::space_top_method), (Json{{"path", "downloads"}, {"refresh", false}}));
+}
+
+TEST_F(CliReadTest, SpaceTopOpensAFolderByItsIdAndListsItsChildren) {
+  const Json answer = ready({{"path", R"(C:\Users)"},
+                             {"size_on_disk", 107374182400},
+                             {"own_size_on_disk", 1073741824},
+                             {"files", Json::array()},
+                             {"folders", Json::array()},
+                             {"children", Json::array({Json{{"id", 11},
+                                                            {"path", R"(C:\Users\owner)"},
+                                                            {"size_on_disk", 106300440576},
+                                                            {"size", 106300440576},
+                                                            {"files", 1200}}})}});
+  serve(ipc::space_top_method,
+        {Param{.name = "path", .type = ParamType::token},
+         Param{.name = "folder", .type = ParamType::integer},
+         Param{.name = "n", .type = ParamType::integer}, refresh},
+        answer);
+
+  const std::string text = both_forms({"space", "top", "--folder", "3", "--limit", "5"}, answer);
+  EXPECT_EQ(sent(ipc::space_top_method), (Json{{"folder", 3}, {"n", 5}, {"refresh", false}}));
+  expect_has(text, "Folders directly inside (100.0 GiB on disk, 1.0 GiB in its own files):\n");
+  expect_has(text, R"(  [11]   99.0 GiB  C:\Users\owner (1200 files))");
 }
 
 TEST_F(CliReadTest, SpaceAnalysesShowTheirResults) {
@@ -400,7 +425,9 @@ TEST(CliReadUsageTest, SpaceUsageErrorsExitThree) {
                                              {"space", "top", "C", "D"},
                                              {"space", "frobnicate"},
                                              {"space", "vhdx", "extra"},
-                                             {"space", "top", "C", "--limit", "five"}}) {
+                                             {"space", "top", "C", "--limit", "five"},
+                                             {"space", "top", "--folder", "three"},
+                                             {"space", "top", "C", "--folder", "3"}}) {
     const Outcome outcome = usage_of(args);
     EXPECT_EQ(outcome.code, exit_usage) << args.back();
     EXPECT_TRUE(outcome.out.empty());

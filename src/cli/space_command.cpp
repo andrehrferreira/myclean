@@ -49,6 +49,13 @@ std::string file_line(const Json& file, std::string_view size_key = "size_on_dis
                      bytes(number(file, size_key)), text_of(file, "path"));
 }
 
+// "  [id]   1.5 GiB  path (12 files)" for a folder entry; the id opens it with --folder.
+std::string folder_line(const Json& folder) {
+  return std::format("  [{}] {:>10}  {} ({} files)\n", fixed(number(folder, "id"), 0),
+                     bytes(number(folder, "size_on_disk")), text_of(folder, "path"),
+                     fixed(number(folder, "files"), 0));
+}
+
 std::string none_if_empty(const Json& list) {
   return list.empty() ? "  none\n" : "";
 }
@@ -86,10 +93,18 @@ std::string top_text(const Json& reply) {
   }
   out += "Folders:\n" + none_if_empty(list_of(reply, "folders"));
   for (const Json& folder : list_of(reply, "folders")) {
-    out += std::format("  {:>10}  {} ({} files)\n", bytes(number(folder, "size_on_disk")),
-                       text_of(folder, "path"), fixed(number(folder, "files"), 0));
+    out += folder_line(folder);
   }
-  return out;
+  if (reply.contains("children")) {
+    out += std::format("Folders directly inside ({} on disk, {} in its own files):\n",
+                       bytes(number(reply, "size_on_disk")),
+                       bytes(number(reply, "own_size_on_disk"))) +
+           none_if_empty(list_of(reply, "children"));
+    for (const Json& child : list_of(reply, "children")) {
+      out += folder_line(child);
+    }
+  }
+  return out + "Open a folder with: myclean space top --folder <id>\n";
 }
 
 std::string old_downloads_text(const Json& reply) {
@@ -300,18 +315,25 @@ constexpr std::array<Analysis, 7> analyses{
              .render = &indexed_text}};
 
 // space top <drive>|downloads|profile [--limit <n>]: "C:" is sent as the token "C".
+// space top --folder <id> [--limit <n>]: a folder by the id an earlier answer gave it.
 int top(const CommandLine& line, const mcp::Caller& call, std::ostream& out, std::ostream& err) {
   const Result<std::optional<std::int64_t>> limit = option<std::int64_t>(line, "limit");
-  if (!limit) {
-    err << "myclean: " << limit.error().message << '\n';
+  const Result<std::optional<std::int64_t>> folder = option<std::int64_t>(line, "folder");
+  if (!limit || !folder) {
+    err << "myclean: " << (!limit ? limit.error() : folder.error()).message << '\n';
     return exit_usage;
   }
-  std::string where = line.words[2];
-  if (where.size() == 2 && where[1] == ':' &&
-      std::isalpha(static_cast<unsigned char>(where[0])) != 0) {
-    where.pop_back();
+  Json params{{"refresh", line.refresh}};
+  if (*folder) {
+    params["folder"] = **folder;
+  } else {
+    std::string where = line.words[2];
+    if (where.size() == 2 && where[1] == ':' &&
+        std::isalpha(static_cast<unsigned char>(where[0])) != 0) {
+      where.pop_back();
+    }
+    params["path"] = where;
   }
-  Json params{{"path", where}, {"refresh", line.refresh}};
   if (*limit) {
     params["n"] = **limit;
   }
@@ -323,7 +345,8 @@ int top(const CommandLine& line, const mcp::Caller& call, std::ostream& out, std
 int space_command(const CommandLine& line, const mcp::Caller& call, std::ostream& out,
                   std::ostream& err) {
   const std::vector<std::string>& words = line.words;
-  if (words.size() == 3 && words[1] == "top") {
+  const bool by_folder = find_option(line, "folder") != nullptr;
+  if (words.size() == (by_folder ? 2U : 3U) && words[1] == "top") {
     return top(line, call, out, err);
   }
   if (words.size() == 2 && words[1] == "duplicates") {
@@ -339,7 +362,8 @@ int space_command(const CommandLine& line, const mcp::Caller& call, std::ostream
                   analysis.render);
     }
   }
-  err << "myclean: space: top <drive>|downloads|profile [--limit <n>] | old-downloads | "
+  err << "myclean: space: top <drive>|downloads|profile|--folder <id> [--limit <n>] | "
+         "old-downloads | "
          "forgotten-files | duplicates [--mode exact|photos] | used-installers | "
          "owner-decisions | dev-drive | vhdx | indexed-folders [--refresh]\n";
   return exit_usage;

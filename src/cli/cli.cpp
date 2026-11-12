@@ -54,9 +54,9 @@ namespace {
 using Json = nlohmann::json;
 
 Result<CommandLine> parse(std::span<const std::string> args) {
-  constexpr std::array<std::string_view, 12> valued{"pipe",  "sort",        "limit",  "entity",
-                                                    "hours", "max-points",  "min-gb", "depth",
-                                                    "data",  "unused-days", "mode",   "state"};
+  constexpr std::array<std::string_view, 13> valued{
+      "pipe",  "sort", "limit",       "entity", "hours", "max-points", "min-gb",
+      "depth", "data", "unused-days", "mode",   "state", "folder"};
   CommandLine line;
   for (std::size_t index = 0; index < args.size(); ++index) {
     const std::string& arg = args[index];
@@ -325,7 +325,7 @@ std::string_view usage() {
          "                              repositories with work that exists nowhere else\n"
          "  apps [--unused-days <n>]    installed apps with last use (source, confidence),\n"
          "                              description and keep/remove verdict\n"
-         "  space top <drive>|downloads|profile [--limit <n>] [--refresh]\n"
+         "  space top <drive>|downloads|profile|--folder <id> [--limit <n>] [--refresh]\n"
          "                              the largest files and folders there (at most 100)\n"
          "  space old-downloads | forgotten-files | duplicates [--mode exact|photos] |\n"
          "        used-installers | owner-decisions | dev-drive | vhdx | indexed-folders\n"
