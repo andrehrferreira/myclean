@@ -3,11 +3,15 @@
 myclean_add_library(cli
   SOURCES
     cli.cpp
+    cleaning_command.cpp
+    cleaning_command.hpp
     cli.hpp
     command.cpp
     command.hpp
     map_command.cpp
     map_command.hpp
+    monitor_command.cpp
+    monitor_command.hpp
     packs_command.cpp
     packs_command.hpp
     report_command.cpp

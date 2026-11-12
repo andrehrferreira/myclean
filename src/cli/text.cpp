@@ -323,6 +323,19 @@ std::string tree_name(const Json& object, std::string_view image_key) {
   return std::format("{} (pid {})", text_of(object, image_key), fixed(number(root, "pid"), 0));
 }
 
+// One line per governor event (core/ipc/governor.hpp).
+std::string event_lines(const Json& events) {
+  std::string out;
+  for (const Json& event : events) {
+    const Json& step = event.value("step", Json());
+    out += std::format("  {} {}{} {}: {}, {}{}\n", utc(event, "time"), text_of(event, "kind"),
+                       step.is_string() ? " " + step.get<std::string>() : "",
+                       tree_name(event, "image"), text_of(event, "reason"), text_of(event, "actor"),
+                       text_of(event, "detail").empty() ? "" : " - " + text_of(event, "detail"));
+  }
+  return out;
+}
+
 }  // namespace
 
 std::string governor(const Json& status) {
@@ -373,14 +386,13 @@ std::string governor(const Json& status) {
   }
   const Json& events = status.value("events", Json::array());
   out += events.empty() ? "Recent events: none\n" : "Recent events, newest first:\n";
-  for (const Json& event : events) {
-    const Json& step = event.value("step", Json());
-    out += std::format("  {} {}{} {}: {}, {}{}\n", utc(event, "time"), text_of(event, "kind"),
-                       step.is_string() ? " " + step.get<std::string>() : "",
-                       tree_name(event, "image"), text_of(event, "reason"), text_of(event, "actor"),
-                       text_of(event, "detail").empty() ? "" : " - " + text_of(event, "detail"));
-  }
-  return out;
+  return out + event_lines(events);
+}
+
+std::string governor_events(const Json& list) {
+  const Json& events = list.value("events", Json::array());
+  return (events.empty() ? "Governor events: none\n" : "Governor events, newest first:\n") +
+         event_lines(events);
 }
 
 namespace {

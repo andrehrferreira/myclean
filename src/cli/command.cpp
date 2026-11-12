@@ -20,6 +20,7 @@
 
 #include "cli/cli.hpp"
 #include "core/mcp/client.hpp"
+#include "core/os/clock.hpp"
 
 namespace myclean::cli {
 
@@ -29,6 +30,26 @@ const std::string* find_option(const CommandLine& line, std::string_view name) {
   const auto found =
       std::ranges::find(line.options, name, &std::pair<std::string, std::string>::first);
   return found == line.options.end() ? nullptr : &found->second;
+}
+
+Result<std::optional<std::int64_t>> since_option(const CommandLine& line, const os::IClock& clock) {
+  const Result<std::optional<double>> hours = option<double>(line, "hours");
+  if (!hours || !*hours) {
+    return hours ? Result<std::optional<std::int64_t>>{} : tl::unexpected(hours.error());
+  }
+  const auto now =
+      std::chrono::duration_cast<std::chrono::seconds>(clock.now().time_since_epoch()).count();
+  return std::optional<std::int64_t>{now - static_cast<std::int64_t>(**hours * 3600.0)};
+}
+
+std::optional<std::int64_t> positive_id(const std::string& text) {
+  std::int64_t id = 0;
+  const char* const last = std::to_address(text.end());
+  const auto [end, error] = std::from_chars(text.data(), last, id);
+  if (error != std::errc{} || end != last || id < 1) {
+    return std::nullopt;
+  }
+  return id;
 }
 
 std::string dump(const Json& value) {

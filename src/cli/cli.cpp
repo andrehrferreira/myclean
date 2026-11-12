@@ -21,8 +21,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cli/cleaning_command.hpp"
 #include "cli/command.hpp"
 #include "cli/map_command.hpp"
+#include "cli/monitor_command.hpp"
 #include "cli/packs_command.hpp"
 #include "cli/report_command.hpp"
 #include "cli/scan_all_command.hpp"
@@ -52,9 +54,9 @@ namespace {
 using Json = nlohmann::json;
 
 Result<CommandLine> parse(std::span<const std::string> args) {
-  constexpr std::array<std::string_view, 11> valued{"pipe",  "sort",        "limit",  "entity",
+  constexpr std::array<std::string_view, 12> valued{"pipe",  "sort",        "limit",  "entity",
                                                     "hours", "max-points",  "min-gb", "depth",
-                                                    "data",  "unused-days", "mode"};
+                                                    "data",  "unused-days", "mode",   "state"};
   CommandLine line;
   for (std::size_t index = 0; index < args.size(); ++index) {
     const std::string& arg = args[index];
@@ -138,14 +140,27 @@ struct PlainCommand {
   std::string (*render)(const Json&);
 };
 
-constexpr std::array<PlainCommand, 6> plain_commands{
+constexpr std::array<PlainCommand, 4> plain_commands{
     PlainCommand{.name = "volumes", .method = ipc::volumes_list_method, .render = &render_volumes},
     PlainCommand{.name = "disks", .method = ipc::disks_health_method, .render = &text::disks},
-    PlainCommand{.name = "alerts", .method = ipc::alerts_list_method, .render = &text::alerts},
     PlainCommand{.name = "freezes", .method = ipc::input_summary_method, .render = &text::freezes},
     PlainCommand{
-        .name = "governor", .method = ipc::governor_status_method, .render = &text::governor},
-    PlainCommand{.name = "backups", .method = ipc::backups_check_method, .render = &text::backups}};
+        .name = "governor", .method = ipc::governor_status_method, .render = &text::governor}};
+
+// alerts [--hours <n>]
+int alerts(const CommandLine& line, const mcp::Caller& call, const os::IClock& clock,
+           std::ostream& out, std::ostream& err) {
+  const Result<std::optional<std::int64_t>> since = since_option(line, clock);
+  if (!since) {
+    err << "myclean: " << since.error().message << '\n';
+    return exit_usage;
+  }
+  Json params = Json::object();
+  if (*since) {
+    params["since"] = **since;
+  }
+  return show(call(ipc::alerts_list_method, params), line.json, out, err, &text::alerts);
+}
 
 // explain <pid>
 int explain(const CommandLine& line, const mcp::Caller& call, std::ostream& out,
@@ -215,6 +230,26 @@ int map_volume(const CommandLine& line, std::ostream& out, std::ostream& err) {
   return map_command(request, out, err);
 }
 
+// The commands of the features with their own parameters or subcommands; nullopt for another.
+std::optional<int> feature_command(const CommandLine& line, const mcp::Caller& call,
+                                   const os::IClock& clock, std::ostream& out, std::ostream& err) {
+  const std::string& command = line.words.front();
+  if (command == "alerts" && line.words.size() == 1) {
+    return alerts(line, call, clock, out, err);
+  }
+  if (command == "backups" && line.words.size() == 1) {
+    return show(call(ipc::backups_check_method, Json{{"refresh", line.refresh}}), line.json, out,
+                err, &text::backups);
+  }
+  if (command == "space" && line.words.size() >= 2) {
+    return space_command(line, call, out, err);
+  }
+  if (const std::optional<int> code = cleaning_command(line, call, out, err)) {
+    return code;
+  }
+  return monitor_command(line, call, clock, out, err);
+}
+
 int dispatch(const CommandLine& line, const mcp::Caller& call, const os::IClock& clock,
              std::istream& in, std::ostream& out, std::ostream& err) {
   const std::vector<std::string>& words = line.words;
@@ -232,6 +267,9 @@ int dispatch(const CommandLine& line, const mcp::Caller& call, const os::IClock&
       }
     }
   }
+  if (const std::optional<int> code = feature_command(line, call, clock, out, err)) {
+    return *code;
+  }
   if (command == "processes" && words.size() == 1) {
     return processes(line, call, out, err);
   }
@@ -240,9 +278,6 @@ int dispatch(const CommandLine& line, const mcp::Caller& call, const os::IClock&
   }
   if (command == "explain" && words.size() == 2) {
     return explain(line, call, out, err);
-  }
-  if (command == "space" && words.size() >= 2) {
-    return space_command(line, call, out, err);
   }
   if (command == "metrics" && words.size() == 2 && words[1] == "latest") {
     return show(call(ipc::metrics_latest_method, Json::object()), line.json, out, err,
@@ -273,12 +308,20 @@ std::string_view usage() {
          "  explain <pid>               one process: tree, use, signer, path, trust and\n"
          "                              knowledge-base entry\n"
          "  disks                       health of every physical disk\n"
-         "  alerts                      stored alerts, newest first\n"
+         "  alerts [--hours <n>]        stored alerts (of the last hours), newest first\n"
+         "  alerts badge                how many alerts are active and not snoozed, the worst\n"
          "  freezes                     copy/paste freezes grouped by mechanism and process\n"
+         "  freezes pauses              guided freeze elimination: the baseline, the suspects,\n"
+         "                              the pause offered, the active pause and past pauses\n"
          "  governor                    the resource governor: mode, pressure, game mode, jobs,\n"
          "                              steps in effect and recent events\n"
+         "  governor events [--hours <n>] [--limit <n>]\n"
+         "                              the stored governor events, newest first (default 100)\n"
+         "  resident costs              what each resident program used in the last 30 days\n"
+         "  resident trend <key>        one program's private bytes over the last 48 hours and\n"
+         "                              its steady growth, if any (the key: resident costs)\n"
          "  volumes                     volumes with free space and days until full\n"
-         "  backups                     every backup source, the last-backup age and the git\n"
+         "  backups [--refresh]         every backup source, the last-backup age and the git\n"
          "                              repositories with work that exists nowhere else\n"
          "  apps [--unused-days <n>]    installed apps with last use (source, confidence),\n"
          "                              description and keep/remove verdict\n"
@@ -293,6 +336,16 @@ std::string_view usage() {
          "                              advice, WSL and Docker disks, indexed build folders;\n"
          "                              each runs in the background (--refresh starts it again)\n"
          "                              and shows its previous result until it is ready\n"
+         "  startup list                every startup item with its impact on the logon\n"
+         "  startup boot-times          boot and logon durations, what ran at the latest logon\n"
+         "                              and the effect of each startup change\n"
+         "  plans list [--state <state>]\n"
+         "                              MyClean's plans, newest first\n"
+         "  plans get <id>              one plan: what runs, its items, undo and verification\n"
+         "  quarantine                  the quarantined items and when they are purged\n"
+         "  cleaning                    the cleaning scan and what is being applied now\n"
+         "  system-space                hibernation, page file and restore-point storage on the\n"
+         "                              system drive, with the change MyClean recommends\n"
          "  metrics latest              the newest CPU, memory, disk and GPU values\n"
          "  metrics query <metric> [--entity <entity>] [--hours <n>] [--max-points <n>]\n"
          "                              history of one metric over the last hours\n"
@@ -309,6 +362,7 @@ std::string_view usage() {
          "                              origin, processes that used the network\n"
          "  security defender-scan <id> Microsoft Defender scans the file of scan item <id>;\n"
          "                              it reports only and removes nothing\n"
+         "  report list                 the stored monthly reports and their files\n"
          "  report get <YYYY-MM>        the monthly report of that month and its files\n"
          "  report compare <a> <b>      what changed from the snapshot of month <a> to <b>\n"
          "  mcp                         MCP server on stdin/stdout with read-only tools\n"

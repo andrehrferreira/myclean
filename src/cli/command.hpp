@@ -15,6 +15,7 @@
 
 #include "core/mcp/client.hpp"
 #include "core/model/result.hpp"
+#include "core/os/clock.hpp"
 
 // What the commands of myclean.exe share: the parsed command line, how a reply is printed (the
 // service's JSON unchanged with --json, else the command's text) and the text helpers.
@@ -46,6 +47,13 @@ template <typename T>
   }
   return std::optional<T>{value};
 }
+
+// --hours <n> as the Unix second `n` hours before `clock`'s now; nullopt when it is not given.
+[[nodiscard]] Result<std::optional<std::int64_t>> since_option(const CommandLine& line,
+                                                               const os::IClock& clock);
+
+// `text` as a whole number of at least 1 (a plan or item id), or nullopt.
+[[nodiscard]] std::optional<std::int64_t> positive_id(const std::string& text);
 
 [[nodiscard]] std::string dump(const nlohmann::json& value);
 

@@ -130,8 +130,8 @@ src/svc/                myclean-svc: host, Service and its components (see below
 src/tray/               myclean-tray: tray icon, toasts, dashboard (approval inbox, Space, the
                         screens),
                         input watchdog, the worker that runs user tasks
-src/cli/                myclean: read-only CLI, `map`, `scan-all`, `packs`, `security`, `report` and
-                        `myclean mcp`
+src/cli/                myclean: read-only CLI (a command per read method), `map`, `scan-all`,
+                        `packs`, `space`, `security`, `report` and `myclean mcp`
 tests/fakes/            in-memory fakes of the src/core/os interfaces (myclean::fakes)
 tests/unit/<module>/    GoogleTest suite of one module
 tests/acceptance/       the seven-prompt acceptance suite over one fixture machine (acceptance.md)

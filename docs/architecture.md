@@ -393,6 +393,18 @@ the service (`svc::GovernorComponent`), over the `core/os` job and process inter
   numbers a read tool returned (candidate ids, startup item ids, folder ids, disk ids, suspect
   ids, app ids), never by
   a path or registry name, so no client string reaches an OS API.
+- **CLI:** `myclean <command> [--json]` has a command for every read method a pipe client may
+  call (its usage text lists them): `status`, `health`, `processes`, `explain`, `metrics
+  latest|query`, `volumes`, `disks`, `alerts [badge]`, `freezes [pauses]`, `governor [events]`,
+  `backups`, `apps`, `resident costs|trend`, `space top|old-downloads|forgotten-files|
+  duplicates|used-installers|owner-decisions|dev-drive|vhdx|indexed-folders`, `startup
+  list|boot-times`, `plans list|get`, `quarantine`, `cleaning`, `system-space`, `security
+  scan|extensions|network` and `report list|get|compare`. A parameter is a flag (`--limit`,
+  `--hours`, `--mode`, `--state`, `--refresh`, ...) forwarded as a typed parameter; the service
+  validates it. Text is for people, `--json` prints the service's answer unchanged. Tray-only
+  methods and proposals have no command; besides a read that starts a space analysis or the
+  backup check again in the background, only `security defender-scan` starts something, a
+  Defender scan that reports and removes nothing.
 
 **Backup check (B1, `core/backup`, `svc::BackupComponent`):** `backups.check` reports every
 backup source of spike X8 (`docs/spikes/X8-backups.md`) as found, not found or could not be checked
@@ -519,7 +531,7 @@ snapshot and the report are stored in tables `snapshot` and `report` (permanent)
 `report.ready` (entity: the month) goes to the alert engine; a click on its toast makes the tray open
 the HTML it builds from the month under `%ProgramData%`. The job calls no plan, proposal or scan
 method that acts, writes nothing to `action_log` and sends nothing off the machine. `reports.get`
-and `reports.compare` (MCP `get_report`, `compare_snapshots`; `myclean report get|compare`) answer
+and `reports.compare` (MCP `get_report`, `compare_snapshots`; `myclean report list|get|compare`) answer
 `"found": false` with the months that exist for a missing month or snapshot; `reports.list` lists
 the stored reports with their files, newest first.
 
